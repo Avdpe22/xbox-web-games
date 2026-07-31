@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Xbox Game Template</title>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #222; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Simple player object
+        const player = { x: canvas.width / 2, y: canvas.height / 2, size: 50, color: '#107C10', speed: 8 };
+
+        // Helper to grab the connected Xbox controller
+        function getGamepad() {
+            const gamepads = navigator.getGamepads();
+            for (let i = 0; i < gamepads.length; i++) {
+                if (gamepads[i] && gamepads[i].mapping === 'standard') {
+                    return gamepads[i];
+                }
+            }
+            return null;
+        }
+
+        function gameLoop() {
+            const pad = getGamepad();
+            
+            if (pad) {
+                // Left Stick Axes (0 = X axis, 1 = Y axis)
+                const lx = pad.axes[0];
+                const ly = pad.axes[1];
+                const deadzone = 0.2; // Ignore slight stick drift
+
+                if (Math.abs(lx) > deadzone) player.x += lx * player.speed;
+                if (Math.abs(ly) > deadzone) player.y += ly * player.speed;
+
+                // Button 0 is the "A" Button on Xbox
+                if (pad.buttons[0].pressed) {
+                    player.color = '#00FF00'; // Light up when A is pressed
+                } else {
+                    player.color = '#107C10'; // Default Xbox Green
+                }
+            }
+
+            // Keep player inside the screen bounds
+            player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
+            player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
+
+            // Draw Background
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw Player
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.size, player.size);
+            
+            // Draw UI Text
+            ctx.fillStyle = 'white';
+            ctx.font = '24px Arial';
+            if (pad) {
+                ctx.fillText("Controller Connected! Use Left Stick to move, 'A' to interact.", 20, 40);
+            } else {
+                ctx.fillText("Press any button on your Xbox Controller to connect...", 20, 40);
+            }
+
+            // Loop to next frame
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the loop
+        gameLoop();
+
+        // Handle window resizing
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>

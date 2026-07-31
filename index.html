@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Xbox Game Hub</title>
+    <style>
+        body { 
+            background-color: #1a1a1a; 
+            color: white; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            text-align: center; 
+            margin: 0; 
+            padding: 50px;
+        }
+        h1 { font-size: 3rem; margin-bottom: 50px; }
+        
+        .game-grid { 
+            display: flex; 
+            justify-content: center; 
+            gap: 30px; 
+            flex-wrap: wrap; 
+        }
+        
+        .game-card { 
+            background: #333; 
+            padding: 30px; 
+            border-radius: 15px; 
+            cursor: pointer; 
+            border: 4px solid transparent; 
+            transition: all 0.2s ease-in-out;
+            width: 250px;
+        }
+        
+        /* Highlight effect when hovered by virtual cursor */
+        .game-card:hover { 
+            border-color: #107C10; 
+            transform: translateY(-10px); 
+            background: #444;
+        }
+
+        /* Fullscreen game container */
+        #gameContainer { 
+            display: none; 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100vw; 
+            height: 100vh; 
+            background: black; 
+            z-index: 1000; 
+        }
+        
+        iframe { 
+            width: 100%; 
+            height: 100%; 
+            border: none; 
+        }
+        
+        /* Exit button designed to be easily clicked by the virtual cursor */
+        .close-btn { 
+            position: absolute; 
+            top: 20px; 
+            right: 20px; 
+            padding: 15px 30px; 
+            font-size: 18px; 
+            font-weight: bold;
+            background: #e50000; 
+            color: white; 
+            border: none; 
+            border-radius: 8px;
+            cursor: pointer; 
+            z-index: 1001;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+        }
+        
+        .close-btn:hover { background: #ff3333; }
+    </style>
+</head>
+<body>
+    <h1>My Xbox Series X Arcade</h1>
+    
+    <div class="game-grid">
+        <!-- Game 1 -->
+        <div class="game-card" onclick="launchGame('game.html')">
+            <h2>Test Template</h2>
+            <p>Canvas + Gamepad API</p>
+        </div>
+        
+        <!-- Add more games easily by duplicating the div below -->
+        <!--
+        <div class="game-card" onclick="launchGame('game2.html')">
+            <h2>Game 2</h2>
+            <p>Coming Soon</p>
+        </div>
+        -->
+    </div>
+
+    <!-- The overlay that runs the game -->
+    <div id="gameContainer">
+        <button class="close-btn" onclick="closeGame()">Exit Game (Back to Hub)</button>
+        <iframe id="gameFrame" src=""></iframe>
+    </div>
+
+    <script>
+        function launchGame(gameUrl) {
+            const frame = document.getElementById('gameFrame');
+            const container = document.getElementById('gameContainer');
+            
+            frame.src = gameUrl;
+            container.style.display = 'block';
+            
+            // Force focus so the controller works immediately in the iframe
+            setTimeout(() => { frame.focus(); }, 100);
+        }
+
+        function closeGame() {
+            document.getElementById('gameFrame').src = '';
+            document.getElementById('gameContainer').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
