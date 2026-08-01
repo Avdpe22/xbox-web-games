@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tadpole Base Assault</title>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #111; color: white; font-family: sans-serif; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Game State
+        let baseHealth = 1000000;
+        let score = 0;
+        let tadpolesDestroyedCounter = 0;
+        
+        // Entities
+        const crosshair = { x: canvas.width / 3, y: canvas.height / 2, radius: 20, speed: 12 };
+        const enemyBase = { x: canvas.width - 250, y: 0, width: 250, height: canvas.height };
+        const tadpoles = [];
+        const attacks = []; // Visual explosions
+
+        // Controller state tracking to prevent holding the button down
+        let buttonState = { A: false, X: false, Y: false };
+
+        function getGamepad() {
+            const gamepads = navigator.getGamepads();
+            for (let i = 0; i < gamepads.length; i++) {
+                if (gamepads[i] && gamepads[i].mapping === 'standard') return gamepads[i];
+            }
+            return null;
+        }
+
+        function spawnTadpole() {
+            if (baseHealth > 0 && Math.random() < 0.08) { // 8% chance per frame
+                tadpoles.push({
+                    x: enemyBase.x,
+                    y: Math.random() * canvas.height,
+                    radius: 10,
+                    speed: 2 + Math.random() * 3,
+                    wobble: Math.random() * Math.PI * 2
+                });
+            }
+        }
+
+        function triggerAttack(type, damage, color, radius) {
+            // Create explosion visual
+            attacks.push({ x: crosshair.x, y: crosshair.y, radius: radius, maxRadius: radius, life: 20, color: color, type: type });
+
+            // Check Base Damage
+            if (crosshair.x + radius > enemyBase.x) {
+                baseHealth -= damage;
+                if (baseHealth < 0) baseHealth = 0;
+            }
+
+            // Check Tadpole Damage
+            for (let i = tadpoles.length - 1; i >= 0; i--) {
+                let t = tadpoles[i];
+                let dist = Math.hypot(crosshair.x - t.x, crosshair.y - t.y);
+                if (dist < radius + t.radius) {
+                    tadpoles.splice(i, 1);
+                    tadpolesDestroyedCounter++;
+                    
+                    // Reward 10 Trillion points for every 5 tadpoles
+                    if (tadpolesDestroyedCounter >= 5) {
+                        score += 10000000000000;
+                        tadpolesDestroyedCounter = 0; // Reset counter
+                    }
+                }
+            }
+        }
+
+        function gameLoop() {
+            const pad = getGamepad();
+            
+            if (pad) {
+                const lx = pad.axes[0];
+                const ly = pad.axes[1];
+                const deadzone = 0.2;
+
+                // Move Crosshair
+                if (Math.abs(lx) > deadzone) crosshair.x += lx * crosshair.speed;
+                if (Math.abs(ly) > deadzone) crosshair.y += ly * crosshair.speed;
+
+                // Clamp Crosshair to screen
+                crosshair.x = Math.max(0, Math.min(canvas.width, crosshair.x));
+                crosshair.y = Math.max(0, Math.min(canvas.height, crosshair.y));
+
+                // Attack 1: Helicopter (A Button)
+                if (pad.buttons[0].pressed && !buttonState.A) {
+                    triggerAttack("Helicopter Paratroopers", 100, "#00aaff", 60);
+                    buttonState.A = true;
+                } else if (!pad.buttons[0].pressed) buttonState.A = false;
+
+                // Attack 2: Tank + 9 Guys (X Button)
+                if (pad.buttons[2].pressed && !buttonState.X) {
+                    triggerAttack("Tank Assault", 210, "#44ff44", 90);
+                    buttonState.X = true;
+                } else if (!pad.buttons[2].pressed) buttonState.X = false;
+
+                // Attack 3: Two Soldier Base (Y Button)
+                if (pad.buttons[3].pressed && !buttonState.Y) {
+                    triggerAttack("Base Strike", 900, "#ff4444", 140);
+                    buttonState.Y = true;
+                } else if (!pad.buttons[3].pressed) buttonState.Y = false;
+            }
+
+            // --- DRAWING ---
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Enemy Base
+            if (baseHealth > 0) {
+                ctx.fillStyle = '#331111';
+                ctx.fillRect(enemyBase.x, enemyBase.y, enemyBase.width, enemyBase.height);
+                
+                // Base Health Bar
+                ctx.fillStyle = 'red';
+                let healthPercent = baseHealth / 1000000;
+                ctx.fillRect(enemyBase.x + 20, 100, 200 * healthPercent, 30);
+                ctx.strokeStyle = 'white';
+                ctx.strokeRect(enemyBase.x + 20, 100, 200, 30);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = '20px Arial';
+                ctx.fillText(`Base HP: ${baseHealth.toLocaleString()}`, enemyBase.x + 30, 90);
+            } else {
+                ctx.fillStyle = 'green';
+                ctx.font = '40px Arial';
+                ctx.fillText("BASE DESTROYED!", enemyBase.x + 10, canvas.height / 2);
+            }
+
+            // Update and Draw Tadpoles
+            spawnTadpole();
+            for (let i = tadpoles.length - 1; i >= 0; i--) {
+                let t = tadpoles[i];
+                t.x -= t.speed; // Move left
+                t.y += Math.sin(t.wobble) * 2; // Wiggle
+                t.wobble += 0.2;
+                
+                // Draw Tadpole
+                ctx.fillStyle = '#00ff88';
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
+                ctx.fill();
+                // Tail
+                ctx.strokeStyle = '#00ff88';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(t.x + t.radius, t.y);
+                ctx.lineTo(t.x + t.radius + 15, t.y + Math.sin(t.wobble - 1) * 5);
+                ctx.stroke();
+
+                // Remove if off screen
+                if (t.x < -20) tadpoles.splice(i, 1);
+            }
+
+            // Draw Attacks (Explosions)
+            for (let i = attacks.length - 1; i >= 0; i--) {
+                let a = attacks[i];
+                ctx.fillStyle = a.color;
+                ctx.globalAlpha = a.life / 20; // Fade out
+                ctx.beginPath();
+                ctx.arc(a.x, a.y, a.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+                
+                ctx.fillStyle = 'white';
+                ctx.font = '16px Arial';
+                ctx.fillText(a.type, a.x - 40, a.y - a.radius - 10);
+                
+                a.life--;
+                if (a.life <= 0) attacks.splice(i, 1);
+            }
+
+            // Draw Crosshair
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(crosshair.x, crosshair.y, crosshair.radius, 0, Math.PI * 2);
+            ctx.moveTo(crosshair.x - crosshair.radius - 10, crosshair.y);
+            ctx.lineTo(crosshair.x + crosshair.radius + 10, crosshair.y);
+            ctx.moveTo(crosshair.x, crosshair.y - crosshair.radius - 10);
+            ctx.lineTo(crosshair.x, crosshair.y + crosshair.radius + 10);
+            ctx.stroke();
+
+            // Draw UI (Score & Controls)
+            ctx.fillStyle = 'white';
+            ctx.font = '28px Arial';
+            ctx.fillText(`Score: ${score.toLocaleString()}`, 20, 40);
+            ctx.font = '18px Arial';
+            ctx.fillText(`Tadpoles until next 10 Trillion payout: ${5 - tadpolesDestroyedCounter}`, 20, 70);
+            
+            ctx.fillStyle = '#aaaaaa';
+            ctx.fillText("Controls:", 20, 120);
+            ctx.fillStyle = '#00aaff'; ctx.fillText("[A] Helicopter Paratroopers (100 DMG)", 20, 145);
+            ctx.fillStyle = '#44ff44'; ctx.fillText("[X] Tank + 9 Guys (210 DMG)", 20, 170);
+            ctx.fillStyle = '#ff4444'; ctx.fillText("[Y] Two Soldier Base (900 DMG)", 20, 195);
+
+            if (!pad) {
+                ctx.fillStyle = 'yellow';
+                ctx.fillText("Press 'A' on your Xbox Controller to connect...", 20, 240);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            enemyBase.x = canvas.width - 250;
+            enemyBase.height = canvas.height;
+        });
+    </script>
+</body>
+</html>
