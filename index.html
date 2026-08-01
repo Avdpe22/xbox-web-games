@@ -5,38 +5,92 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Xbox Game Hub</title>
     <style>
+        /* Modern Xbox-style dark theme with a radial gradient background */
         body { 
-            background-color: #1a1a1a; 
-            color: white; 
+            background: radial-gradient(circle at top, #2b2b2b, #0b0b0b);
+            color: #ffffff; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             text-align: center; 
             margin: 0; 
-            padding: 50px;
+            padding: 50px 20px;
+            min-height: 100vh;
         }
-        h1 { font-size: 3rem; margin-bottom: 50px; }
+
+        h1 { 
+            font-size: 3.5rem; 
+            margin-bottom: 50px; 
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 4px 15px rgba(16, 124, 16, 0.5);
+        }
         
+        /* Flexbox handles the auto-centering and wrapping perfectly */
         .game-grid { 
             display: flex; 
             justify-content: center; 
-            gap: 30px; 
+            align-items: stretch;
+            gap: 40px; 
             flex-wrap: wrap; 
+            max-width: 1400px;
+            margin: 0 auto;
         }
         
+        /* Sleek card design with glass/gradient effect */
         .game-card { 
-            background: #333; 
-            padding: 30px; 
-            border-radius: 15px; 
+            background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+            border-radius: 20px; 
             cursor: pointer; 
-            border: 4px solid transparent; 
-            transition: all 0.2s ease-in-out;
-            width: 250px;
+            border: 3px solid #333; 
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            width: 260px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            outline: none; /* Hide default outline for custom focus */
+        }
+
+        /* The artwork area for the game */
+        .game-art {
+            height: 140px;
+            background: #107C10; /* Xbox green fallback */
+            background: linear-gradient(145deg, #107C10, #0a4f0a);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            opacity: 0.8;
+            transition: opacity 0.3s;
         }
         
-        /* Highlight effect when hovered by virtual cursor */
-        .game-card:hover { 
-            border-color: #107C10; 
-            transform: translateY(-10px); 
-            background: #444;
+        .game-info {
+            padding: 20px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .game-info h2 {
+            margin: 0 0 10px 0;
+            font-size: 1.5rem;
+        }
+
+        .game-info p {
+            margin: 0;
+            color: #aaaaaa;
+            font-size: 0.95rem;
+        }
+        
+        /* Highlight effect for virtual cursor or keyboard focus */
+        .game-card:hover, .game-card:focus { 
+            border-color: #107C10; /* Xbox Green */
+            transform: translateY(-10px) scale(1.05); 
+            box-shadow: 0 15px 30px rgba(16, 124, 16, 0.4);
+        }
+
+        .game-card:hover .game-art, .game-card:focus .game-art {
+            opacity: 1;
         }
 
         /* Fullscreen game container */
@@ -47,8 +101,9 @@
             left: 0; 
             width: 100vw; 
             height: 100vh; 
-            background: black; 
+            background: #000; 
             z-index: 1000; 
+            animation: fadeIn 0.3s ease-out;
         }
         
         iframe { 
@@ -57,24 +112,35 @@
             border: none; 
         }
         
-        /* Exit button designed to be easily clicked by the virtual cursor */
+        /* Modernized close button */
         .close-btn { 
             position: absolute; 
-            top: 20px; 
-            right: 20px; 
-            padding: 15px 30px; 
-            font-size: 18px; 
-            font-weight: bold;
-            background: #e50000; 
+            top: 30px; 
+            right: 30px; 
+            padding: 12px 25px; 
+            font-size: 16px; 
+            font-weight: 600;
+            background: rgba(229, 0, 0, 0.8); 
             color: white; 
-            border: none; 
-            border-radius: 8px;
+            border: 2px solid transparent; 
+            border-radius: 30px;
             cursor: pointer; 
             z-index: 1001;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+            transition: all 0.2s;
         }
         
-        .close-btn:hover { background: #ff3333; }
+        .close-btn:hover, .close-btn:focus { 
+            background: rgba(255, 51, 51, 1); 
+            transform: scale(1.05);
+            border-color: white;
+            outline: none;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -82,45 +148,73 @@
     
     <div class="game-grid">
         <!-- Game 1 -->
-        <div class="game-card" onclick="launchGame('game.html')">
-            <h2>Test Template</h2>
-            <p>Canvas + Gamepad API</p>
+        <div class="game-card" tabindex="0" onclick="launchGame('game.html')" onkeypress="handleKeyPress(event, 'game.html')">
+            <div class="game-art">🎮</div>
+            <div class="game-info">
+                <h2>Test Template</h2>
+                <p>Canvas + Gamepad API</p>
+            </div>
         </div>
-        <div class="game-card" onclick="launchGame('game2.html')">
-            <h2>Space Shooter</h2>
-            <p>Fly and Shoot</p>
+
+        <!-- Game 2 -->
+        <div class="game-card" tabindex="0" onclick="launchGame('game2.html')" onkeypress="handleKeyPress(event, 'game2.html')">
+            <div class="game-art">🚀</div>
+            <div class="game-info">
+                <h2>Space Shooter</h2>
+                <p>Fly and Shoot</p>
+            </div>
         </div>
-                <div class="game-card" onclick="launchGame('game3.html')">
-            <h2>Base Assault</h2>
-            <p>Destroy Tadpoles</p>
+
+        <!-- Game 3 -->
+        <div class="game-card" tabindex="0" onclick="launchGame('game3.html')" onkeypress="handleKeyPress(event, 'game3.html')">
+            <div class="game-art">🐸</div>
+            <div class="game-info">
+                <h2>Base Assault</h2>
+                <p>Destroy Tadpoles</p>
+            </div>
         </div> 
-                </div>
-                <div class="game-card" onclick="launchGame('game4.html')">
-            <h2>Toy Soldiers</h2>
-            <p>Protect the base</p>
+
+        <!-- Game 4 -->
+        <div class="game-card" tabindex="0" onclick="launchGame('game4.html')" onkeypress="handleKeyPress(event, 'game4.html')">
+            <div class="game-art">🪖</div>
+            <div class="game-info">
+                <h2>Toy Soldiers</h2>
+                <p>Protect the base</p>
+            </div>
         </div> 
-        </div> 
-                </div>
-                <div class="game-card" onclick="launchGame('game5.html')">
-            <h2>Toy Soldiers (Original)</h2>
-            <p>Protect the base</p>
+                
+        <!-- Game 5 -->
+        <div class="game-card" tabindex="0" onclick="launchGame('game5.html')" onkeypress="handleKeyPress(event, 'game5.html')">
+            <div class="game-art">⭐</div>
+            <div class="game-info">
+                <h2>Toy Soldiers (Original)</h2>
+                <p>Protect the base</p>
+            </div>
         </div>       
-        <!-- Add more games easily by duplicating the div below -->
-        <!--
-        <div class="game-card" onclick="launchGame('game2.html')">
-            <h2>Game 2</h2>
-            <p>Coming Soon</p>
-        </div>
-        -->
     </div>
 
     <!-- The overlay that runs the game -->
     <div id="gameContainer">
-        <button class="close-btn" onclick="closeGame()">Exit Game (Back to Hub)</button>
+        <button class="close-btn" tabindex="0" onclick="closeGame()" onkeypress="handleCloseKeyPress(event)">Exit Game (Back to Hub)</button>
         <iframe id="gameFrame" src=""></iframe>
     </div>
 
     <script>
+        // Accessibility addition: Allow launching games by pressing 'Enter' or 'A' button (if mapped to Enter)
+        function handleKeyPress(event, gameUrl) {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                launchGame(gameUrl);
+            }
+        }
+
+        function handleCloseKeyPress(event) {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                closeGame();
+            }
+        }
+
         function launchGame(gameUrl) {
             const frame = document.getElementById('gameFrame');
             const container = document.getElementById('gameContainer');
