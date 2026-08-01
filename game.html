@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tadpole Swarm: Versus Mode</title>
+    <title>Tadpole Swarm: Versus Mode (Balanced)</title>
     <style>
         body, html { margin: 0; padding: 0; overflow: hidden; background: #0a0a0f; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         canvas { display: block; }
@@ -22,7 +22,7 @@
         let winner = '';
 
         // Game Variables
-        let nestMaxHealth = 8000; 
+        let nestMaxHealth = 6000; // NERFED from 8000
         let nestHealth = nestMaxHealth;
         let playerBaseMaxHealth = 500;
         let playerHealth = playerBaseMaxHealth;
@@ -193,18 +193,18 @@
             });
         }
 
-        // --- P2: MUTANT SPAWNER ---
+        // --- P2: MUTANT SPAWNER (NERFED) ---
         function spawnSpecificEnemy(type, y) {
             let enemy = { x: tadpoleNest.x - 10, y: y, wobble: Math.random() * Math.PI * 2, attackCooldown: 0, jumpTimer: 0 };
             
             if (type === 'frog') {
-                enemy.type = 'frog'; enemy.hp = 300; enemy.radius = 18; enemy.speed = 0; enemy.maxSpeed = 6;
+                enemy.type = 'frog'; enemy.hp = 200; enemy.radius = 18; enemy.speed = 0; enemy.maxSpeed = 4.5;
             } else if (type === 'froglet') {
-                enemy.type = 'froglet'; enemy.hp = 25; enemy.radius = 7; enemy.speed = 2.8; 
+                enemy.type = 'froglet'; enemy.hp = 18; enemy.radius = 7; enemy.speed = 2.5; 
             } else if (type === 'shielded') {
-                enemy.type = 'shielded'; enemy.hp = 60; enemy.radius = 6; enemy.speed = 1.2;
+                enemy.type = 'shielded'; enemy.hp = 40; enemy.radius = 6; enemy.speed = 1.0;
             } else {
-                enemy.type = 'basic'; enemy.hp = 15; enemy.radius = 6; enemy.speed = 1.0 + Math.random();
+                enemy.type = 'basic'; enemy.hp = 10; enemy.radius = 6; enemy.speed = 0.8 + Math.random();
             }
             enemies.push(enemy);
         }
@@ -290,32 +290,32 @@
                         } else if (!pad.buttons[3].pressed) player.buttons.Y = false;
                     }
                     
-                    // --- PLAYER 2 (SWARM) LOGIC ---
+                    // --- PLAYER 2 (SWARM) LOGIC (NERFED COSTS) ---
                     else if (index === 1) {
                         // Constrain P2 to the right side (Nest area)
                         player.crosshair.x = Math.max(tadpoleNest.x - 100, Math.min(canvas.width - 10, player.crosshair.x));
 
-                        // [A] Basic Tadpole (Cost 10)
+                        // [A] Basic Tadpole (Cost 15)
                         if (pad.buttons[0].pressed && player.buttons.A === true && !player.buttons.A_Attack) {
-                            if (p2Energy >= 10) { p2Energy -= 10; spawnSpecificEnemy('basic', player.crosshair.y); playDeploySound(true); }
+                            if (p2Energy >= 15) { p2Energy -= 15; spawnSpecificEnemy('basic', player.crosshair.y); playDeploySound(true); }
                             player.buttons.A_Attack = true;
                         } else if (!pad.buttons[0].pressed) player.buttons.A_Attack = false;
 
-                        // [X] Shielded Mutant (Cost 25)
+                        // [X] Shielded Mutant (Cost 35)
                         if (pad.buttons[2].pressed && !player.buttons.X) {
-                            if (p2Energy >= 25) { p2Energy -= 25; spawnSpecificEnemy('shielded', player.crosshair.y); playDeploySound(true); }
+                            if (p2Energy >= 35) { p2Energy -= 35; spawnSpecificEnemy('shielded', player.crosshair.y); playDeploySound(true); }
                             player.buttons.X = true;
                         } else if (!pad.buttons[2].pressed) player.buttons.X = false;
 
-                        // [Y] Speed Froglet (Cost 35)
+                        // [Y] Speed Froglet (Cost 45)
                         if (pad.buttons[3].pressed && !player.buttons.Y) {
-                            if (p2Energy >= 35) { p2Energy -= 35; spawnSpecificEnemy('froglet', player.crosshair.y); playDeploySound(true); }
+                            if (p2Energy >= 45) { p2Energy -= 45; spawnSpecificEnemy('froglet', player.crosshair.y); playDeploySound(true); }
                             player.buttons.Y = true;
                         } else if (!pad.buttons[3].pressed) player.buttons.Y = false;
 
-                        // [B] Giant Boss Frog (Cost 80)
+                        // [B] Giant Boss Frog (Cost 90)
                         if (pad.buttons[1].pressed && !player.buttons.B) {
-                            if (p2Energy >= 80) { p2Energy -= 80; spawnSpecificEnemy('frog', player.crosshair.y); playDeploySound(true); }
+                            if (p2Energy >= 90) { p2Energy -= 90; spawnSpecificEnemy('frog', player.crosshair.y); playDeploySound(true); }
                             player.buttons.B = true;
                         } else if (!pad.buttons[1].pressed) player.buttons.B = false;
                     }
@@ -438,7 +438,7 @@
                     
                     if (e.x < playerBase.width) {
                         enemies.splice(i, 1);
-                        playerHealth -= (e.type === 'frog' ? 100 : (e.type === 'shielded' ? 20 : 10)); // Adjusted base damage
+                        playerHealth -= (e.type === 'frog' ? 50 : (e.type === 'shielded' ? 10 : 5)); // NERFED BASE DAMAGE
                         if (playerHealth <= 0) {
                             playerHealth = 0;
                             winner = 'PLAYER 2 (SWARM)';
@@ -537,7 +537,7 @@
                 // Draw Enemies
                 for (let e of enemies) {
                     if (e.type === 'shielded') {
-                        ctx.fillStyle = `rgba(0, 255, 255, ${0.1 + (e.hp/60)*0.2})`;
+                        ctx.fillStyle = `rgba(0, 255, 255, ${0.1 + (e.hp/40)*0.2})`;
                         ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 4, 0, Math.PI*2); ctx.fill();
                         ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 1; ctx.stroke();
                     }
@@ -563,7 +563,7 @@
                     // Health bar for Boss frog
                     if(e.type === 'frog') {
                         ctx.fillStyle = 'red'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, e.radius*2, 3);
-                        ctx.fillStyle = 'green'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, (e.radius*2) * (e.hp/300), 3);
+                        ctx.fillStyle = 'green'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, (e.radius*2) * (e.hp/200), 3); // Max HP matched to nerf
                     }
                 }
 
@@ -606,7 +606,7 @@
                 ctx.fillStyle = p1Energy >= 45 ? '#44ff44' : '#555'; ctx.fillText(`[X] Tank Platoon (-45)`, 90, 155);
                 ctx.fillStyle = p1Energy >= 70 ? '#ff4444' : '#555'; ctx.fillText(`[Y] Heavy Bunker (-70)`, 90, 175);
 
-                // --- UI FOR P2 (SWARM) ---
+                // --- UI FOR P2 (SWARM - NERFED COSTS) ---
                 let p2Offset = canvas.width - 320;
                 ctx.fillStyle = 'white'; ctx.font = 'bold 20px Arial';
                 ctx.fillText(`P2 (SWARM)`, p2Offset, 30);
@@ -620,10 +620,10 @@
 
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(p2Offset, 100, 240, 105);
                 ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Arial'; ctx.fillText("Spawn Mutants:", p2Offset + 10, 115);
-                ctx.fillStyle = p2Energy >= 10 ? '#ff88aa' : '#555'; ctx.fillText(`[A] Basic Tadpole (-10)`, p2Offset + 10, 135);
-                ctx.fillStyle = p2Energy >= 25 ? '#00ffff' : '#555'; ctx.fillText(`[X] Shielded Mutant (-25)`, p2Offset + 10, 155);
-                ctx.fillStyle = p2Energy >= 35 ? '#44ff44' : '#555'; ctx.fillText(`[Y] Speed Froglet (-35)`, p2Offset + 10, 175);
-                ctx.fillStyle = p2Energy >= 80 ? '#ff4444' : '#555'; ctx.fillText(`[B] Giant Boss Frog (-80)`, p2Offset + 10, 195);
+                ctx.fillStyle = p2Energy >= 15 ? '#ff88aa' : '#555'; ctx.fillText(`[A] Basic Tadpole (-15)`, p2Offset + 10, 135);
+                ctx.fillStyle = p2Energy >= 35 ? '#00ffff' : '#555'; ctx.fillText(`[X] Shielded Mutant (-35)`, p2Offset + 10, 155);
+                ctx.fillStyle = p2Energy >= 45 ? '#44ff44' : '#555'; ctx.fillText(`[Y] Speed Froglet (-45)`, p2Offset + 10, 175);
+                ctx.fillStyle = p2Energy >= 90 ? '#ff4444' : '#555'; ctx.fillText(`[B] Giant Boss Frog (-90)`, p2Offset + 10, 195);
             }
 
             if (pads.length < 2 && gameState !== 'START') {
