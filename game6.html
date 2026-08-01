@@ -22,7 +22,7 @@
         let level = 1;
 
         // Game Variables
-        let nestMaxHealth = 15000;
+        let nestMaxHealth = 10000; // Lower starting health for faster Level 1
         let nestHealth = nestMaxHealth;
         let playerHealth = 100;
         let commandEnergy = 100;
@@ -52,10 +52,10 @@
             if (fullReset) {
                 level = 1;
                 score = 0;
-                nestMaxHealth = 15000;
+                nestMaxHealth = 10000;
             } else {
                 level++;
-                nestMaxHealth += 5000; // Nest gets stronger every level
+                nestMaxHealth += 3000; // Gentler scaling
             }
             
             nestHealth = nestMaxHealth;
@@ -75,7 +75,8 @@
             units.push({ 
                 type: 'soldier', x: x, y: y, hp: 12, maxHp: 12, speed: 0.8, 
                 range: 250, prefDist: 200 + Math.random() * 80,
-                damage: 5, fireRate: 25, fireCooldown: 0, color: '#4CAF50', size: 4 
+                damage: 6, fireRate: 20, fireCooldown: 0, color: '#4CAF50', size: 5,
+                animTimer: 0 // Used for walking animation
             });
         }
 
@@ -83,42 +84,40 @@
             units.push({ 
                 type: 'tank', x: x, y: y, hp: 80, maxHp: 80, speed: 0.4, 
                 range: 350, prefDist: 300 + Math.random() * 50,
-                damage: 25, fireRate: 60, fireCooldown: 0, color: '#2E7D32', size: 10 
+                damage: 30, fireRate: 50, fireCooldown: 0, color: '#2E7D32', size: 12,
+                animTimer: 0
             });
         }
 
         function spawnBunker(x, y) {
             units.push({ 
-                type: 'bunker', x: x, y: y, hp: 200, maxHp: 200, speed: 0, 
+                type: 'bunker', x: x, y: y, hp: 250, maxHp: 250, speed: 0, 
                 range: 300, prefDist: 0, 
-                damage: 8, fireRate: 8, fireCooldown: 0, color: '#757575', size: 14 
+                damage: 10, fireRate: 8, fireCooldown: 0, color: '#757575', size: 16 
             });
         }
 
         // --- ENEMY MUTATION SPAWNER ---
         function spawnEnemy() {
             let healthPercent = nestHealth / nestMaxHealth;
-            // Spawn rate increases as nest dies, and inherently increases per level
-            let spawnChance = (0.04 + (level * 0.01)) + ((1 - healthPercent) * 0.12); 
+            let spawnChance = (0.04 + (level * 0.015)) + ((1 - healthPercent) * 0.12); 
             
             if (Math.random() < spawnChance) {
                 let typeRand = Math.random();
                 let enemy = {
                     x: tadpoleNest.x, y: 20 + Math.random() * (canvas.height - 40),
-                    wobble: Math.random() * Math.PI * 2, attackCooldown: 0,
-                    jumpTimer: 0 // Used for frogs
+                    wobble: Math.random() * Math.PI * 2, attackCooldown: 0, jumpTimer: 0 
                 };
 
-                // Determine enemy type based on level unlocks
                 if (level >= 4 && typeRand < 0.10) {
-                    // Goliath Frog (10% chance level 4+)
+                    // Goliath Frog
                     enemy.type = 'frog'; enemy.hp = 250; enemy.radius = 18; enemy.speed = 0; enemy.maxSpeed = 6;
                 } else if (level >= 3 && typeRand < 0.35) {
-                    // Froglet / Legs (25% chance level 3+)
+                    // Froglet / Legs
                     enemy.type = 'froglet'; enemy.hp = 25; enemy.radius = 7; enemy.speed = 2.8; 
                 } else if (level >= 2 && typeRand < 0.60) {
-                    // Shielded Tadpole (25% chance level 2+)
-                    enemy.type = 'shielded'; enemy.hp = 60; enemy.radius = 6; enemy.speed = 1.2;
+                    // Shielded Tadpole (Nerfed HP)
+                    enemy.type = 'shielded'; enemy.hp = 45; enemy.radius = 6; enemy.speed = 1.2;
                 } else {
                     // Basic Tadpole
                     enemy.type = 'basic'; enemy.hp = 15; enemy.radius = 6; enemy.speed = 1.0 + Math.random();
@@ -131,8 +130,8 @@
         function createExplosion(x, y, color, sizeMultiplier = 1) {
             for(let i=0; i<6; i++){
                 particles.push({
-                    x: x, y: y, vx: (Math.random() - 0.5) * 4, vy: (Math.random() - 0.5) * 4,
-                    life: 15, color: color, size: (Math.random() * 3 + 1) * sizeMultiplier
+                    x: x, y: y, vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5,
+                    life: 12, color: color, size: (Math.random() * 3 + 1) * sizeMultiplier
                 });
             }
         }
@@ -163,31 +162,31 @@
                     crosshair.x = Math.max(playerBase.width + 10, Math.min(maxDeployX, crosshair.x));
                     crosshair.y = Math.max(10, Math.min(canvas.height - 10, crosshair.y));
 
-                    // [A] 3x Paratroopers (NERFED: Cost 25)
+                    // [A] 3x Paratroopers (Cost 15)
                     if (pad.buttons[0].pressed && buttonState.A === true && !buttonState.A_Attack) {
-                        if (commandEnergy >= 25) {
-                            commandEnergy -= 25;
+                        if (commandEnergy >= 15) {
+                            commandEnergy -= 15;
                             spawnSoldier(crosshair.x, crosshair.y - 15);
-                            spawnSoldier(crosshair.x - 10, crosshair.y + 10);
-                            spawnSoldier(crosshair.x + 10, crosshair.y + 10);
+                            spawnSoldier(crosshair.x - 12, crosshair.y + 12);
+                            spawnSoldier(crosshair.x + 12, crosshair.y + 12);
                         }
                         buttonState.A_Attack = true;
                     } else if (!pad.buttons[0].pressed) buttonState.A_Attack = false;
 
-                    // [X] Tank Platoon (NERFED: Cost 60)
+                    // [X] Tank Platoon (Cost 45)
                     if (pad.buttons[2].pressed && !buttonState.X) {
-                        if (commandEnergy >= 60) {
-                            commandEnergy -= 60;
+                        if (commandEnergy >= 45) {
+                            commandEnergy -= 45;
                             spawnTank(crosshair.x, crosshair.y);
-                            for(let i=0; i<4; i++) spawnSoldier(crosshair.x - 20 - (Math.random()*15), crosshair.y - 20 + (i*15));
+                            for(let i=0; i<4; i++) spawnSoldier(crosshair.x - 25 - (Math.random()*15), crosshair.y - 25 + (i*18));
                         }
                         buttonState.X = true;
                     } else if (!pad.buttons[2].pressed) buttonState.X = false;
 
-                    // [Y] Heavy Bunker (NERFED: Cost 90)
+                    // [Y] Heavy Bunker (Cost 70)
                     if (pad.buttons[3].pressed && !buttonState.Y) {
-                        if (commandEnergy >= 90) {
-                            commandEnergy -= 90;
+                        if (commandEnergy >= 70) {
+                            commandEnergy -= 70;
                             spawnBunker(crosshair.x, crosshair.y);
                         }
                         buttonState.Y = true;
@@ -197,7 +196,7 @@
 
             // --- UPDATE LOGIC ---
             if (gameState === 'PLAYING') {
-                commandEnergy = Math.min(100, commandEnergy + 0.15); // Slower recharge
+                commandEnergy = Math.min(100, commandEnergy + 0.22); // Faster recharge
                 spawnEnemy();
 
                 // 1. Update Units
@@ -215,20 +214,32 @@
 
                     if (!target && (tadpoleNest.x - u.x) < u.range) target = tadpoleNest;
 
+                    let isMoving = false;
+
                     if (target) {
                         if (u.fireCooldown <= 0) {
                             let targetY = target === tadpoleNest ? u.y + (Math.random()*20-10) : target.y;
                             let angle = Math.atan2(targetY - u.y, (target === tadpoleNest ? tadpoleNest.x : target.x) - u.x);
+                            
+                            // Much faster projectiles for tracers
                             projectiles.push({
-                                x: u.x + u.size, y: u.y,
-                                vx: Math.cos(angle) * 12, vy: Math.sin(angle) * 12,
+                                x: u.x + (u.type === 'tank' ? u.size : 5), y: u.y,
+                                vx: Math.cos(angle) * 20, vy: Math.sin(angle) * 20,
                                 damage: u.damage, isExplosive: u.type === 'tank'
                             });
                             u.fireCooldown = u.fireRate;
                         }
-                    } 
-                    
-                    if (u.speed > 0 && (tadpoleNest.x - u.x) > u.prefDist) u.x += u.speed; 
+                    } else if (u.speed > 0 && (tadpoleNest.x - u.x) > u.prefDist) {
+                        u.x += u.speed; 
+                        isMoving = true;
+                    }
+
+                    // Animate legs/treads if moving
+                    if (isMoving) {
+                        u.animTimer += (u.type === 'soldier' ? 0.4 : 0.2);
+                    } else {
+                        u.animTimer = 0; // Stand still
+                    }
 
                     if (u.hp <= 0) {
                         createExplosion(u.x, u.y, '#ff8800', 1.5);
@@ -244,7 +255,7 @@
                     let hit = false;
                     if (p.x > tadpoleNest.x) {
                         nestHealth -= p.damage;
-                        createExplosion(p.x, p.y, '#88ffaa', 1.5);
+                        createExplosion(p.x, p.y, '#88ffaa', 1.0);
                         hit = true;
                     } else {
                         for (let j = enemies.length - 1; j >= 0; j--) {
@@ -253,7 +264,6 @@
                                 e.hp -= p.damage;
                                 hit = true;
                                 if (p.isExplosive) createExplosion(p.x, p.y, '#ff4400', 1.5);
-                                // Shielded units create blue sparks when hit
                                 else createExplosion(p.x, p.y, e.type === 'shielded' && e.hp > 0 ? '#00ffff' : '#88ff88', 0.5);
                                 
                                 if (e.hp <= 0) {
@@ -272,7 +282,7 @@
                 for (let i = enemies.length - 1; i >= 0; i--) {
                     let e = enemies[i];
                     let aggroUnit = null;
-                    let closestDist = e.type === 'froglet' ? 350 : 250; // Froglets see further
+                    let closestDist = e.type === 'froglet' ? 350 : 250; 
                     let eatingUnit = null;
 
                     for (let u of units) {
@@ -281,20 +291,19 @@
                         if (dist < closestDist) { closestDist = dist; aggroUnit = u; }
                     }
 
-                    // Special movement for Frogs (Jumping)
                     if (e.type === 'frog') {
                         e.jumpTimer++;
-                        if (e.jumpTimer > 100) {
-                            e.speed = e.maxSpeed; // Leap!
-                            if (e.jumpTimer > 120) e.jumpTimer = 0; // Reset
+                        if (e.jumpTimer > 90) {
+                            e.speed = e.maxSpeed; 
+                            if (e.jumpTimer > 110) e.jumpTimer = 0; 
                         } else {
-                            e.speed *= 0.9; // Friction to stop
+                            e.speed *= 0.85; 
                         }
                     }
 
                     if (eatingUnit) {
                         if (e.attackCooldown <= 0) {
-                            eatingUnit.hp -= (e.type === 'frog' ? 20 : (e.type === 'froglet' ? 4 : 2));
+                            eatingUnit.hp -= (e.type === 'frog' ? 25 : (e.type === 'froglet' ? 4 : 2));
                             e.attackCooldown = e.type === 'frog' ? 30 : 8;
                             createExplosion(e.x - 5, e.y, '#ff0000', 0.5);
                         } else {
@@ -305,7 +314,6 @@
                         e.x += Math.cos(angle) * e.speed;
                         e.y += Math.sin(angle) * e.speed;
                         
-                        // Frogs jump straight, tadpoles wiggle
                         if (e.type !== 'frog') {
                             e.x += Math.cos(e.wobble) * 0.5;
                             e.y += Math.sin(e.wobble) * 0.5;
@@ -384,54 +392,105 @@
                 ctx.fillStyle = 'white'; ctx.font = 'bold 12px Arial';
                 ctx.fillText(`Nest Integrity: ${Math.floor((nestHealth/nestMaxHealth)*100)}%`, tadpoleNest.x + 30, 70);
 
-                // Draw Units
+                // Draw Units (High Res Sprites)
                 for (let u of units) {
-                    ctx.fillStyle = u.color;
                     if(u.type === 'soldier') {
-                        ctx.fillRect(u.x - u.size, u.y - u.size, u.size*2, u.size*2); 
-                        ctx.fillStyle = '#1b5e20'; ctx.beginPath(); ctx.arc(u.x, u.y, u.size-1, 0, Math.PI*2); ctx.fill();
-                        ctx.fillStyle = '#111'; ctx.fillRect(u.x, u.y - 1, u.size + 6, 2); 
+                        let legOffset = Math.sin(u.animTimer) * 4;
+                        
+                        // Swinging Legs
+                        ctx.fillStyle = '#1b5e20';
+                        ctx.beginPath(); ctx.ellipse(u.x - 1 + legOffset, u.y - 4, 3, 2, 0, 0, Math.PI*2); ctx.fill(); // Top foot
+                        ctx.beginPath(); ctx.ellipse(u.x - 1 - legOffset, u.y + 4, 3, 2, 0, 0, Math.PI*2); ctx.fill(); // Bottom foot
+                        
+                        // Torso / Shoulders
+                        ctx.fillStyle = u.color;
+                        ctx.beginPath(); ctx.ellipse(u.x, u.y, 4, 6, 0, 0, Math.PI*2); ctx.fill();
+                        
+                        // Gun
+                        ctx.fillStyle = '#111';
+                        ctx.fillRect(u.x, u.y - 1, 12, 2); 
+                        
+                        // Helmet
+                        ctx.fillStyle = '#2e7d32'; 
+                        ctx.beginPath(); ctx.arc(u.x, u.y, 4, 0, Math.PI*2); ctx.fill();
+
+                        // Muzzle Flash
+                        if (u.fireCooldown > u.fireRate - 3) {
+                            ctx.fillStyle = '#ffcc00';
+                            ctx.beginPath(); ctx.arc(u.x + 13, u.y, 3, 0, Math.PI*2); ctx.fill();
+                        }
+
                     } else if (u.type === 'tank') {
+                        let treadOffset = (u.animTimer * 5) % 8; // Treads animation trick
+                        
+                        // Treads
                         ctx.fillStyle = '#111'; ctx.fillRect(u.x - u.size - 2, u.y - u.size, u.size*2 + 4, u.size*2);
+                        // Tread details
+                        ctx.fillStyle = '#333';
+                        for(let t = 0; t < u.size*2; t+=4) {
+                            ctx.fillRect(u.x - u.size + t - treadOffset, u.y - u.size, 2, u.size*2);
+                        }
+
+                        // Hull
                         ctx.fillStyle = u.color; ctx.fillRect(u.x - u.size, u.y - u.size + 2, u.size*2, u.size*2 - 4);
+                        // Turret
                         ctx.fillStyle = '#1b5e20'; ctx.beginPath(); ctx.arc(u.x, u.y, u.size-3, 0, Math.PI*2); ctx.fill();
-                        ctx.fillStyle = '#111'; ctx.fillRect(u.x, u.y - 1.5, u.size + 10, 3);
+                        // Barrel
+                        ctx.fillStyle = '#111'; ctx.fillRect(u.x, u.y - 1.5, u.size + 12, 4);
+
+                        // Tank Muzzle Flash
+                        if (u.fireCooldown > u.fireRate - 4) {
+                            ctx.fillStyle = '#ff6600';
+                            ctx.beginPath(); ctx.arc(u.x + u.size + 14, u.y, 6, 0, Math.PI*2); ctx.fill();
+                        }
+
                     } else if (u.type === 'bunker') {
+                        ctx.fillStyle = '#757575';
                         ctx.beginPath(); ctx.arc(u.x, u.y, u.size, Math.PI/2, Math.PI*1.5, true); ctx.fill();
                         ctx.fillRect(u.x, u.y - u.size, u.size+5, u.size*2);
                         ctx.fillStyle = '#111'; ctx.fillRect(u.x+5, u.y-2, 10, 4); 
+
+                        // Bunker Muzzle Flash
+                        if (u.fireCooldown > u.fireRate - 2) {
+                            ctx.fillStyle = '#ffcc00';
+                            ctx.beginPath(); ctx.arc(u.x + 16, u.y, 4, 0, Math.PI*2); ctx.fill();
+                        }
                     }
+
+                    // HP Bars
                     if(u.hp < u.maxHp) {
-                        ctx.fillStyle = 'red'; ctx.fillRect(u.x - u.size, u.y - u.size - 4, u.size*2, 2);
-                        ctx.fillStyle = 'green'; ctx.fillRect(u.x - u.size, u.y - u.size - 4, (u.size*2) * (u.hp/u.maxHp), 2);
+                        ctx.fillStyle = 'red'; ctx.fillRect(u.x - u.size, u.y - u.size - 6, u.size*2, 2);
+                        ctx.fillStyle = 'green'; ctx.fillRect(u.x - u.size, u.y - u.size - 6, (u.size*2) * (u.hp/u.maxHp), 2);
                     }
                 }
 
-                // Draw Projectiles
+                // Draw Projectiles (Tracers)
                 for (let p of projectiles) {
-                    ctx.fillStyle = p.isExplosive ? '#ffaa00' : '#ffff00';
-                    ctx.beginPath(); ctx.arc(p.x, p.y, p.isExplosive ? 2 : 1, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = p.isExplosive ? '#ffaa00' : '#ffff55';
+                    ctx.lineWidth = p.isExplosive ? 3 : 1.5;
+                    ctx.beginPath(); 
+                    ctx.moveTo(p.x, p.y);
+                    // Draw line opposite of velocity to create a motion blur tail
+                    ctx.lineTo(p.x - p.vx * 0.7, p.y - p.vy * 0.7);
+                    ctx.stroke();
                 }
 
                 // Draw Enemies
                 for (let e of enemies) {
                     if (e.type === 'shielded') {
-                        // Draw energy shield
-                        ctx.fillStyle = `rgba(0, 255, 255, ${0.1 + (e.hp/60)*0.2})`;
+                        ctx.fillStyle = `rgba(0, 255, 255, ${0.1 + (e.hp/45)*0.2})`;
                         ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 4, 0, Math.PI*2); ctx.fill();
                         ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 1; ctx.stroke();
                     }
 
                     if (e.type === 'froglet' || e.type === 'frog') {
-                        // Draw Legs
                         ctx.strokeStyle = '#007733'; ctx.lineWidth = e.type === 'frog' ? 4 : 2;
-                        let legExt = e.type === 'frog' && e.jumpTimer > 100 ? 15 : 5; // Stretch legs when jumping
+                        let legExt = e.type === 'frog' && e.jumpTimer > 90 ? 15 : 5; 
                         ctx.beginPath(); 
                         ctx.moveTo(e.x, e.y - e.radius); ctx.lineTo(e.x + legExt, e.y - e.radius - 5);
                         ctx.moveTo(e.x, e.y + e.radius); ctx.lineTo(e.x + legExt, e.y + e.radius + 5);
                         ctx.stroke();
                     } else {
-                        // Draw Wavy Tail (Only for tadpoles)
                         ctx.strokeStyle = '#00aa55'; ctx.lineWidth = 2;
                         ctx.beginPath(); ctx.moveTo(e.x, e.y);
                         ctx.lineTo(e.x + e.radius + 4, e.y + Math.sin(e.wobble) * 4);
@@ -439,11 +498,9 @@
                         ctx.stroke();
                     }
 
-                    // Body
                     ctx.fillStyle = e.type === 'frog' ? '#006622' : '#00ff88';
                     ctx.beginPath(); ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2); ctx.fill();
                     
-                    // Eyes
                     let eyeOffset = e.type === 'frog' ? 4 : 2;
                     ctx.fillStyle = 'white';
                     ctx.beginPath(); ctx.arc(e.x - eyeOffset, e.y - eyeOffset, eyeOffset, 0, Math.PI * 2); ctx.fill();
@@ -453,7 +510,7 @@
 
                 // Particles
                 for (let p of particles) {
-                    ctx.fillStyle = p.color; ctx.globalAlpha = p.life / 15;
+                    ctx.fillStyle = p.color; ctx.globalAlpha = p.life / 12;
                     ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
                 }
                 ctx.globalAlpha = 1.0;
@@ -476,16 +533,16 @@
                 // Command Energy
                 ctx.fillStyle = 'white'; ctx.font = '14px Arial'; ctx.fillText("Energy:", 80, 85);
                 ctx.strokeStyle = 'white'; ctx.strokeRect(140, 72, 150, 15);
-                ctx.fillStyle = commandEnergy >= 90 ? '#00aaff' : (commandEnergy >= 25 ? '#44ff44' : '#ff4444');
+                ctx.fillStyle = commandEnergy >= 70 ? '#00aaff' : (commandEnergy >= 15 ? '#44ff44' : '#ff4444');
                 ctx.fillRect(142, 74, 146 * (commandEnergy/100), 11);
 
                 // Controls HUD
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(80, 100, 240, 85);
                 ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Arial';
                 ctx.fillText("Deploy Units (Costs Energy):", 90, 115);
-                ctx.fillStyle = commandEnergy >= 25 ? '#00aaff' : '#555'; ctx.fillText(`[A] 3x Paratroopers (-25)`, 90, 135);
-                ctx.fillStyle = commandEnergy >= 60 ? '#44ff44' : '#555'; ctx.fillText(`[X] Tank Platoon (-60)`, 90, 155);
-                ctx.fillStyle = commandEnergy >= 90 ? '#ff4444' : '#555'; ctx.fillText(`[Y] Heavy Bunker (-90)`, 90, 175);
+                ctx.fillStyle = commandEnergy >= 15 ? '#00aaff' : '#555'; ctx.fillText(`[A] 3x Paratroopers (-15)`, 90, 135);
+                ctx.fillStyle = commandEnergy >= 45 ? '#44ff44' : '#555'; ctx.fillText(`[X] Tank Platoon (-45)`, 90, 155);
+                ctx.fillStyle = commandEnergy >= 70 ? '#ff4444' : '#555'; ctx.fillText(`[Y] Heavy Bunker (-70)`, 90, 175);
             }
 
             if (!pad && gameState !== 'START') {
