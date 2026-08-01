@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tadpole Swarm: Versus Mode (Balanced)</title>
+    <title>Tadpole Swarm: Versus Mode (Trigger Update)</title>
     <style>
         body, html { margin: 0; padding: 0; overflow: hidden; background: #0a0a0f; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         canvas { display: block; }
@@ -22,7 +22,7 @@
         let winner = '';
 
         // Game Variables
-        let nestMaxHealth = 6000; // NERFED from 8000
+        let nestMaxHealth = 6000; 
         let nestHealth = nestMaxHealth;
         let playerBaseMaxHealth = 500;
         let playerHealth = playerBaseMaxHealth;
@@ -40,19 +40,26 @@
         const projectiles = [];
         const particles = [];
 
-        // Player Tracking for Versus
+        // Player Tracking for Versus (Updated Button Tracking)
         const players = [
             { 
                 id: 0, // Defender (Human)
                 crosshair: { x: canvas.width / 4, y: canvas.height / 2, radius: 10, speed: 10, color: '#00aaff' }, 
-                buttons: { A: false, X: false, Y: false, B: false, A_Attack: false } 
+                buttons: { A: false, LB: false, LT: false, RB: false, RT: false } 
             },
             { 
                 id: 1, // Attacker (Swarm)
                 crosshair: { x: canvas.width - 200, y: canvas.height / 2, radius: 10, speed: 10, color: '#ff0055' }, 
-                buttons: { A: false, X: false, Y: false, B: false, A_Attack: false } 
+                buttons: { A: false, LB: false, LT: false, RB: false, RT: false } 
             }
         ];
+
+        // Standard Gamepad Button Indices:
+        // 0: A (Used for Start/Rematch)
+        // 4: LB (Left Bumper)
+        // 5: RB (Right Bumper)
+        // 6: LT (Left Trigger)
+        // 7: RT (Right Trigger)
 
         // --- WEB AUDIO API (SYNTHESIZER) ---
         let audioCtx;
@@ -193,7 +200,7 @@
             });
         }
 
-        // --- P2: MUTANT SPAWNER (NERFED) ---
+        // --- P2: MUTANT SPAWNER ---
         function spawnSpecificEnemy(type, y) {
             let enemy = { x: tadpoleNest.x - 10, y: y, wobble: Math.random() * Math.PI * 2, attackCooldown: 0, jumpTimer: 0 };
             
@@ -231,7 +238,7 @@
                 const pad = pads[index];
                 if (!pad) return; 
 
-                // Start / Restart
+                // Start / Restart [A]
                 if (pad.buttons[0].pressed && !player.buttons.A) {
                     initAudio(); 
                     if (gameState === 'START' || gameState === 'GAME_OVER') resetGame();
@@ -253,78 +260,77 @@
 
                     // --- PLAYER 1 (COMMAND) LOGIC ---
                     if (index === 0) {
-                        // Constrain P1 to the left side (defensive line)
                         player.crosshair.x = Math.max(playerBase.width + 10, Math.min(canvas.width / 2 - 50, player.crosshair.x));
 
-                        // [A] Deploy Paratroopers (Cost 15)
-                        if (pad.buttons[0].pressed && player.buttons.A === true && !player.buttons.A_Attack) {
-                            if (p1Energy >= 15) {
-                                p1Energy -= 15;
+                        // [LB] Deploy Paratroopers (Cost 25)
+                        if (pad.buttons[4].pressed && !player.buttons.LB) {
+                            if (p1Energy >= 25) {
+                                p1Energy -= 25;
                                 spawnSoldier(player.crosshair.x, player.crosshair.y - 15);
                                 spawnSoldier(player.crosshair.x - 12, player.crosshair.y + 12);
                                 spawnSoldier(player.crosshair.x + 12, player.crosshair.y + 12);
                                 playDeploySound();
                             }
-                            player.buttons.A_Attack = true;
-                        } else if (!pad.buttons[0].pressed) player.buttons.A_Attack = false;
+                            player.buttons.LB = true;
+                        } else if (!pad.buttons[4].pressed) player.buttons.LB = false;
 
-                        // [X] Tank Platoon (Cost 45)
-                        if (pad.buttons[2].pressed && !player.buttons.X) {
-                            if (p1Energy >= 45) {
-                                p1Energy -= 45;
+                        // [LT] Tank Platoon (Cost 60)
+                        if (pad.buttons[6].pressed && !player.buttons.LT) {
+                            if (p1Energy >= 60) {
+                                p1Energy -= 60;
                                 spawnTank(player.crosshair.x, player.crosshair.y);
                                 for(let i=0; i<4; i++) spawnSoldier(player.crosshair.x - 25 - (Math.random()*15), player.crosshair.y - 25 + (i*18));
                                 playDeploySound();
                             }
-                            player.buttons.X = true;
-                        } else if (!pad.buttons[2].pressed) player.buttons.X = false;
+                            player.buttons.LT = true;
+                        } else if (!pad.buttons[6].pressed) player.buttons.LT = false;
 
-                        // [Y] Heavy Bunker (Cost 70)
-                        if (pad.buttons[3].pressed && !player.buttons.Y) {
-                            if (p1Energy >= 70) {
-                                p1Energy -= 70;
+                        // [RB] Heavy Bunker (Cost 90)
+                        if (pad.buttons[5].pressed && !player.buttons.RB) {
+                            if (p1Energy >= 90) {
+                                p1Energy -= 90;
                                 spawnBunker(player.crosshair.x, player.crosshair.y);
                                 playDeploySound();
                             }
-                            player.buttons.Y = true;
-                        } else if (!pad.buttons[3].pressed) player.buttons.Y = false;
+                            player.buttons.RB = true;
+                        } else if (!pad.buttons[5].pressed) player.buttons.RB = false;
                     }
                     
-                    // --- PLAYER 2 (SWARM) LOGIC (NERFED COSTS) ---
+                    // --- PLAYER 2 (SWARM) LOGIC ---
                     else if (index === 1) {
-                        // Constrain P2 to the right side (Nest area)
                         player.crosshair.x = Math.max(tadpoleNest.x - 100, Math.min(canvas.width - 10, player.crosshair.x));
 
-                        // [A] Basic Tadpole (Cost 15)
-                        if (pad.buttons[0].pressed && player.buttons.A === true && !player.buttons.A_Attack) {
-                            if (p2Energy >= 15) { p2Energy -= 15; spawnSpecificEnemy('basic', player.crosshair.y); playDeploySound(true); }
-                            player.buttons.A_Attack = true;
-                        } else if (!pad.buttons[0].pressed) player.buttons.A_Attack = false;
+                        // [LB] Basic Tadpole (Cost 10)
+                        if (pad.buttons[4].pressed && !player.buttons.LB) {
+                            if (p2Energy >= 10) { p2Energy -= 10; spawnSpecificEnemy('basic', player.crosshair.y); playDeploySound(true); }
+                            player.buttons.LB = true;
+                        } else if (!pad.buttons[4].pressed) player.buttons.LB = false;
 
-                        // [X] Shielded Mutant (Cost 35)
-                        if (pad.buttons[2].pressed && !player.buttons.X) {
-                            if (p2Energy >= 35) { p2Energy -= 35; spawnSpecificEnemy('shielded', player.crosshair.y); playDeploySound(true); }
-                            player.buttons.X = true;
-                        } else if (!pad.buttons[2].pressed) player.buttons.X = false;
+                        // [LT] Shielded Mutant (Cost 20)
+                        if (pad.buttons[6].pressed && !player.buttons.LT) {
+                            if (p2Energy >= 20) { p2Energy -= 20; spawnSpecificEnemy('shielded', player.crosshair.y); playDeploySound(true); }
+                            player.buttons.LT = true;
+                        } else if (!pad.buttons[6].pressed) player.buttons.LT = false;
 
-                        // [Y] Speed Froglet (Cost 45)
-                        if (pad.buttons[3].pressed && !player.buttons.Y) {
-                            if (p2Energy >= 45) { p2Energy -= 45; spawnSpecificEnemy('froglet', player.crosshair.y); playDeploySound(true); }
-                            player.buttons.Y = true;
-                        } else if (!pad.buttons[3].pressed) player.buttons.Y = false;
+                        // [RB] Speed Froglet (Cost 30)
+                        if (pad.buttons[5].pressed && !player.buttons.RB) {
+                            if (p2Energy >= 30) { p2Energy -= 30; spawnSpecificEnemy('froglet', player.crosshair.y); playDeploySound(true); }
+                            player.buttons.RB = true;
+                        } else if (!pad.buttons[5].pressed) player.buttons.RB = false;
 
-                        // [B] Giant Boss Frog (Cost 90)
-                        if (pad.buttons[1].pressed && !player.buttons.B) {
-                            if (p2Energy >= 90) { p2Energy -= 90; spawnSpecificEnemy('frog', player.crosshair.y); playDeploySound(true); }
-                            player.buttons.B = true;
-                        } else if (!pad.buttons[1].pressed) player.buttons.B = false;
+                        // [RT] Giant Boss Frog (Cost 70)
+                        if (pad.buttons[7].pressed && !player.buttons.RT) {
+                            if (p2Energy >= 70) { p2Energy -= 70; spawnSpecificEnemy('frog', player.crosshair.y); playDeploySound(true); }
+                            player.buttons.RT = true;
+                        } else if (!pad.buttons[7].pressed) player.buttons.RT = false;
                     }
                 }
             });
 
             // --- UPDATE LOGIC ---
             if (gameState === 'PLAYING') {
-                p1Energy = Math.min(100, p1Energy + 0.22); 
+                // NERF P1 Energy Gen, BUFF/Maintain P2 Energy Gen
+                p1Energy = Math.min(100, p1Energy + 0.18); 
                 p2Energy = Math.min(100, p2Energy + 0.22); 
 
                 // 1. Update Units (P1)
@@ -438,7 +444,7 @@
                     
                     if (e.x < playerBase.width) {
                         enemies.splice(i, 1);
-                        playerHealth -= (e.type === 'frog' ? 50 : (e.type === 'shielded' ? 10 : 5)); // NERFED BASE DAMAGE
+                        playerHealth -= (e.type === 'frog' ? 50 : (e.type === 'shielded' ? 10 : 5)); 
                         if (playerHealth <= 0) {
                             playerHealth = 0;
                             winner = 'PLAYER 2 (SWARM)';
@@ -560,10 +566,9 @@
                     ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(e.x - eyeOffset, e.y - eyeOffset, eyeOffset, 0, Math.PI * 2); ctx.fill();
                     ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(e.x - (eyeOffset+0.5), e.y - eyeOffset, eyeOffset/2, 0, Math.PI * 2); ctx.fill();
                     
-                    // Health bar for Boss frog
                     if(e.type === 'frog') {
                         ctx.fillStyle = 'red'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, e.radius*2, 3);
-                        ctx.fillStyle = 'green'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, (e.radius*2) * (e.hp/200), 3); // Max HP matched to nerf
+                        ctx.fillStyle = 'green'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, (e.radius*2) * (e.hp/200), 3); 
                     }
                 }
 
@@ -602,11 +607,11 @@
 
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(80, 100, 240, 85);
                 ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Arial'; ctx.fillText("Deploy Units:", 90, 115);
-                ctx.fillStyle = p1Energy >= 15 ? '#44ff44' : '#555'; ctx.fillText(`[A] 3x Paratroopers (-15)`, 90, 135);
-                ctx.fillStyle = p1Energy >= 45 ? '#44ff44' : '#555'; ctx.fillText(`[X] Tank Platoon (-45)`, 90, 155);
-                ctx.fillStyle = p1Energy >= 70 ? '#ff4444' : '#555'; ctx.fillText(`[Y] Heavy Bunker (-70)`, 90, 175);
+                ctx.fillStyle = p1Energy >= 25 ? '#44ff44' : '#555'; ctx.fillText(`[LB] 3x Paratroopers (-25)`, 90, 135);
+                ctx.fillStyle = p1Energy >= 60 ? '#44ff44' : '#555'; ctx.fillText(`[LT] Tank Platoon (-60)`, 90, 155);
+                ctx.fillStyle = p1Energy >= 90 ? '#ff4444' : '#555'; ctx.fillText(`[RB] Heavy Bunker (-90)`, 90, 175);
 
-                // --- UI FOR P2 (SWARM - NERFED COSTS) ---
+                // --- UI FOR P2 (SWARM) ---
                 let p2Offset = canvas.width - 320;
                 ctx.fillStyle = 'white'; ctx.font = 'bold 20px Arial';
                 ctx.fillText(`P2 (SWARM)`, p2Offset, 30);
@@ -620,10 +625,10 @@
 
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(p2Offset, 100, 240, 105);
                 ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Arial'; ctx.fillText("Spawn Mutants:", p2Offset + 10, 115);
-                ctx.fillStyle = p2Energy >= 15 ? '#ff88aa' : '#555'; ctx.fillText(`[A] Basic Tadpole (-15)`, p2Offset + 10, 135);
-                ctx.fillStyle = p2Energy >= 35 ? '#00ffff' : '#555'; ctx.fillText(`[X] Shielded Mutant (-35)`, p2Offset + 10, 155);
-                ctx.fillStyle = p2Energy >= 45 ? '#44ff44' : '#555'; ctx.fillText(`[Y] Speed Froglet (-45)`, p2Offset + 10, 175);
-                ctx.fillStyle = p2Energy >= 90 ? '#ff4444' : '#555'; ctx.fillText(`[B] Giant Boss Frog (-90)`, p2Offset + 10, 195);
+                ctx.fillStyle = p2Energy >= 10 ? '#ff88aa' : '#555'; ctx.fillText(`[LB] Basic Tadpole (-10)`, p2Offset + 10, 135);
+                ctx.fillStyle = p2Energy >= 20 ? '#00ffff' : '#555'; ctx.fillText(`[LT] Shielded Mutant (-20)`, p2Offset + 10, 155);
+                ctx.fillStyle = p2Energy >= 30 ? '#44ff44' : '#555'; ctx.fillText(`[RB] Speed Froglet (-30)`, p2Offset + 10, 175);
+                ctx.fillStyle = p2Energy >= 70 ? '#ff4444' : '#555'; ctx.fillText(`[RT] Giant Boss Frog (-70)`, p2Offset + 10, 195);
             }
 
             if (pads.length < 2 && gameState !== 'START') {
