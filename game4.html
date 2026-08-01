@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Plastic Bastion: Toy City Defender</title>
+    <title>Plastic Rescue: Squad Reunion</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #0d0d0d; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #87CEEB; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
         canvas { display: block; width: 100%; height: 100%; }
         
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 3vmin; }
@@ -16,12 +16,11 @@
         
         .hud-text { color: #fff; font-size: 3vmin; font-weight: bold; margin: 0.5vmin 0; }
         .hud-val { color: #4ade80; }
-        .hud-warn { color: #f87171; }
         
         #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto; z-index: 10; backdrop-filter: blur(8px); }
         .title { color: #fff; font-size: 8vmin; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 2vmin; text-shadow: 0 10px 30px rgba(74, 222, 128, 0.6); text-align: center;}
         .subtitle { color: #cbd5e1; font-size: 3vmin; margin-bottom: 6vmin; text-align: center; max-width: 80%; line-height: 1.4; }
-        .blink { animation: pulse 1.5s infinite; color: #4ade80; font-size: 4vmin; font-weight: bold; }
+        .blink { animation: pulse 1.5s infinite; color: #4ade80; font-size: 4vmin; font-weight: bold; cursor: pointer; }
         
         #gamepad-status { margin-top: 4vmin; padding: 1.5vmin 3vmin; border-radius: 50px; font-size: 2.5vmin; font-weight: bold; transition: all 0.3s ease; }
         .pad-disconnected { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 2px solid #ef4444; }
@@ -39,25 +38,22 @@
     <div id="ui-layer" class="hidden">
         <div class="hud-top">
             <div class="hud-box">
-                <div class="hud-text">HQ INTEGRITY: <span id="ui-health" class="hud-val">100%</span></div>
-                <div class="hud-text">PLASTIC: <span id="ui-plastic" class="hud-val">50</span> <span style="font-size: 2vmin; color:#94a3b8;">(Hold X/B to Build)</span></div>
+                <div class="hud-text">SQUADMATES FOUND: <span id="ui-buddies" class="hud-val">0 / 7</span></div>
             </div>
             <div class="hud-box" style="text-align: right;">
-                <div class="hud-text">WAVE: <span id="ui-wave" class="hud-val">1</span></div>
-                <div class="hud-text">SCORE: <span id="ui-score" class="hud-val">0</span></div>
+                <div class="hud-text">TIME: <span id="ui-time" class="hud-val">0:00</span></div>
             </div>
         </div>
     </div>
 
     <div id="overlay">
-        <div class="title" id="screen-title">PLASTIC BASTION</div>
+        <div class="title" id="screen-title">PLASTIC RESCUE</div>
         <div class="subtitle" id="screen-desc">
-            You are the last green toy soldier. <br>
-            Build walls to protect the Toybox HQ from the red robot bugs!<br><br>
-            <b>L-Stick / D-Pad:</b> Move & Aim<br>
-            <b>A / RT:</b> Shoot Primary<br>
-            <b>X / B / RB:</b> Build City Block (Costs 10 Plastic)<br>
-            <b>Menu:</b> Pause
+            Your squad got scattered across the giant bedroom!<br>
+            Platform across the obstacles and find all your soldier buddies.<br><br>
+            <b>L-Stick / A & D:</b> Move Left / Right<br>
+            <b>A Button / Spacebar:</b> Jump<br>
+            <b>Menu / Escape:</b> Pause
         </div>
         <div class="blink" id="start-prompt">Press 'A' on Controller or Click to Start</div>
         <div id="gamepad-status" class="pad-disconnected">🎮 Controller Disconnected</div>
@@ -65,10 +61,18 @@
 
 <script>
 /** 
- * AUDIO SYNTHESIZER (Web Audio API)
- * Procedural sound effects to keep it single-file.
+ * AUDIO SYNTHESIZER & MUSIC SEQUENCER
  */
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+// Pre-generate white noise buffer for the snare drum
+const noiseBufferSize = audioCtx.sampleRate * 2;
+const noiseBuffer = audioCtx.createBuffer(1, noiseBufferSize, audioCtx.sampleRate);
+const noiseOutput = noiseBuffer.getChannelData(0);
+for (let i = 0; i < noiseBufferSize; i++) {
+    noiseOutput[i] = Math.random() * 2 - 1;
+}
+
 const Sound = {
     play: (type) => {
         if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -79,68 +83,151 @@ const Sound = {
         const now = audioCtx.currentTime;
         
         switch(type) {
-            case 'shoot':
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(880, now);
-                osc.frequency.exponentialRampToValueAtTime(110, now + 0.1);
-                gain.gain.setValueAtTime(0.1, now);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-                osc.start(now);
-                osc.stop(now + 0.1);
-                break;
-            case 'hit':
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(100, now);
-                osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+            case 'jump':
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(600, now + 0.15);
                 gain.gain.setValueAtTime(0.2, now);
-                gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
-                osc.start(now);
-                osc.stop(now + 0.1);
-                break;
-            case 'build':
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(220, now);
-                osc.frequency.setValueAtTime(440, now + 0.05);
-                gain.gain.setValueAtTime(0.15, now);
                 gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
                 osc.start(now);
                 osc.stop(now + 0.15);
                 break;
-            case 'explosion':
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(100, now);
-                osc.frequency.exponentialRampToValueAtTime(10, now + 0.5);
-                gain.gain.setValueAtTime(0.3, now);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
-                // add noise
-                const filter = audioCtx.createBiquadFilter();
-                filter.type = 'lowpass';
-                filter.frequency.value = 1000;
-                osc.disconnect();
-                osc.connect(filter);
-                filter.connect(gain);
-                osc.start(now);
-                osc.stop(now + 0.5);
-                break;
             case 'collect':
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(600, now);
-                osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(554, now + 0.1);
+                osc.frequency.setValueAtTime(659, now + 0.2);
                 gain.gain.setValueAtTime(0.1, now);
-                gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
                 osc.start(now);
-                osc.stop(now + 0.1);
+                osc.stop(now + 0.4);
                 break;
-            case 'error':
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(150, now);
-                osc.frequency.setValueAtTime(100, now + 0.1);
+            case 'win':
+                osc.type = 'triangle';
+                [523, 659, 783, 1046].forEach((freq, i) => {
+                    let time = now + (i * 0.15);
+                    osc.frequency.setValueAtTime(freq, time);
+                });
                 gain.gain.setValueAtTime(0.2, now);
-                gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                gain.gain.linearRampToValueAtTime(0.01, now + 1.0);
                 osc.start(now);
-                osc.stop(now + 0.2);
+                osc.stop(now + 1.0);
                 break;
         }
+    }
+};
+
+const Music = {
+    isPlaying: false,
+    nextNoteTime: 0,
+    current16thNote: 0,
+    tempo: 125, // Upbeat arcade tempo
+    lookahead: 25.0, // ms
+    scheduleAheadTime: 0.1, // s
+    timerID: null,
+    
+    playNote: function(time, noteIndex) {
+        // --- 1. SNARE (Marching Beat) ---
+        // Plays on beats: 1, 2, 3, 4 and little snare rolls
+        const isSnare = (noteIndex % 4 === 0) || (noteIndex % 16 === 14) || (noteIndex % 16 === 15);
+        if (isSnare) {
+            let noise = audioCtx.createBufferSource();
+            noise.buffer = noiseBuffer;
+            let filter = audioCtx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.value = 1200;
+            let gain = audioCtx.createGain();
+            
+            // Accent the downbeats slightly louder than the rolls
+            let volume = (noteIndex % 4 === 0) ? 0.25 : 0.1;
+            gain.gain.setValueAtTime(volume, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+            
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+            noise.start(time);
+            noise.stop(time + 0.1);
+        }
+
+        // --- 2. BASSLINE (Square Wave) ---
+        // Driving alternating 8th notes
+        if (noteIndex % 2 === 0) {
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.type = 'square';
+            
+            // G minor marching progression
+            let bassNotes = [98.00, 98.00, 116.54, 130.81, 98.00, 98.00, 87.31, 116.54];
+            let bassFreq = bassNotes[(noteIndex / 2) % bassNotes.length];
+            
+            // Octave drop on the start of a measure
+            if (noteIndex === 0) bassFreq /= 2; 
+            
+            osc.frequency.setValueAtTime(bassFreq, time);
+            gain.gain.setValueAtTime(0.15, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(time);
+            osc.stop(time + 0.15);
+        }
+
+        // --- 3. ARCADE MELODY (Pulse/Square) ---
+        // Staccato chiptune melody
+        const melodyPattern = [
+            0, null, 2, null, 4, null, 2, 4,
+            7, null, null, 4, null, null, null, null
+        ];
+        
+        let melodyNote = melodyPattern[noteIndex % 16];
+        if (melodyNote !== null) {
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.type = 'square';
+            
+            // Minor pentatonic scale mapping (G4 base)
+            let scale = [392.00, 466.16, 523.25, 587.33, 698.46, 783.99, 932.33, 1046.50];
+            osc.frequency.setValueAtTime(scale[melodyNote], time);
+            
+            gain.gain.setValueAtTime(0.05, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(time);
+            osc.stop(time + 0.1);
+        }
+    },
+    
+    scheduler: function() {
+        while (Music.nextNoteTime < audioCtx.currentTime + Music.scheduleAheadTime) {
+            Music.playNote(Music.nextNoteTime, Music.current16thNote);
+            
+            // Advance time
+            const secondsPerBeat = 60.0 / Music.tempo;
+            Music.nextNoteTime += 0.25 * secondsPerBeat; // 16th note timing
+            
+            Music.current16thNote++;
+            if (Music.current16thNote === 32) Music.current16thNote = 0;
+        }
+        Music.timerID = setTimeout(Music.scheduler, Music.lookahead);
+    },
+    
+    start: function() {
+        if (!this.isPlaying) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            this.isPlaying = true;
+            this.current16thNote = 0;
+            this.nextNoteTime = audioCtx.currentTime + 0.05;
+            this.scheduler();
+        }
+    },
+    
+    stop: function() {
+        this.isPlaying = false;
+        clearTimeout(this.timerID);
     }
 };
 
@@ -149,127 +236,57 @@ const Sound = {
  */
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d', { alpha: false });
-let width, height, cx, cy;
+let width, height;
+const CAMERA_ZOOM = 0.6; // Zooms out to see more of the battlefield
 
 function resize() {
     width = canvas.width = window.innerWidth;
     height = canvas.height = window.innerHeight;
-    cx = width / 2;
-    cy = height / 2;
-    generateFloorTexture();
 }
 window.addEventListener('resize', resize);
 
-// Procedural Floor Texture (Macro photography hardwood floor)
-let floorPattern;
-function generateFloorTexture() {
-    const off = document.createElement('canvas');
-    off.width = 512; off.height = 512;
-    const octx = off.getContext('2d');
-    
-    // Base wood color
-    octx.fillStyle = '#4a2f1d';
-    octx.fillRect(0, 0, 512, 512);
-    
-    // Planks
-    octx.fillStyle = '#3a2212';
-    for(let i=0; i<512; i+=64) {
-        octx.fillRect(0, i, 512, 4);
-        if(Math.random() > 0.5) octx.fillRect(Math.random()*512, i-64, 4, 64);
-    }
-    
-    // Grain
-    octx.globalAlpha = 0.1;
-    octx.strokeStyle = '#2b170a';
-    octx.lineWidth = 2;
-    for(let i=0; i<200; i++) {
-        octx.beginPath();
-        octx.moveTo(0, Math.random()*512);
-        octx.bezierCurveTo(170, Math.random()*512, 340, Math.random()*512, 512, Math.random()*512);
-        octx.stroke();
-    }
-    
-    floorPattern = ctx.createPattern(off, 'repeat');
-}
-
 /**
- * GAMEPAD API
+ * GAMEPAD & INPUT
  */
 const Input = {
-    x: 0, y: 0, 
-    aimX: 0, aimY: -1,
-    shoot: false, build: false, pause: false,
-    prevBuild: false, prevPause: false, prevShoot: false,
+    x: 0,
+    jump: false, prevJump: false,
+    pause: false, prevPause: false,
     connected: false,
     deadzone: 0.18
 };
 
 window.addEventListener("gamepadconnected", (e) => {
     Input.connected = true;
-    const el = document.getElementById('gamepad-status');
-    el.className = 'pad-connected';
-    el.innerText = `🎮 ${e.gamepad.id.substring(0,25)} Connected`;
+    document.getElementById('gamepad-status').className = 'pad-connected';
+    document.getElementById('gamepad-status').innerText = `🎮 ${e.gamepad.id.substring(0,25)} Connected`;
 });
 window.addEventListener("gamepaddisconnected", (e) => {
     Input.connected = false;
-    const el = document.getElementById('gamepad-status');
-    el.className = 'pad-disconnected';
-    el.innerText = '🎮 Controller Disconnected';
+    document.getElementById('gamepad-status').className = 'pad-disconnected';
+    document.getElementById('gamepad-status').innerText = '🎮 Controller Disconnected';
 });
 
-// Mouse/Keyboard fallback
 let keys = {};
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
 
 function pollInput() {
     let pad = navigator.getGamepads()[0];
-    
-    Input.prevBuild = Input.build;
+    Input.prevJump = Input.jump;
     Input.prevPause = Input.pause;
-    Input.prevShoot = Input.shoot;
     
     if (pad) {
-        // Left Stick (Movement & Aiming)
         let lx = pad.axes[0];
-        let ly = pad.axes[1];
         if (Math.abs(lx) < Input.deadzone) lx = 0;
-        if (Math.abs(ly) < Input.deadzone) ly = 0;
-        
-        // D-Pad Fallback
-        if (pad.buttons[14]?.pressed) ly = -1; // Up
-        if (pad.buttons[15]?.pressed) ly = 1;  // Down
-        if (pad.buttons[14]?.pressed) lx = -1; // Left
-        if (pad.buttons[15]?.pressed) lx = 1;  // Right
-
+        if (pad.buttons[14]?.pressed) lx = -1; // D-pad Left
+        if (pad.buttons[15]?.pressed) lx = 1;  // D-pad Right
         Input.x = lx;
-        Input.y = ly;
-
-        if (lx !== 0 || ly !== 0) {
-            let len = Math.hypot(lx, ly);
-            Input.aimX = lx / len;
-            Input.aimY = ly / len;
-        }
-
-        // A (0) or RT (7) - Shoot
-        Input.shoot = pad.buttons[0]?.pressed || (pad.buttons[7] && pad.buttons[7].value > 0.5);
-        
-        // X (2), B (1), RB (5) - Build
-        Input.build = pad.buttons[2]?.pressed || pad.buttons[1]?.pressed || pad.buttons[5]?.pressed;
-        
-        // Menu (9) - Pause
-        Input.pause = pad.buttons[9]?.pressed;
+        Input.jump = pad.buttons[0]?.pressed || pad.buttons[7]?.pressed; // A or RT
+        Input.pause = pad.buttons[9]?.pressed; // Menu
     } else {
-        // Keyboard fallback
         Input.x = (keys['KeyD']||keys['ArrowRight'] ? 1 : 0) - (keys['KeyA']||keys['ArrowLeft'] ? 1 : 0);
-        Input.y = (keys['KeyS']||keys['ArrowDown'] ? 1 : 0) - (keys['KeyW']||keys['ArrowUp'] ? 1 : 0);
-        if (Input.x !== 0 || Input.y !== 0) {
-            let len = Math.hypot(Input.x, Input.y);
-            Input.aimX = Input.x / len;
-            Input.aimY = Input.y / len;
-        }
-        Input.shoot = keys['Space'] || keys['Enter'];
-        Input.build = keys['ShiftLeft'] || keys['ShiftRight'] || keys['KeyE'];
+        Input.jump = keys['Space'] || keys['ArrowUp'] || keys['KeyW'];
         Input.pause = keys['Escape'] || keys['KeyP'];
     }
 }
@@ -277,334 +294,183 @@ function pollInput() {
 /**
  * GAME STATE & ENTITIES
  */
-const State = {
-    MENU: 0, PLAYING: 1, PAUSED: 2, GAMEOVER: 3,
-    current: 0
-};
+const State = { MENU: 0, PLAYING: 1, PAUSED: 2, GAMEOVER: 3, current: 0 };
 
 let game = {
-    score: 0, wave: 1, plastic: 50,
-    lastTime: 0, spawnTimer: 0, waveTimer: 0
+    time: 0, lastTime: 0,
+    buddiesFound: 0, totalBuddies: 7
 };
 
-// Physics Scale (pixels per unit roughly)
-const SCALE = 40; 
-
-class HQ {
-    constructor() {
-        this.x = cx; this.y = cy;
-        this.size = 120;
-        this.maxHealth = 1000;
-        this.health = 1000;
-    }
-    draw(ctx) {
-        // Toybox
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        
-        // Shadow
-        ctx.shadowColor = 'rgba(0,0,0,0.8)';
-        ctx.shadowBlur = 20;
-        ctx.shadowOffsetX = 10;
-        ctx.shadowOffsetY = 15;
-        
-        // Box Base
-        let grad = ctx.createLinearGradient(-this.size/2, -this.size/2, this.size/2, this.size/2);
-        grad.addColorStop(0, '#3b82f6');
-        grad.addColorStop(1, '#1e3a8a');
-        ctx.fillStyle = grad;
-        ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
-        
-        ctx.shadowColor = 'transparent';
-        
-        // Star decal
-        ctx.fillStyle = 'rgba(255,255,255,0.8)';
-        ctx.font = 'bold 60px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText("★", 0, 0);
-
-        // Health bar
-        ctx.fillStyle = '#ef4444';
-        ctx.fillRect(-this.size/2, this.size/2 + 10, this.size, 10);
-        ctx.fillStyle = '#22c55e';
-        ctx.fillRect(-this.size/2, this.size/2 + 10, this.size * (this.health/this.maxHealth), 10);
-        
-        ctx.restore();
-    }
-}
+const GRAVITY = 1800;
+let camera = { x: 0, y: 0 };
 
 class Player {
-    constructor() {
-        this.x = cx + 150; this.y = cy;
-        this.radius = 20;
-        this.speed = 300;
-        this.cooldown = 0;
-        this.buildCooldown = 0;
+    constructor(x, y) {
+        this.x = x; this.y = y;
+        this.w = 30; this.h = 60;
+        this.vx = 0; this.vy = 0;
+        this.speed = 400;
+        this.jumpForce = -900;
+        this.grounded = false;
+        this.facingRight = true;
     }
     update(dt) {
-        // Movement
-        this.x += Input.x * this.speed * dt;
-        this.y += Input.y * this.speed * dt;
+        // Horizontal movement
+        this.vx = Input.x * this.speed;
+        if (this.vx > 0) this.facingRight = true;
+        if (this.vx < 0) this.facingRight = false;
         
-        // Boundaries
-        this.x = Math.max(this.radius, Math.min(width - this.radius, this.x));
-        this.y = Math.max(this.radius, Math.min(height - this.radius, this.y));
+        this.x += this.vx * dt;
+        this.checkCollisions(true); // check horizontal
 
-        // Timers
-        if(this.cooldown > 0) this.cooldown -= dt;
-        if(this.buildCooldown > 0) this.buildCooldown -= dt;
+        // Vertical movement (Gravity & Jumping)
+        this.vy += GRAVITY * dt;
+        
+        // Terminal velocity
+        if (this.vy > 1000) this.vy = 1000;
 
-        // Shoot
-        if (Input.shoot && this.cooldown <= 0) {
-            projectiles.push(new Projectile(this.x, this.y, Input.aimX, Input.aimY));
-            Sound.play('shoot');
-            this.cooldown = 0.15; // Fire rate
+        if (Input.jump && !Input.prevJump && this.grounded) {
+            this.vy = this.jumpForce;
+            this.grounded = false;
+            Sound.play('jump');
         }
 
-        // Build Block
-        if (Input.build && !Input.prevBuild && this.buildCooldown <= 0) {
-            if (game.plastic >= 10) {
-                // Snap to grid roughly
-                const gridSize = 60;
-                let bx = Math.round(this.x / gridSize) * gridSize;
-                let by = Math.round(this.y / gridSize) * gridSize;
+        this.y += this.vy * dt;
+        this.grounded = false;
+        this.checkCollisions(false); // check vertical
+        
+        // Level Boundaries (left side)
+        if (this.x < 0) this.x = 0;
+    }
+    checkCollisions(isHorizontal) {
+        for (let p of platforms) {
+            if (this.x < p.x + p.w && this.x + this.w > p.x &&
+                this.y < p.y + p.h && this.y + this.h > p.y) {
                 
-                // Prevent building inside HQ
-                let distToHQ = Math.hypot(bx - hq.x, by - hq.y);
-                if(distToHQ > hq.size/2 + 30) {
-                    blocks.push(new Block(bx, by));
-                    game.plastic -= 10;
-                    Sound.play('build');
-                    updateHUD();
-                    this.buildCooldown = 0.3;
+                if (isHorizontal) {
+                    if (this.vx > 0) this.x = p.x - this.w;
+                    else if (this.vx < 0) this.x = p.x + p.w;
+                    this.vx = 0;
                 } else {
-                    Sound.play('error');
+                    if (this.vy > 0) { // falling
+                        this.y = p.y - this.h;
+                        this.grounded = true;
+                    } else if (this.vy < 0) { // hitting head
+                        this.y = p.y + p.h;
+                    }
+                    this.vy = 0;
                 }
-            } else {
-                Sound.play('error');
             }
         }
     }
     draw(ctx) {
         ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.rotate(Math.atan2(Input.aimY, Input.aimX));
+        ctx.translate(this.x + this.w/2, this.y + this.h/2);
+        if (!this.facingRight) ctx.scale(-1, 1);
 
-        // Shadow
-        ctx.shadowColor = 'rgba(0,0,0,0.6)';
-        ctx.shadowBlur = 10;
-        ctx.shadowOffsetX = 8;
-        ctx.shadowOffsetY = 12;
-
-        // Base/Helmet
-        let grad = ctx.createRadialGradient(0,0,0, 0,0,this.radius);
-        grad.addColorStop(0, '#86efac');
-        grad.addColorStop(1, '#15803d');
-        ctx.fillStyle = grad;
+        // Toy Soldier Draw
+        ctx.fillStyle = '#22c55e'; // Green plastic base
+        ctx.fillRect(-this.w/2, -this.h/2 + 20, this.w, this.h - 20); // body
+        ctx.fillRect(-this.w/2 + 5, -this.h/2, 20, 20); // head
+        
+        // Helmet rim
+        ctx.fillStyle = '#166534';
         ctx.beginPath();
-        ctx.arc(0, 0, this.radius, 0, Math.PI*2);
+        ctx.ellipse(0, -this.h/2 + 5, 18, 6, 0, 0, Math.PI*2);
         ctx.fill();
 
-        // Gun
-        ctx.fillStyle = '#064e3b';
-        ctx.fillRect(this.radius-5, -5, 25, 10);
+        // Gun/Arm pointing forward
+        ctx.fillStyle = '#15803d';
+        ctx.fillRect(0, -this.h/2 + 30, 25, 8);
         
+        // Base plate (like classic toy soldiers)
+        ctx.fillStyle = '#14532d';
+        ctx.beginPath();
+        ctx.ellipse(0, this.h/2, 22, 6, 0, 0, Math.PI*2);
+        ctx.fill();
+
         ctx.restore();
     }
 }
 
-class Projectile {
-    constructor(x, y, dx, dy) {
-        this.x = x + dx*25; this.y = y + dy*25;
-        this.dx = dx; this.dy = dy;
-        this.speed = 800;
-        this.life = 1.5;
-        this.radius = 4;
+class Buddy {
+    constructor(x, y) {
+        this.x = x; this.y = y;
+        this.w = 30; this.h = 60;
+        this.collected = false;
+        this.hoverOffset = 0;
     }
     update(dt) {
-        this.x += this.dx * this.speed * dt;
-        this.y += this.dy * this.speed * dt;
-        this.life -= dt;
+        this.hoverOffset += dt * 3;
+        
+        if (!this.collected) {
+            // Check collision with player
+            if (player.x < this.x + this.w && player.x + player.w > this.x &&
+                player.y < this.y + this.h && player.y + player.h > this.y) {
+                this.collected = true;
+                game.buddiesFound++;
+                Sound.play('collect');
+                spawnParticles(this.x + this.w/2, this.y + this.h/2, '#4ade80', 30);
+                updateHUD();
+                
+                if (game.buddiesFound >= game.totalBuddies) {
+                    setTimeout(gameWin, 500);
+                }
+            }
+        }
     }
     draw(ctx) {
-        ctx.fillStyle = '#fef08a';
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
-        ctx.fill();
+        if (this.collected) return;
+        
+        ctx.save();
+        // Hover effect to make them stand out
+        let yWave = Math.sin(this.hoverOffset) * 5;
+        ctx.translate(this.x + this.w/2, this.y + this.h/2 + yWave);
+        
         // Glow
-        ctx.shadowColor = '#eab308';
-        ctx.shadowBlur = 10;
-        ctx.fill();
-        ctx.shadowColor = 'transparent';
-    }
-}
-
-class Block {
-    constructor(x, y) {
-        this.x = x; this.y = y;
-        this.size = 50;
-        this.health = 100;
-        this.maxHealth = 100;
-    }
-    draw(ctx) {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        
-        ctx.shadowColor = 'rgba(0,0,0,0.7)';
+        ctx.shadowColor = '#4ade80';
         ctx.shadowBlur = 15;
-        ctx.shadowOffsetX = 5;
-        ctx.shadowOffsetY = 10;
 
-        // Lego brick style
-        ctx.fillStyle = '#eab308'; // Yellow plastic block
-        ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
+        // Soldier Draw (Standing at attention, lighter green to pop out)
+        ctx.fillStyle = '#4ade80'; 
+        ctx.fillRect(-this.w/2, -this.h/2 + 20, this.w, this.h - 20); // body
+        ctx.fillRect(-this.w/2 + 5, -this.h/2, 20, 20); // head
         
-        // Inner bevel highlight
-        ctx.strokeStyle = '#fef08a';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(-this.size/2 + 2, -this.size/2 + 2, this.size - 4, this.size - 4);
-        
-        // Studs
-        ctx.fillStyle = '#ca8a04';
-        ctx.beginPath(); ctx.arc(-10, -10, 6, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(10, -10, 6, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(-10, 10, 6, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(10, 10, 6, 0, Math.PI*2); ctx.fill();
-
-        ctx.shadowColor = 'transparent';
-        
-        // Damage overlay
-        if (this.health < this.maxHealth) {
-            ctx.fillStyle = `rgba(0,0,0,${1 - (this.health/this.maxHealth)})`;
-            ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
-        }
-        
-        ctx.restore();
-    }
-}
-
-class Enemy {
-    constructor() {
-        // Spawn offscreen
-        let angle = Math.random() * Math.PI * 2;
-        let dist = Math.max(width, height) / 2 + 100;
-        this.x = cx + Math.cos(angle) * dist;
-        this.y = cy + Math.sin(angle) * dist;
-        
-        this.radius = 16 + Math.random() * 8;
-        this.speed = 50 + Math.random() * 50 + (game.wave * 10);
-        this.health = 20 + (game.wave * 10);
-        this.damage = 10 + game.wave * 2;
-        this.attackCooldown = 0;
-        this.target = null;
-    }
-    update(dt) {
-        // Find target (closest block or HQ)
-        this.target = hq;
-        let minDist = Math.hypot(this.x - hq.x, this.y - hq.y);
-        
-        for (let b of blocks) {
-            let d = Math.hypot(this.x - b.x, this.y - b.y);
-            if (d < minDist) {
-                minDist = d;
-                this.target = b;
-            }
-        }
-
-        // Move towards target
-        let dx = this.target.x - this.x;
-        let dy = this.target.y - this.y;
-        let dist = Math.hypot(dx, dy);
-        
-        let attackRange = this.target === hq ? hq.size/2 + this.radius : this.target.size/2 + this.radius;
-
-        if (dist > attackRange) {
-            this.x += (dx / dist) * this.speed * dt;
-            this.y += (dy / dist) * this.speed * dt;
-        } else {
-            // Attack
-            if (this.attackCooldown <= 0) {
-                this.target.health -= this.damage;
-                this.attackCooldown = 1.0;
-                Sound.play('hit');
-                if (this.target === hq) updateHUD();
-            }
-        }
-        if (this.attackCooldown > 0) this.attackCooldown -= dt;
-    }
-    draw(ctx) {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        
-        let dx = this.target ? this.target.x - this.x : 0;
-        let dy = this.target ? this.target.y - this.y : 0;
-        ctx.rotate(Math.atan2(dy, dx));
-
-        ctx.shadowColor = 'rgba(0,0,0,0.6)';
-        ctx.shadowBlur = 8;
-        ctx.shadowOffsetX = 5;
-        ctx.shadowOffsetY = 10;
-
-        // Robot Bug Body
-        let grad = ctx.createRadialGradient(0,0,0, 0,0,this.radius);
-        grad.addColorStop(0, '#fca5a5');
-        grad.addColorStop(1, '#991b1b');
-        ctx.fillStyle = grad;
-        
+        ctx.fillStyle = '#16a34a';
         ctx.beginPath();
-        ctx.ellipse(0, 0, this.radius, this.radius*0.7, 0, 0, Math.PI*2);
+        ctx.ellipse(0, -this.h/2 + 5, 18, 6, 0, 0, Math.PI*2);
         ctx.fill();
 
-        // Pincers
-        ctx.strokeStyle = '#450a0a';
-        ctx.lineWidth = 4;
+        // Base plate
+        ctx.fillStyle = '#14532d';
         ctx.beginPath();
-        ctx.moveTo(this.radius*0.8, -this.radius*0.4);
-        ctx.lineTo(this.radius*1.5, -this.radius*0.8);
-        ctx.moveTo(this.radius*0.8, this.radius*0.4);
-        ctx.lineTo(this.radius*1.5, this.radius*0.8);
-        ctx.stroke();
+        ctx.ellipse(0, this.h/2, 22, 6, 0, 0, Math.PI*2);
+        ctx.fill();
+
+        // Help bubble
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = "20px Arial";
+        ctx.fillText("!", -5, -this.h/2 - 10);
         
         ctx.restore();
     }
 }
 
-class Pickup {
-    constructor(x, y) {
+class Platform {
+    constructor(x, y, w, h, color) {
         this.x = x; this.y = y;
-        this.radius = 8;
-        this.life = 10;
-        this.rot = Math.random() * Math.PI;
-    }
-    update(dt) {
-        this.life -= dt;
-        this.rot += dt;
-        // Magnet to player if close
-        let dx = player.x - this.x;
-        let dy = player.y - this.y;
-        let dist = Math.hypot(dx, dy);
-        if (dist < 80) {
-            this.x += (dx/dist) * 400 * dt;
-            this.y += (dy/dist) * 400 * dt;
-        }
+        this.w = w; this.h = h;
+        this.color = color || '#d97706';
     }
     draw(ctx) {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.rot);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.w, this.h);
         
-        ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-        ctx.shadowBlur = 10;
-        
-        ctx.fillStyle = '#60a5fa'; // Blue plastic scrap
-        ctx.fillRect(-this.radius, -this.radius, this.radius*2, this.radius*2);
-        
-        // inner glint
-        ctx.fillStyle = '#bfdbfe';
-        ctx.fillRect(-this.radius+2, -this.radius+2, 4, 4);
-        
-        ctx.restore();
+        // Inner detail/highlight for block-like look
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(this.x + 2, this.y + 2, this.w - 4, this.h - 4);
     }
 }
 
@@ -612,19 +478,20 @@ class Particle {
     constructor(x, y, color) {
         this.x = x; this.y = y;
         let angle = Math.random() * Math.PI * 2;
-        let speed = Math.random() * 200 + 50;
+        let speed = Math.random() * 200 + 100;
         this.dx = Math.cos(angle) * speed;
         this.dy = Math.sin(angle) * speed;
-        this.life = 0.3 + Math.random() * 0.4;
+        this.life = 0.5 + Math.random() * 0.5;
         this.maxLife = this.life;
         this.color = color;
-        this.size = 2 + Math.random() * 4;
+        this.size = 4 + Math.random() * 6;
     }
     update(dt) {
+        this.vy = (this.vy || 0) + GRAVITY * 0.5 * dt;
         this.x += this.dx * dt;
-        this.y += this.dy * dt;
-        this.dx *= 0.9; // friction
-        this.dy *= 0.9;
+        this.y += (this.dy + this.vy) * dt;
+        this.dx *= 0.95; 
+        this.dy *= 0.95;
         this.life -= dt;
     }
     draw(ctx) {
@@ -637,33 +504,75 @@ class Particle {
     }
 }
 
-/**
- * GAME VARIABLES
- */
-let hq, player;
-let projectiles = [], blocks = [], enemies = [], pickups = [], particles = [];
+let player;
+let platforms = [];
+let buddies = [];
+let particles = [];
+
+function buildLevel() {
+    platforms = [];
+    buddies = [];
+    
+    // Main long floor (Carpet/Desk)
+    platforms.push(new Platform(-1000, 800, 10000, 500, '#1e3a8a')); // Giant blue book/mat base
+    
+    // Platform layout (x, y, w, h, color)
+    const toyYellow = '#eab308', toyRed = '#ef4444', toyBlue = '#3b82f6', toyWood = '#b45309';
+
+    platforms.push(new Platform(400, 650, 150, 150, toyRed));
+    platforms.push(new Platform(700, 500, 150, 300, toyYellow));
+    buddies.push(new Buddy(760, 440)); // Buddy 1
+    
+    platforms.push(new Platform(1050, 600, 200, 50, toyWood));
+    platforms.push(new Platform(1400, 450, 200, 50, toyWood));
+    buddies.push(new Buddy(1485, 390)); // Buddy 2
+    
+    platforms.push(new Platform(1800, 700, 100, 100, toyBlue));
+    platforms.push(new Platform(1950, 550, 100, 250, toyRed));
+    platforms.push(new Platform(2100, 400, 100, 400, toyYellow));
+    
+    platforms.push(new Platform(2400, 250, 150, 50, toyWood));
+    buddies.push(new Buddy(2460, 190)); // Buddy 3
+    
+    platforms.push(new Platform(2700, 600, 300, 200, toyBlue));
+    buddies.push(new Buddy(2850, 540)); // Buddy 4
+    
+    // Tricky gap jump section
+    platforms.push(new Platform(3200, 500, 100, 50, toyRed));
+    platforms.push(new Platform(3500, 400, 100, 50, toyYellow));
+    platforms.push(new Platform(3800, 300, 100, 50, toyBlue));
+    buddies.push(new Buddy(3835, 240)); // Buddy 5
+    
+    platforms.push(new Platform(4000, 700, 500, 100, toyWood));
+    platforms.push(new Platform(4200, 600, 100, 100, toyRed));
+    platforms.push(new Platform(4300, 500, 100, 200, toyYellow));
+    buddies.push(new Buddy(4335, 440)); // Buddy 6
+    
+    // The final peak
+    platforms.push(new Platform(4600, 400, 150, 50, toyWood));
+    platforms.push(new Platform(4900, 250, 200, 550, toyBlue));
+    buddies.push(new Buddy(4985, 190)); // Buddy 7 (Last one)
+    
+    // Bounds wall on far right
+    platforms.push(new Platform(5300, -500, 200, 2000, '#0f172a'));
+
+    game.totalBuddies = buddies.length;
+}
 
 function initGame() {
-    hq = new HQ();
-    player = new Player();
-    projectiles = [];
-    blocks = [];
-    enemies = [];
-    pickups = [];
+    buildLevel();
+    player = new Player(100, 600);
     particles = [];
     
-    game.score = 0;
-    game.wave = 1;
-    game.plastic = 50;
-    game.spawnTimer = 0;
-    game.waveTimer = 0;
+    game.time = 0;
+    game.buddiesFound = 0;
     
     updateHUD();
     State.current = State.PLAYING;
     document.getElementById('ui-layer').classList.remove('hidden');
     document.getElementById('overlay').classList.add('hidden');
     
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    Music.start();
 }
 
 function spawnParticles(x, y, color, count) {
@@ -671,23 +580,24 @@ function spawnParticles(x, y, color, count) {
 }
 
 function updateHUD() {
-    const hpEl = document.getElementById('ui-health');
-    let hpPercent = Math.max(0, Math.floor((hq.health/hq.maxHealth)*100));
-    hpEl.innerText = hpPercent + "%";
-    hpEl.className = hpPercent < 30 ? 'hud-warn' : 'hud-val';
-    
-    document.getElementById('ui-plastic').innerText = game.plastic;
-    document.getElementById('ui-wave').innerText = game.wave;
-    document.getElementById('ui-score').innerText = game.score;
+    document.getElementById('ui-buddies').innerText = `${game.buddiesFound} / ${game.totalBuddies}`;
+    let mins = Math.floor(game.time / 60);
+    let secs = Math.floor(game.time % 60).toString().padStart(2, '0');
+    document.getElementById('ui-time').innerText = `${mins}:${secs}`;
 }
 
-function gameOver() {
+function gameWin() {
     State.current = State.GAMEOVER;
-    Sound.play('explosion');
+    Music.stop(); // Stop soundtrack on victory
+    Sound.play('win');
     document.getElementById('ui-layer').classList.add('hidden');
     document.getElementById('overlay').classList.remove('hidden');
-    document.getElementById('screen-title').innerText = "HQ DESTROYED";
-    document.getElementById('screen-desc').innerHTML = `You survived to Wave ${game.wave}<br>Final Score: ${game.score}<br><br>Press 'A' or Click to Restart`;
+    document.getElementById('screen-title').innerText = "SQUAD RESCUED!";
+    
+    let mins = Math.floor(game.time / 60);
+    let secs = Math.floor(game.time % 60).toString().padStart(2, '0');
+    
+    document.getElementById('screen-desc').innerHTML = `You found all ${game.totalBuddies} soldiers.<br>Clear Time: ${mins}:${secs}<br><br>Press 'A' or Click to Play Again`;
     document.getElementById('start-prompt').innerText = "Restart Mission";
 }
 
@@ -695,113 +605,80 @@ function gameOver() {
  * MAIN LOOP
  */
 function update(dt) {
+    game.time += dt;
+    updateHUD();
+
     player.update(dt);
     
-    // Wave Management
-    game.waveTimer += dt;
-    if (game.waveTimer > 30) { // New wave every 30s
-        game.wave++;
-        game.waveTimer = 0;
-        updateHUD();
-    }
+    // Update Camera (Lerp towards player with offset to show more in front)
+    let targetCamX = player.x - (width / (2 * CAMERA_ZOOM)) + (player.vx > 0 ? 200 : (player.vx < 0 ? -200 : 0));
+    let targetCamY = player.y - (height / (2 * CAMERA_ZOOM)) + 100;
     
-    // Enemy Spawning
-    game.spawnTimer -= dt;
-    let spawnRate = Math.max(0.5, 2.5 - (game.wave * 0.2)); // Gets faster
-    if (game.spawnTimer <= 0) {
-        enemies.push(new Enemy());
-        game.spawnTimer = spawnRate;
-    }
+    // Clamp camera to level bounds roughly
+    targetCamX = Math.max(0, targetCamX);
 
-    // Entities
-    for (let i = projectiles.length - 1; i >= 0; i--) {
-        let p = projectiles[i];
-        p.update(dt);
-        if (p.life <= 0 || p.x < 0 || p.x > width || p.y < 0 || p.y > height) {
-            projectiles.splice(i, 1);
-            continue;
-        }
-        // Collision with enemies
-        for (let j = enemies.length - 1; j >= 0; j--) {
-            let e = enemies[j];
-            if (Math.hypot(p.x - e.x, p.y - e.y) < e.radius + p.radius) {
-                e.health -= 15; // Weapon damage
-                spawnParticles(p.x, p.y, '#fef08a', 5);
-                projectiles.splice(i, 1);
-                Sound.play('hit');
-                if (e.health <= 0) {
-                    spawnParticles(e.x, e.y, '#991b1b', 15);
-                    Sound.play('explosion');
-                    game.score += 10 * game.wave;
-                    // Drop pickup
-                    if (Math.random() > 0.3) pickups.push(new Pickup(e.x, e.y));
-                    enemies.splice(j, 1);
-                    updateHUD();
-                }
-                break;
-            }
-        }
-    }
+    camera.x += (targetCamX - camera.x) * 5 * dt;
+    camera.y += (targetCamY - camera.y) * 5 * dt;
 
-    for (let i = enemies.length - 1; i >= 0; i--) {
-        enemies[i].update(dt);
-    }
-
-    for (let i = blocks.length - 1; i >= 0; i--) {
-        if (blocks[i].health <= 0) {
-            spawnParticles(blocks[i].x, blocks[i].y, '#eab308', 20);
-            Sound.play('explosion');
-            blocks.splice(i, 1);
-        }
-    }
-
-    for (let i = pickups.length - 1; i >= 0; i--) {
-        let pk = pickups[i];
-        pk.update(dt);
-        if (pk.life <= 0) {
-            pickups.splice(i, 1);
-            continue;
-        }
-        if (Math.hypot(pk.x - player.x, pk.y - player.y) < player.radius + pk.radius) {
-            game.plastic += 2;
-            Sound.play('collect');
-            updateHUD();
-            pickups.splice(i, 1);
-        }
-    }
+    buddies.forEach(b => b.update(dt));
 
     for (let i = particles.length - 1; i >= 0; i--) {
         particles[i].update(dt);
         if (particles[i].life <= 0) particles.splice(i, 1);
     }
+    
+    // Death pit reset
+    if (player.y > 1500) {
+        player.x = 100;
+        player.y = 600;
+        player.vx = 0;
+        player.vy = 0;
+    }
+}
 
-    if (hq.health <= 0) {
-        gameOver();
+function drawWallpaperBackground() {
+    // Light blue sky base
+    ctx.fillStyle = '#bae6fd';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Draw repeating clouds/wallpaper pattern fixed to screen
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    const bgScale = 150;
+    const offset = -(camera.x * 0.1) % bgScale; // parallax effect
+    
+    for (let x = offset - bgScale; x < width + bgScale; x += bgScale) {
+        for (let y = 50; y < height; y += bgScale * 1.5) {
+            ctx.beginPath();
+            ctx.arc(x + 50, y, 30, 0, Math.PI*2);
+            ctx.arc(x + 80, y, 40, 0, Math.PI*2);
+            ctx.arc(x + 110, y, 30, 0, Math.PI*2);
+            ctx.fill();
+        }
     }
 }
 
 function draw() {
-    // Clear & draw procedural floor
-    if(floorPattern) {
-        ctx.fillStyle = floorPattern;
-        ctx.fillRect(0, 0, width, height);
-    } else {
-        ctx.fillStyle = '#4a2f1d';
-        ctx.fillRect(0, 0, width, height);
-    }
+    // 1. Draw static background
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    drawWallpaperBackground();
     
-    // Draw entities based on Y-sort (fake 3D depth)
-    let renderList = [hq, player, ...blocks, ...enemies, ...pickups];
-    renderList.sort((a,b) => a.y - b.y);
+    // 2. Setup Camera transform
+    ctx.translate(width/2, height/2);
+    ctx.scale(CAMERA_ZOOM, CAMERA_ZOOM);
+    ctx.translate(-width/2, -height/2);
+    ctx.translate(-camera.x, -camera.y);
+
+    // 3. Draw World
+    for (let p of platforms) p.draw(ctx);
+    for (let b of buddies) b.draw(ctx);
+    for (let p of particles) p.draw(ctx);
     
-    for(let p of particles) p.draw(ctx);
-    for(let r of renderList) r.draw(ctx);
-    for(let p of projectiles) p.draw(ctx);
+    player.draw(ctx);
 }
 
 function loop(timestamp) {
     let dt = (timestamp - game.lastTime) / 1000;
-    if (dt > 0.1) dt = 0.1; // Cap delta to prevent huge jumps
+    if (dt > 0.1) dt = 0.1; 
     game.lastTime = timestamp;
 
     pollInput();
@@ -809,6 +686,7 @@ function loop(timestamp) {
     if (State.current === State.PLAYING) {
         if (Input.pause && !Input.prevPause) {
             State.current = State.PAUSED;
+            Music.stop(); // Pause Music
             document.getElementById('overlay').classList.remove('hidden');
             document.getElementById('screen-title').innerText = "PAUSED";
             document.getElementById('screen-desc').innerText = "Press Menu or Click to Resume";
@@ -820,11 +698,12 @@ function loop(timestamp) {
     } else if (State.current === State.PAUSED) {
         if (Input.pause && !Input.prevPause) {
             State.current = State.PLAYING;
+            Music.start(); // Resume Music
             document.getElementById('overlay').classList.add('hidden');
             document.getElementById('start-prompt').classList.remove('hidden');
         }
     } else if (State.current === State.MENU || State.current === State.GAMEOVER) {
-        if (Input.shoot && !Input.prevShoot) {
+        if (Input.jump && !Input.prevJump) {
             initGame();
         }
     }
@@ -838,6 +717,7 @@ document.getElementById('overlay').addEventListener('mousedown', () => {
         initGame();
     } else if (State.current === State.PAUSED) {
         State.current = State.PLAYING;
+        Music.start(); // Resume Music
         document.getElementById('overlay').classList.add('hidden');
         document.getElementById('start-prompt').classList.remove('hidden');
     }
