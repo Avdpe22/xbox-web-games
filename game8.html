@@ -17,7 +17,7 @@
     <div id="ui">
         <h1>Honey Rush</h1>
         <p>Score: <span id="score">0</span></p>
-        <p>🎮 <strong>Left Stick</strong>: Move Cursor | <strong>'A' Button</strong>: Extract Honey</p>
+        <p>🎮 <strong>Left Stick</strong>: Move Cursor | <strong>'A' Button</strong>: Extract Honey / Start / Restart</p>
     </div>
     <canvas id="gameCanvas"></canvas>
 
@@ -26,7 +26,7 @@
         const ctx = canvas.getContext('2d');
         const scoreEl = document.getElementById('score');
 
-        // --- Tunable constants (gameplay values unchanged from original) ---
+        // --- Tunable constants ---
         const HEX_SIZE = 45;
         const HEX_STROKE_SIZE = HEX_SIZE - 2;
         const HEX_WIDTH = Math.sqrt(3) * HEX_SIZE;
@@ -39,10 +39,11 @@
 
         const HONEY_INITIAL_MAX = 30;
         const HONEY_EXTRACT_THRESHOLD = 10;
-        const HONEY_GROWTH_BASE = 0.08;
-        const HONEY_GROWTH_SCORE_FACTOR = 0.00005;
+        // SIGNIFICANTLY REDUCED for slower gameplay
+        const HONEY_GROWTH_BASE = 0.015; 
+        const HONEY_GROWTH_SCORE_FACTOR = 0.00001; 
         const HONEY_OVERFLOW = 100;
-        const HONEY_WARN_LEVEL = 80; // purely visual "about to overflow" warning
+        const HONEY_WARN_LEVEL = 85; // triggers flashing red warning
 
         const CURSOR_DOT_RADIUS = 8;
         const CURSOR_RING_RADIUS = 16;
@@ -51,9 +52,6 @@
         const HEX_STROKE_STYLE = 'rgba(255, 193, 7, 0.3)';
         const HEX_STROKE_WIDTH = 3;
 
-        // High-DPI support: render crisply on retina-style displays without
-        // changing any logical coordinate math (cursor speed, hex layout, etc.
-        // all continue to operate in CSS/logical pixels).
         const dpr = window.devicePixelRatio || 1;
         const width = window.innerWidth;
         const height = window.innerHeight;
@@ -63,38 +61,47 @@
         canvas.style.height = height + 'px';
         ctx.scale(dpr, dpr);
 
-        // Precomputed unit-circle offsets for hex corners (pointy-topped).
-        // Angle only depends on corner index, never on position/size, so this
-        // table is built once instead of recomputing 6 sin/cos calls per hex
-        // per frame.
         const HEX_CORNERS = Array.from({ length: 6 }, (_, i) => {
             const angle = Math.PI / 180 * (60 * i - 30);
             return { cos: Math.cos(angle), sin: Math.sin(angle) };
         });
 
         const grid = [];
-        const flashes = []; // active extraction flash effects, reused in place
+        const flashes = []; 
 
         let score = 0;
-        let gameOver = false;
+        // Game State Management
+        let gameState = 'START'; // 'START', 'PLAYING', 'GAMEOVER'
 
         // Virtual Cursor for Xbox Gamepad
         let cursor = { x: width / 2, y: height / 2, speed: CURSOR_SPEED };
         let lastAState = false;
 
-        // Generate the honeycomb grid (unchanged layout/RNG behavior)
+        // Generate the honeycomb grid
         const rows = Math.floor(height / HEX_ROW_SPACING);
         const cols = Math.floor(width / HEX_WIDTH);
 
-        for (let row = 1; row < rows - 1; row++) {
-            for (let col = 1; col < cols - 1; col++) {
-                const x = (col * HEX_WIDTH) + (row % 2 === 1 ? HEX_WIDTH / 2 : 0);
-                const y = row * HEX_ROW_SPACING;
-                grid.push({ x, y, honey: Math.random() * HONEY_INITIAL_MAX });
+        function initGrid() {
+            grid.length = 0; // Clear existing
+            for (let row = 1; row < rows - 1; row++) {
+                for (let col = 1; col < cols - 1; col++) {
+                    const x = (col * HEX_WIDTH) + (row % 2 === 1 ? HEX_WIDTH / 2 : 0);
+                    const y = row * HEX_ROW_SPACING;
+                    grid.push({ x, y, honey: Math.random() * HONEY_INITIAL_MAX });
+                }
             }
         }
+        initGrid();
 
-        // Draw a single hexagon
+        function resetGame() {
+            score = 0;
+            scoreEl.innerText = score;
+            initGrid();
+            flashes.length = 0;
+            gameState = 'PLAYING';
+        }
+
+        // Draw a single hexagon with Fill Color + Progress Bar + Flashing
         function drawHex(x, y, size, honeyLevel) {
             ctx.beginPath();
             for (let i = 0; i < 6; i++) {
@@ -105,21 +112,43 @@
                 else ctx.lineTo(px, py);
             }
             ctx.closePath();
+            
+            let isFlashing = honeyLevel > HONEY_WARN_LEVEL;
+            let flashPulse = isFlashing ? Math.abs(Math.sin(Date.now() / 150)) : 0;
+
+            // Background Fill Color
+            if (honeyLevel > 0) {
+                if (isFlashing) {
+                    // Pulsing Red/Orange for danger
+                    ctx.fillStyle = `rgba(255, ${80 + 100 * (1-flashPulse)}, 40, ${0.4 + 0.4 * flashPulse})`;
+                } else {
+                    // Gentle Orange tint based on fill amount
+                    ctx.fillStyle = `rgba(255, 160, 0, ${honeyLevel / 250})`;
+                }
+                ctx.fill();
+            }
+
+            // Hex Outline
+            ctx.strokeStyle = isFlashing ? `rgba(255, 50, 50, ${0.5 + 0.5 * flashPulse})` : HEX_STROKE_STYLE;
+            ctx.lineWidth = isFlashing ? 4 : HEX_STROKE_WIDTH;
             ctx.stroke();
 
-            // The rising honey visual
+            // Inner Progress Bar
             if (honeyLevel > 0) {
-                ctx.fillStyle = `rgba(255, 160, 0, ${honeyLevel / 100})`;
-                ctx.fill();
+                const barMaxWidth = 8;
+                const barMaxHeight = size * 1.2;
+                const barHeight = Math.min((honeyLevel / 100) * barMaxHeight, barMaxHeight);
+                
+                const barX = x - barMaxWidth / 2;
+                const barY = y + barMaxHeight / 2 - barHeight;
 
-                // Subtle warning glow as a cell nears overflow (visual only)
-                if (honeyLevel > HONEY_WARN_LEVEL) {
-                    ctx.strokeStyle = 'rgba(255, 80, 40, 0.6)';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    ctx.strokeStyle = HEX_STROKE_STYLE;
-                    ctx.lineWidth = HEX_STROKE_WIDTH;
-                }
+                // Bar Track Background
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(barX, y - barMaxHeight / 2, barMaxWidth, barMaxHeight);
+
+                // Bar Fill
+                ctx.fillStyle = isFlashing ? '#ff4444' : '#ffc107';
+                ctx.fillRect(barX, barY, barMaxWidth, barHeight);
             }
         }
 
@@ -147,28 +176,32 @@
             }
         }
 
+        function handleAction() {
+            if (gameState === 'START' || gameState === 'GAMEOVER') {
+                resetGame();
+            } else if (gameState === 'PLAYING') {
+                extractHoney();
+            }
+        }
+
         // Handle Xbox controller inputs via Gamepad API
         function pollGamepad() {
             const gamepads = navigator.getGamepads();
             if (gamepads[0]) {
                 const gp = gamepads[0];
 
-                // Axes 0 and 1 are the Left Stick
                 const dx = gp.axes[0];
                 const dy = gp.axes[1];
 
-                // Deadzone to prevent drift
                 if (Math.abs(dx) > STICK_DEADZONE) cursor.x += dx * cursor.speed;
                 if (Math.abs(dy) > STICK_DEADZONE) cursor.y += dy * cursor.speed;
 
-                // Keep cursor on screen
                 cursor.x = Math.max(0, Math.min(width, cursor.x));
                 cursor.y = Math.max(0, Math.min(height, cursor.y));
 
-                // Button 0 is the 'A' Button
                 const aPressed = gp.buttons[A_BUTTON_INDEX].pressed;
                 if (aPressed && !lastAState) {
-                    extractHoney();
+                    handleAction();
                 }
                 lastAState = aPressed;
             }
@@ -178,11 +211,10 @@
         window.addEventListener('mousedown', (e) => {
             cursor.x = e.clientX;
             cursor.y = e.clientY;
-            extractHoney();
+            handleAction();
         });
 
-        // Draw and age out active extraction flashes in place (no per-frame
-        // array reallocation; finished flashes are spliced out)
+        // Draw and age out active extraction flashes
         function drawFlashes() {
             for (let i = flashes.length - 1; i >= 0; i--) {
                 const f = flashes[i];
@@ -202,34 +234,54 @@
 
         // Main Game Loop
         function gameLoop() {
-            if (gameOver) {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(0, 0, width, height);
-                ctx.fillStyle = '#ff4444';
-                ctx.font = 'bold 64px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText('OVERFLOW!', width / 2, height / 2);
-                ctx.fillStyle = 'white';
-                ctx.font = '32px sans-serif';
-                ctx.fillText(`Final Score: ${score}`, width / 2, height / 2 + 50);
-                return;
-            }
-
             // Clear screen
             ctx.clearRect(0, 0, width, height);
             pollGamepad();
 
-            // Update and draw grid
-            ctx.strokeStyle = HEX_STROKE_STYLE;
-            ctx.lineWidth = HEX_STROKE_WIDTH;
-            for (let hex of grid) {
-                // Honey rises faster as your score gets higher
-                hex.honey += HONEY_GROWTH_BASE + (score * HONEY_GROWTH_SCORE_FACTOR);
-                if (hex.honey >= HONEY_OVERFLOW) gameOver = true;
-                drawHex(hex.x, hex.y, HEX_STROKE_SIZE, hex.honey);
+            // Draw grid mechanics based on state
+            if (gameState === 'PLAYING' || gameState === 'GAMEOVER') {
+                for (let hex of grid) {
+                    if (gameState === 'PLAYING') {
+                        hex.honey += HONEY_GROWTH_BASE + (score * HONEY_GROWTH_SCORE_FACTOR);
+                        if (hex.honey >= HONEY_OVERFLOW) {
+                            gameState = 'GAMEOVER';
+                        }
+                    }
+                    drawHex(hex.x, hex.y, HEX_STROKE_SIZE, hex.honey);
+                }
+                drawFlashes();
+            } else if (gameState === 'START') {
+                // Draw static background grid for start screen
+                for (let hex of grid) {
+                    drawHex(hex.x, hex.y, HEX_STROKE_SIZE, hex.honey);
+                }
             }
 
-            drawFlashes();
+            // Draw UI Overlays based on state
+            if (gameState === 'START') {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+                ctx.fillRect(0, 0, width, height);
+                ctx.fillStyle = '#ffc107';
+                ctx.font = 'bold 64px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('HONEY RUSH', width / 2, height / 2 - 20);
+                ctx.fillStyle = 'white';
+                ctx.font = '24px sans-serif';
+                ctx.fillText('Press "A" Button or Click to Start', width / 2, height / 2 + 30);
+            } else if (gameState === 'GAMEOVER') {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+                ctx.fillRect(0, 0, width, height);
+                ctx.fillStyle = '#ff4444';
+                ctx.font = 'bold 64px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('OVERFLOW!', width / 2, height / 2 - 40);
+                ctx.fillStyle = 'white';
+                ctx.font = '32px sans-serif';
+                ctx.fillText(`Final Score: ${score}`, width / 2, height / 2 + 10);
+                ctx.fillStyle = '#aaa';
+                ctx.font = '24px sans-serif';
+                ctx.fillText('Press "A" Button or Click to Restart', width / 2, height / 2 + 60);
+            }
 
             // Draw Virtual Target Cursor
             ctx.beginPath();

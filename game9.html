@@ -8,7 +8,7 @@
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #1a1a2e;
+            background-color: #111;
             color: white;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
@@ -17,26 +17,28 @@
             height: 100vh;
         }
         canvas {
-            background-color: #87CEEB; /* Sky blue */
-            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            background-color: #1e1e2f; 
+            box-shadow: 0 0 20px rgba(0,0,0,1);
             image-rendering: pixelated;
         }
         #ui {
             position: absolute;
             top: 20px;
             left: 20px;
-            font-size: 24px;
+            font-size: 20px;
             text-shadow: 2px 2px 2px black;
             pointer-events: none;
+            z-index: 10;
         }
     </style>
 </head>
 <body>
     <div id="ui">
-        <div>Health: <span id="hp">100</span>%</div>
-        <div>Scrap: <span id="scrap">0</span>/10 (Need 10 to build)</div>
-        <div>Power Unlocked: <span id="power">None (Find the Engineer!)</span></div>
-        <div style="font-size: 16px; margin-top: 10px;">Controls: Left Stick to Move, A to Jump, X to Build, Y to Interact</div>
+        <div id="hud" style="display: none;">
+            <div>Health: <span id="hp">100</span>% | Scrap: <span id="scrap">0</span>/10</div>
+            <div>Equipped Power: <span id="power" style="font-weight: bold; color: #aaa;">None</span></div>
+            <div style="font-size: 14px; margin-top: 5px; color: #ccc;">Left Stick: Move | A: Jump | X: Build (10 Scrap) | Y: Interact/Next Dialog | LB/RB: Switch Power</div>
+        </div>
     </div>
     <canvas id="gameCanvas" width="1280" height="720"></canvas>
 
@@ -44,77 +46,142 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// Game State
-let cameraX = 0;
-let scrapCount = 0;
-let unlockedPower = 0; // 0: None, 1: Fire, 2: Ice, 3: Lightning, 4: Earth
-let gameState = 'playing'; // playing, boss, won, lost
+// --- GAME STATE ---
+let gameState = 'start'; // start, playing, won, lost
+let camera = { x: 0, y: 0, zoom: 0.75 };
+let frames = 0;
 
 // Inputs
 const keys = {};
+let prevKeys = {};
+let gamepadState = { a: false, x: false, y: false, start: false, lb: false, rb: false };
+let prevGamepadState = { a: false, x: false, y: false, start: false, lb: false, rb: false };
+
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
 
-// Player (Blocky Lego-style figure)
-const player = {
-    x: 100, y: 300, w: 40, h: 80, 
-    vx: 0, vy: 0, speed: 5, jumpPower: -12, 
-    grounded: false, hp: 100, maxHp: 100,
-    buildCooldown: 0
-};
+function isPressed(code) {
+    return keys[code] && !prevKeys[code];
+}
 
-// World Data (Metroidvania layout slice)
-const groundY = 600;
-const worldWidth = 4000;
-const platforms = [
-    {x: 400, y: 500, w: 150, h: 20},
-    {x: 700, y: 400, w: 150, h: 20},
-    {x: 1000, y: 300, w: 200, h: 20},
-    {x: 1500, y: 450, w: 300, h: 20},
-    {x: 2200, y: 350, w: 200, h: 20},
-];
+// --- GLOBAL VARIABLES ---
+let player, worldWidth, worldHeight, groundY, platforms, supplies, skeletons, robots, projectiles, particles, npcs, unlockedPowers, currentPowerIndex, boss, dialog;
 
-// Entities
-let supplies = [];
-let skeletons = [];
-let robots = [];
-let projectiles = [];
-let particles = [];
+const POWER_COLORS = ['#aaaaaa', '#ff4400', '#00eeff', '#ffee00', '#885522'];
+const POWER_NAMES = ['Basic', 'Fire', 'Ice', 'Lightning', 'Earth'];
 
-// NPC
-const npc = { x: 1600, y: 370, w: 40, h: 80, talked: false };
+// --- INITIALIZATION ---
+function initGame() {
+    player = { x: 200, y: 500, w: 30, h: 60, vx: 0, vy: 0, speed: 6, jumpPower: -14, grounded: false, hp: 100, maxHp: 100, scrap: 0, buildCooldown: 0 };
+    unlockedPowers = [0]; // Always start with basic (0)
+    currentPowerIndex = 0;
+    
+    groundY = 800;
+    worldWidth = 6000;
+    worldHeight = 1000;
+    
+    // Metroidvania Map - Platforms and Gates
+    platforms = [
+        {x: 0, y: groundY, w: worldWidth, h: 200, type: 'ground'},
+        {x: 500, y: 650, w: 200, h: 20, type: 'platform'},
+        {x: 800, y: 500, w: 200, h: 20, type: 'platform'},
+        {x: 1200, y: 650, w: 150, h: 20, type: 'platform'},
+        
+        // Ice Zone
+        {x: 1800, y: 400, w: 300, h: 20, type: 'platform'},
+        {x: 2200, y: 250, w: 200, h: 20, type: 'platform'},
+        
+        // Earth Zone
+        {x: 3000, y: 600, w: 400, h: 20, type: 'platform'},
+        {x: 3500, y: 450, w: 200, h: 20, type: 'platform'},
+        {x: 3800, y: 300, w: 150, h: 20, type: 'platform'},
+        
+        // Gates (Require powers to pass)
+        {x: 1600, y: groundY - 200, w: 40, h: 200, type: 'gate', weakness: 1, hp: 100, color: '#0055ff'}, // Ice gate needs Fire
+        {x: 2800, y: groundY - 300, w: 40, h: 300, type: 'gate', weakness: 4, hp: 100, color: '#aaa'}, // Stone gate needs Earth
+    ];
 
-// Boss
-let boss = { x: 3500, y: 200, radius: 100, hp: 1000, maxHp: 1000, active: false, attackTimer: 0 };
+    supplies = [];
+    for(let i=0; i<60; i++) {
+        supplies.push({ x: 400 + Math.random() * (worldWidth - 1000), y: groundY - 50 - Math.random() * 400, w: 16, h: 16, active: true });
+    }
 
-// Populate Supplies
-for(let i=0; i<30; i++) {
-    supplies.push({
-        x: 300 + Math.random() * (worldWidth - 1000), 
-        y: groundY - 30 - Math.random() * 200, 
-        w: 20, h: 20, collected: false 
-    });
+    skeletons = [];
+    robots = [];
+    projectiles = [];
+    particles = [];
+
+    npcs = [
+        { 
+            x: 900, y: 440, w: 30, h: 60, name: "Scrap Mechanic", color: '#ff4400',
+            messages: [
+                "Hey you! This place is crawling with skeletons.",
+                "Your basic robots are weak against those icy barriers ahead.",
+                "Take this FIRE CORE. Use LB/RB to switch elements.",
+                "Fire melts ice! Good luck!"
+            ],
+            unlock: 1, talked: false
+        },
+        { 
+            x: 2300, y: 190, w: 30, h: 60, name: "Deep Miner", color: '#885522',
+            messages: [
+                "Brrr... thanks for clearing out those ice monsters.",
+                "I dug up something interesting in the caves.",
+                "This EARTH CORE lets your robots hurl heavy boulders.",
+                "Use it to smash through the stone walls blocking the east!"
+            ],
+            unlock: 4, talked: false
+        }
+    ];
+
+    boss = { x: 5500, y: 300, radius: 120, hp: 2000, maxHp: 2000, active: false, attackTimer: 0 };
+
+    dialog = { active: false, textIndex: 0, npcIndex: -1 };
+    gameState = 'playing';
+    document.getElementById('hud').style.display = 'block';
+}
+
+// --- INPUT & UPDATE ---
+function getGamepadInput() {
+    const gamepads = navigator.getGamepads();
+    if (gamepads && gamepads[0]) {
+        const gp = gamepads[0];
+        gamepadState.a = gp.buttons[0].pressed;
+        gamepadState.x = gp.buttons[2].pressed;
+        gamepadState.y = gp.buttons[3].pressed;
+        gamepadState.lb = gp.buttons[4].pressed;
+        gamepadState.rb = gp.buttons[5].pressed;
+        gamepadState.start = gp.buttons[9].pressed;
+        return gp;
+    }
+    return null;
 }
 
 function updateInput() {
+    const gp = getGamepadInput();
+    
     let moveLeft = keys['ArrowLeft'] || keys['KeyA'];
     let moveRight = keys['ArrowRight'] || keys['KeyD'];
     let jump = keys['ArrowUp'] || keys['KeyW'] || keys['Space'];
     let build = keys['KeyB'] || keys['KeyX'];
-    let interact = keys['KeyE'] || keys['KeyY'];
+    let interact = isPressed('KeyE') || isPressed('KeyY');
+    let prevPower = isPressed('KeyQ') || (gamepadState.lb && !prevGamepadState.lb);
+    let nextPower = isPressed('KeyE') || (gamepadState.rb && !prevGamepadState.rb);
 
-    // Xbox Controller Support
-    const gamepads = navigator.getGamepads();
-    if (gamepads && gamepads[0]) {
-        const gp = gamepads[0];
+    if (gp) {
         if (gp.axes[0] < -0.4 || gp.buttons[14].pressed) moveLeft = true;
         if (gp.axes[0] > 0.4 || gp.buttons[15].pressed) moveRight = true;
-        if (gp.buttons[0].pressed) jump = true; // A Button
-        if (gp.buttons[2].pressed) build = true; // X Button
-        if (gp.buttons[3].pressed) interact = true; // Y Button
+        if (gamepadState.a) jump = true;
+        if (gamepadState.x) build = true;
+        if (gamepadState.y && !prevGamepadState.y) interact = true;
     }
 
-    // Apply movement
+    if (dialog.active) {
+        if (interact) advanceDialog();
+        return; // Don't move while talking
+    }
+
+    // Movement
     if (moveLeft) player.vx = -player.speed;
     else if (moveRight) player.vx = player.speed;
     else player.vx = 0;
@@ -124,88 +191,129 @@ function updateInput() {
         player.grounded = false;
     }
 
-    if (build && player.buildCooldown <= 0 && scrapCount >= 10 && unlockedPower > 0) {
-        // Build a robot turret
-        scrapCount -= 10;
-        player.buildCooldown = 60; // 1 second cooldown
-        robots.push({
-            x: player.x, y: player.y + 40, w: 40, h: 40, 
-            type: unlockedPower, fireTimer: 0
-        });
-        unlockedPower = unlockedPower >= 4 ? 1 : unlockedPower + 1; // Cycle powers
+    // Switch Powers
+    if (prevPower) {
+        currentPowerIndex = (currentPowerIndex - 1 + unlockedPowers.length) % unlockedPowers.length;
+    }
+    if (nextPower && !interact) { // E is shared with interact, prefer interact if near NPC
+        let nearNPC = npcs.some(n => Math.abs(player.x - n.x) < 80);
+        if(!nearNPC) currentPowerIndex = (currentPowerIndex + 1) % unlockedPowers.length;
     }
 
-    if (interact && !npc.talked && Math.abs(player.x - npc.x) < 100) {
-        npc.talked = true;
-        unlockedPower = 1; // Unlock Fire
+    // Build
+    if (build && player.buildCooldown <= 0 && player.scrap >= 10) {
+        player.scrap -= 10;
+        player.buildCooldown = 30; // Half second
+        robots.push({
+            x: player.x, y: player.y + player.h - 40, w: 40, h: 40, 
+            type: unlockedPowers[currentPowerIndex], fireTimer: 0, hp: 100
+        });
+    }
+
+    // Interact
+    if (interact) {
+        for (let i = 0; i < npcs.length; i++) {
+            if (Math.abs(player.x - npcs[i].x) < 80 && Math.abs(player.y - npcs[i].y) < 100) {
+                dialog.active = true;
+                dialog.npcIndex = i;
+                dialog.textIndex = 0;
+                break;
+            }
+        }
+    }
+}
+
+function advanceDialog() {
+    let npc = npcs[dialog.npcIndex];
+    dialog.textIndex++;
+    if (dialog.textIndex >= npc.messages.length) {
+        dialog.active = false;
+        if (!npc.talked) {
+            npc.talked = true;
+            if (!unlockedPowers.includes(npc.unlock)) {
+                unlockedPowers.push(npc.unlock);
+                currentPowerIndex = unlockedPowers.length - 1; // Auto equip new power
+            }
+        }
     }
 }
 
 function spawnSkeletons() {
-    if (Math.random() < 0.02 && skeletons.length < 10) {
-        let spawnX = player.x + (Math.random() > 0.5 ? 800 : -800);
-        if(spawnX > 0 && spawnX < worldWidth) {
-            skeletons.push({ x: spawnX, y: groundY - 80, w: 40, h: 80, hp: 50, speed: 2, frozen: 0 });
+    if (frames % 120 === 0 && skeletons.length < 15 && !boss.active) {
+        let spawnX = player.x + (Math.random() > 0.5 ? 1200 : -1200);
+        if (spawnX > 100 && spawnX < worldWidth - 1000) {
+            skeletons.push({ x: spawnX, y: groundY - 60, w: 25, h: 60, hp: 60, maxHp: 60, speed: 2 + Math.random(), frozen: 0 });
         }
     }
 }
 
 function updatePhysics() {
-    player.vy += 0.5; // Gravity
+    if (dialog.active) return;
+
+    player.vy += 0.6; // Gravity
     player.x += player.vx;
     player.y += player.vy;
     player.grounded = false;
 
-    // Floor collision
-    if (player.y + player.h >= groundY) {
-        player.y = groundY - player.h;
-        player.vy = 0;
-        player.grounded = true;
-    }
-
-    // Platform collision (simple falling onto)
+    // Platform & Gate collision
     platforms.forEach(p => {
+        if (p.hp <= 0) return;
+        
+        // Floor collision (falling onto)
         if (player.vy > 0 && player.x + player.w > p.x && player.x < p.x + p.w && 
-            player.y + player.h >= p.y && player.y + player.h <= p.y + 20) {
+            player.y + player.h >= p.y && player.y + player.h <= p.y + 30) {
             player.y = p.y - player.h;
             player.vy = 0;
             player.grounded = true;
         }
-    });
-
-    // Constrain player
-    if(player.x < 0) player.x = 0;
-    if(player.x > worldWidth - player.w) player.x = worldWidth - player.w;
-
-    // Camera follow
-    cameraX = player.x - canvas.width / 2 + player.w / 2;
-    if (cameraX < 0) cameraX = 0;
-    if (cameraX > worldWidth - canvas.width) cameraX = worldWidth - canvas.width;
-}
-
-function updateEntities() {
-    if (player.buildCooldown > 0) player.buildCooldown--;
-
-    // Collect supplies
-    supplies.forEach(s => {
-        if (!s.collected && player.x < s.x + s.w && player.x + player.w > s.x && 
-            player.y < s.y + s.h && player.y + player.h > s.y) {
-            s.collected = true;
-            scrapCount += 2;
+        
+        // Wall collision (Gates)
+        if (p.type === 'gate') {
+            if (player.x + player.w > p.x && player.x < p.x + p.w && player.y + player.h > p.y && player.y < p.y + p.h) {
+                if (player.vx > 0) player.x = p.x - player.w; // Hit from left
+                else if (player.vx < 0) player.x = p.x + p.w; // Hit from right
+            }
         }
     });
 
-    // Robots logic
+    // Boundaries
+    if(player.x < 0) player.x = 0;
+    if(player.x > worldWidth - player.w) player.x = worldWidth - player.w;
+
+    // Camera follow (centered with zoom)
+    camera.x = player.x - (canvas.width / camera.zoom) / 2 + player.w / 2;
+    camera.y = player.y - (canvas.height / camera.zoom) / 1.5;
+    
+    // Clamp camera
+    if (camera.x < 0) camera.x = 0;
+    if (camera.x > worldWidth - (canvas.width / camera.zoom)) camera.x = worldWidth - (canvas.width / camera.zoom);
+    if (camera.y > groundY - (canvas.height / camera.zoom)) camera.y = groundY - (canvas.height / camera.zoom);
+}
+
+function updateEntities() {
+    if (dialog.active) return;
+
+    if (player.buildCooldown > 0) player.buildCooldown--;
+
+    // Supplies
+    supplies.forEach(s => {
+        if (s.active && player.x < s.x + s.w && player.x + player.w > s.x && player.y < s.y + s.h && player.y + player.h > s.y) {
+            s.active = false;
+            player.scrap += 2;
+        }
+    });
+
+    // Robots shooting
     robots.forEach(r => {
+        if(r.hp <= 0) return;
         r.fireTimer--;
         if (r.fireTimer <= 0) {
-            // Find target
             let target = null;
-            let minDist = 600;
-            let possibleTargets = boss.active ? skeletons.concat([boss]) : skeletons;
+            let minDist = 800;
+            let possibleTargets = boss.active ? skeletons.concat([boss]) : skeletons.concat(platforms.filter(p => p.type==='gate' && p.hp > 0));
             
             possibleTargets.forEach(enemy => {
-                let dist = Math.hypot(enemy.x - r.x, enemy.y - r.y);
+                let dist = Math.hypot((enemy.x + (enemy.w||enemy.radius)/2) - (r.x + r.w/2), (enemy.y + (enemy.h||enemy.radius)/2) - (r.y + r.h/2));
                 if (dist < minDist && (enemy.hp > 0 || enemy.active)) {
                     minDist = dist;
                     target = enemy;
@@ -213,12 +321,15 @@ function updateEntities() {
             });
 
             if (target) {
-                r.fireTimer = 60; // 1 shot per second
-                let angle = Math.atan2((target.y + (target.h||0)/2) - r.y, target.x - r.x);
+                r.fireTimer = r.type === 4 ? 90 : 45; // Earth is slower
+                let tx = target.x + (target.w||target.radius)/2;
+                let ty = target.y + (target.h||target.radius)/2;
+                let angle = Math.atan2(ty - (r.y + 10), tx - (r.x + r.w/2));
+                
                 projectiles.push({
-                    x: r.x + r.w/2, y: r.y + r.h/2,
-                    vx: Math.cos(angle) * 10, vy: Math.sin(angle) * 10,
-                    type: r.type, active: true, radius: 10
+                    x: r.x + r.w/2, y: r.y + 10,
+                    vx: Math.cos(angle) * 12, vy: Math.sin(angle) * 12,
+                    type: r.type, active: true, radius: r.type === 4 ? 15 : 8, isEnemy: false
                 });
             }
         }
@@ -229,12 +340,35 @@ function updateEntities() {
         if (!p.active) return;
         p.x += p.vx;
         p.y += p.vy;
+        if(p.type === 4) p.vy += 0.2; // Earth is affected by gravity
         
-        // Hit boss
+        // Particles
+        if(Math.random() < 0.5) {
+            particles.push({x: p.x, y: p.y, vx: -p.vx*0.2 + (Math.random()-0.5), vy: -p.vy*0.2 + (Math.random()-0.5), life: 10, color: POWER_COLORS[p.type]});
+        }
+
+        if (p.isEnemy) {
+            if (Math.hypot(p.x - (player.x+player.w/2), p.y - (player.y+player.h/2)) < 30) {
+                p.active = false;
+                player.hp -= 15;
+            }
+            return; // Skip enemy damage checks below
+        }
+
+        // Hit Gates
+        platforms.forEach(plat => {
+            if (plat.type === 'gate' && plat.hp > 0 && p.x > plat.x && p.x < plat.x + plat.w && p.y > plat.y && p.y < plat.y + plat.h) {
+                p.active = false;
+                if (p.type === plat.weakness) plat.hp -= 34; // 3 hits to break
+            }
+        });
+
+        // Hit Boss
         if (boss.active && Math.hypot(p.x - boss.x, p.y - boss.y) < boss.radius + p.radius) {
             p.active = false;
-            boss.hp -= 20;
-            if(p.type === 2) boss.attackTimer += 30; // Ice slows boss
+            boss.hp -= 25;
+            if(p.type === 2) boss.attackTimer += 20; // Ice slows boss
+            if(p.type === 4) boss.hp -= 25; // Earth double damage
             if(boss.hp <= 0) gameState = 'won';
         }
 
@@ -242,10 +376,18 @@ function updateEntities() {
         skeletons.forEach(skel => {
             if (skel.hp > 0 && p.x > skel.x && p.x < skel.x + skel.w && p.y > skel.y && p.y < skel.y + skel.h) {
                 p.active = false;
-                skel.hp -= (p.type === 1) ? 50 : 25; // Fire does double damage
-                if (p.type === 2) skel.frozen = 100; // Ice freezes
-                if (p.type === 3) skel.hp -= 10; // Lightning extra tick
-                if (p.type === 4) skel.vy = -5; // Earth knocks up
+                skel.hp -= (p.type === 1) ? 40 : 20;
+                if (p.type === 2) skel.frozen = 120; // Freeze
+                if (p.type === 3) { // Lightning arc to nearest
+                    skel.hp -= 15;
+                    skeletons.forEach(s2 => {
+                        if (s2 !== skel && Math.hypot(s2.x - skel.x, s2.y - skel.y) < 150) {
+                            s2.hp -= 20;
+                            particles.push({x: skel.x, y: skel.y, vx: (s2.x-skel.x)*0.1, vy: (s2.y-skel.y)*0.1, life: 10, color: '#ffee00', arc: true});
+                        }
+                    });
+                }
+                if (p.type === 4) { skel.vy = -8; skel.y -= 5; } // Knockback
             }
         });
     });
@@ -253,170 +395,431 @@ function updateEntities() {
     // Skeletons
     skeletons.forEach(skel => {
         if (skel.hp <= 0) return;
+        skel.vy = skel.vy || 0;
+        skel.vy += 0.5; // Gravity
+        skel.y += skel.vy;
+        if(skel.y + skel.h > groundY) { skel.y = groundY - skel.h; skel.vy = 0; }
+
         if (skel.frozen > 0) {
             skel.frozen--;
         } else {
-            // Walk towards player
             if (skel.x < player.x) skel.x += skel.speed;
             else skel.x -= skel.speed;
         }
         
-        // Hurt player
+        // Melee Player
         if (Math.abs(skel.x - player.x) < 30 && Math.abs(skel.y - player.y) < 60) {
-            player.hp -= 0.5;
-            if (player.hp <= 0) gameState = 'lost';
+            player.hp -= 0.3;
         }
+        
+        // Attack Robots
+        robots.forEach(r => {
+            if (r.hp > 0 && Math.abs(skel.x - r.x) < 30 && Math.abs(skel.y - r.y) < 60) {
+                r.hp -= 0.5;
+            }
+        });
     });
 
-    // Cleanup dead things
-    skeletons = skeletons.filter(s => s.hp > 0);
-    projectiles = projectiles.filter(p => p.active && p.x > cameraX && p.x < cameraX + canvas.width);
-
-    // Boss Logic
-    if (player.x > worldWidth - 1000) boss.active = true;
-    if (boss.active && gameState === 'playing') {
-        boss.y += Math.sin(Date.now() / 500) * 2; // Float
-        
-        // Move towards player slowly
-        boss.x += (player.x + 300 - boss.x) * 0.01; 
+    // Boss Phase
+    if (player.x > worldWidth - 1200) boss.active = true;
+    if (boss.active) {
+        boss.y = 200 + Math.sin(frames / 30) * 50; 
+        boss.x += (player.x + 400 - boss.x) * 0.015; // Hover right of player
 
         boss.attackTimer--;
         if (boss.attackTimer <= 0) {
-            boss.attackTimer = 100;
+            boss.attackTimer = 80;
             projectiles.push({
-                x: boss.x - boss.radius, y: boss.y,
-                vx: -8, vy: (player.y - boss.y) / 100,
-                type: 0, active: true, radius: 15 // 0 is enemy projectile
+                x: boss.x - boss.radius, y: boss.y + 40,
+                vx: -10, vy: ((player.y + player.h/2) - (boss.y + 40)) / 40,
+                type: 0, active: true, radius: 15, isEnemy: true
             });
         }
     }
+
+    // Cleanup
+    skeletons = skeletons.filter(s => s.hp > 0);
+    robots = robots.filter(r => r.hp > 0);
+    projectiles = projectiles.filter(p => p.active && p.x > camera.x - 200 && p.x < camera.x + (canvas.width/camera.zoom) + 200 && p.y < worldHeight);
+    particles.forEach(p => p.life--);
+    particles = particles.filter(p => p.life > 0);
+
+    if (player.hp <= 0) gameState = 'lost';
 }
 
-function drawBlockyCharacter(x, y, colorBody, colorHead) {
-    ctx.fillStyle = colorBody;
-    ctx.fillRect(x - cameraX, y + 20, 40, 60); // Body
-    ctx.fillStyle = colorHead;
-    ctx.fillRect(x + 5 - cameraX, y, 30, 30); // Head
-    // Eyes
-    ctx.fillStyle = 'black';
-    ctx.fillRect(x + 10 - cameraX, y + 10, 5, 5);
-    ctx.fillRect(x + 25 - cameraX, y + 10, 5, 5);
+
+// --- RENDERING PROCEDURAL TEXTURES ---
+
+function drawPlasticRobot(x, y, w, h) {
+    ctx.save();
+    ctx.translate(x, y);
+    
+    // Glossy Body
+    let grad = ctx.createLinearGradient(0, 0, w, 0);
+    grad.addColorStop(0, '#0055aa');
+    grad.addColorStop(0.5, '#0088ff');
+    grad.addColorStop(1, '#003377');
+    ctx.fillStyle = grad;
+    
+    // Torso (Trapezoid-ish)
+    ctx.beginPath();
+    ctx.moveTo(5, 20); ctx.lineTo(w-5, 20);
+    ctx.lineTo(w, h-15); ctx.lineTo(0, h-15);
+    ctx.fill();
+
+    // Legs
+    ctx.fillStyle = '#444'; // Joints
+    ctx.fillRect(5, h-15, 8, 15);
+    ctx.fillRect(w-13, h-15, 8, 15);
+    
+    // Head (Cylinder)
+    ctx.fillStyle = '#ffcc00'; // Yellow plastic head
+    ctx.fillRect(5, 0, 20, 20);
+    ctx.fillStyle = 'black'; // Visor/Eyes
+    ctx.fillRect(8, 5, 14, 6);
+    
+    // Arms (Claws)
+    ctx.fillStyle = '#0088ff';
+    ctx.fillRect(-5, 25, 8, 20); // Left arm
+    ctx.fillRect(w-3, 25, 8, 20); // Right arm
+    ctx.fillStyle = '#555';
+    ctx.beginPath(); ctx.arc(-1, 45, 5, 0, Math.PI, true); ctx.stroke(); // Left Claw
+    ctx.beginPath(); ctx.arc(w+1, 45, 5, 0, Math.PI, true); ctx.stroke(); // Right Claw
+
+    ctx.restore();
 }
+
+function drawSkeleton(x, y, w, h) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.strokeStyle = '#e0e0e0';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+
+    // Spine
+    ctx.beginPath(); ctx.moveTo(w/2, 20); ctx.lineTo(w/2, h-25); ctx.stroke();
+    // Ribs
+    for(let i=0; i<3; i++) {
+        ctx.beginPath(); ctx.moveTo(w/2-8, 25+i*8); ctx.lineTo(w/2+8, 25+i*8); ctx.stroke();
+    }
+    // Arms
+    ctx.beginPath(); ctx.moveTo(w/2-5, 25); ctx.lineTo(-5, 40); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w/2+5, 25); ctx.lineTo(w+5, 40); ctx.stroke();
+    // Legs
+    ctx.beginPath(); ctx.moveTo(w/2-3, h-25); ctx.lineTo(w/2-8, h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w/2+3, h-25); ctx.lineTo(w/2+8, h); ctx.stroke();
+    
+    // Skull
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(w/2, 10, 10, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.fillRect(w/2-5, 6, 4, 4); // Eye L
+    ctx.fillRect(w/2+1, 6, 4, 4); // Eye R
+    ctx.fillRect(w/2-3, 14, 6, 2); // Mouth
+
+    ctx.restore();
+}
+
+function drawTurret(x, y, w, h, type) {
+    ctx.save();
+    ctx.translate(x, y);
+    
+    // Base/Treads
+    ctx.fillStyle = '#333';
+    ctx.fillRect(0, h-10, w, 10);
+    ctx.fillStyle = '#555';
+    ctx.beginPath(); ctx.arc(5, h-5, 5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(w-5, h-5, 5, 0, Math.PI*2); ctx.fill();
+    
+    // Body
+    ctx.fillStyle = '#777';
+    ctx.fillRect(5, h-30, w-10, 20);
+    
+    // Cannon/Core
+    ctx.fillStyle = '#444';
+    ctx.fillRect(w/2, h-25, 15, 8); // Barrel
+    
+    // Power Core Glow
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = POWER_COLORS[type];
+    ctx.fillStyle = POWER_COLORS[type];
+    ctx.beginPath(); ctx.arc(w/2, h-20, 6, 0, Math.PI*2); ctx.fill();
+    
+    ctx.restore();
+}
+
+function drawBossSkull(x, y, r) {
+    ctx.save();
+    ctx.translate(x, y);
+    
+    // Bone color with shadow
+    let grad = ctx.createRadialGradient(-20, -20, 10, 0, 0, r);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.8, '#ddddcc');
+    grad.addColorStop(1, '#999988');
+    
+    // Main Cranium
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(0, -20, r, 0, Math.PI*2);
+    ctx.fill();
+    
+    // Cheekbones / Maxilla
+    ctx.fillRect(-r*0.6, r*0.4, r*1.2, r*0.4);
+
+    // Deep Eye Sockets
+    ctx.fillStyle = '#000';
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = '#f00'; // Evil red glow
+    ctx.beginPath(); ctx.arc(-40, -10, 30, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(40, -10, 30, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0; // Reset
+    
+    // Nasal Cavity
+    ctx.beginPath();
+    ctx.moveTo(0, 20); ctx.lineTo(-15, 50); ctx.lineTo(15, 50); ctx.fill();
+    
+    // Jagged Teeth
+    ctx.fillStyle = '#e8e8d8';
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 2;
+    for(let i=0; i<6; i++) {
+        let tx = -50 + (i*20);
+        ctx.beginPath();
+        ctx.moveTo(tx, r*0.8);
+        ctx.lineTo(tx+10, r*1.1);
+        ctx.lineTo(tx+20, r*0.8);
+        ctx.fill();
+        ctx.stroke();
+    }
+    
+    ctx.restore();
+}
+
 
 function render() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#1e1e2f'; // Background sky
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Ground
-    ctx.fillStyle = '#4CAF50'; // Grass
-    ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
-    ctx.fillStyle = '#795548'; // Dirt
-    ctx.fillRect(0, groundY + 20, canvas.width, canvas.height - groundY - 20);
+    if (gameState === 'start') {
+        document.getElementById('hud').style.display = 'none';
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 60px "Segoe UI"';
+        ctx.fillText("BLOCKY BUILDER", canvas.width/2, canvas.height/2 - 50);
+        ctx.font = '30px "Segoe UI"';
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillText("Press START or ENTER to Begin", canvas.width/2, canvas.height/2 + 20);
+        return;
+    }
+
+    ctx.save();
+    // Apply Camera Zoom and Translation
+    ctx.scale(camera.zoom, camera.zoom);
+    ctx.translate(-camera.x, -camera.y);
+
+    // Grid / Background Texture
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    for(let i=0; i<worldWidth; i+=100) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, worldHeight); ctx.stroke(); }
+    for(let j=0; j<worldHeight; j+=100) { ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(worldWidth, j); ctx.stroke(); }
 
     // Platforms
-    ctx.fillStyle = '#8D6E63';
     platforms.forEach(p => {
-        if(p.x - cameraX < canvas.width && p.x + p.w - cameraX > 0) {
-            ctx.fillRect(p.x - cameraX, p.y, p.w, p.h);
+        if(p.hp <= 0) return;
+        if(p.x > camera.x + (canvas.width/camera.zoom) || p.x + p.w < camera.x) return; // Culling
+        
+        if (p.type === 'ground' || p.type === 'platform') {
+            // Textured blocky ground
+            ctx.fillStyle = '#4CAF50'; 
+            ctx.fillRect(p.x, p.y, p.w, 10);
+            ctx.fillStyle = '#5d4037';
+            ctx.fillRect(p.x, p.y+10, p.w, p.h-10);
+            // Brick pattern
+            ctx.strokeStyle = '#4e342e';
+            for(let i=0; i<p.w; i+=40) {
+                ctx.strokeRect(p.x+i, p.y+10, 40, 20);
+                ctx.strokeRect(p.x+i-20, p.y+30, 40, 20);
+            }
+        } else if (p.type === 'gate') {
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText("HP", p.x+5, p.y+30);
+            // Crack texture based on HP
+            if(p.hp < 100) {
+                ctx.strokeStyle = 'black'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(p.x+10, p.y+50); ctx.lineTo(p.x+30, p.y+80); ctx.lineTo(p.x+15, p.y+120); ctx.stroke();
+            }
         }
     });
 
-    // Supplies
-    ctx.fillStyle = '#9E9E9E'; // Silver gears
+    // Supplies (Gears)
+    ctx.fillStyle = '#99aa99';
     supplies.forEach(s => {
-        if (!s.collected) ctx.fillRect(s.x - cameraX, s.y, s.w, s.h);
+        if (s.active && s.x > camera.x - 50 && s.x < camera.x + (canvas.width/camera.zoom)) {
+            ctx.beginPath();
+            ctx.arc(s.x+s.w/2, s.y+s.h/2, s.w/2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.strokeRect(s.x+4, s.y+4, s.w-8, s.h-8);
+        }
     });
 
-    // NPC
-    if (!npc.talked) {
-        drawBlockyCharacter(npc.x, npc.y, '#9C27B0', '#FFEB3B'); // Purple body
-        ctx.fillStyle = 'white';
-        ctx.fillText("I'm the Engineer! Press Y/E to unlock elemental cores!", npc.x - cameraX - 50, npc.y - 10);
-    }
+    // NPCs
+    npcs.forEach(n => {
+        if (n.x > camera.x - 100 && n.x < camera.x + (canvas.width/camera.zoom)) {
+            // Draw NPC (similar to player but different color)
+            ctx.fillStyle = n.color;
+            ctx.fillRect(n.x, n.y+20, 30, 40);
+            ctx.fillStyle = '#ffcc00';
+            ctx.fillRect(n.x+5, n.y, 20, 20);
+            if (!n.talked) {
+                ctx.fillStyle = '#fff';
+                ctx.font = '24px Arial';
+                ctx.fillText("!", n.x+10, n.y-20);
+            }
+        }
+    });
 
     // Robots
-    robots.forEach(r => {
-        let colors = ['gray', '#F44336', '#00BCD4', '#FFEB3B', '#795548'];
-        ctx.fillStyle = colors[r.type];
-        ctx.fillRect(r.x - cameraX, r.y, r.w, r.h);
-        ctx.fillStyle = 'black';
-        ctx.fillRect(r.x + 10 - cameraX, r.y + 10, 20, 20); // cannon hole
-    });
+    robots.forEach(r => drawTurret(r.x, r.y, r.w, r.h, r.type));
 
     // Skeletons
     skeletons.forEach(skel => {
-        drawBlockyCharacter(skel.x, skel.y, '#E0E0E0', '#FFFFFF');
+        drawSkeleton(skel.x, skel.y, skel.w, skel.h);
         if(skel.frozen > 0) {
-            ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
-            ctx.fillRect(skel.x - cameraX, skel.y, skel.w, skel.h);
+            ctx.fillStyle = 'rgba(100, 200, 255, 0.6)';
+            ctx.fillRect(skel.x-5, skel.y-5, skel.w+10, skel.h+10);
         }
     });
 
     // Projectiles
     projectiles.forEach(p => {
-        let colors = ['#000', '#F44336', '#00BCD4', '#FFEB3B', '#795548'];
-        ctx.fillStyle = colors[p.type];
+        ctx.fillStyle = p.isEnemy ? '#ff0000' : POWER_COLORS[p.type];
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = ctx.fillStyle;
         ctx.beginPath();
-        ctx.arc(p.x - cameraX, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fill();
+        if(p.type === 4) { // Earth boulder
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2);
+            ctx.fill();
+            ctx.strokeStyle = '#553311'; ctx.stroke();
+        } else {
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.shadowBlur = 0;
     });
 
-    // Boss (Flying Skull)
+    // Particles
+    particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        if(p.arc) {
+            ctx.strokeStyle = p.color; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x+p.vx*10, p.y+p.vy*10); ctx.stroke();
+        } else {
+            ctx.fillRect(p.x, p.y, 4, 4);
+        }
+    });
+
+    // Boss
     if (boss.active) {
-        ctx.fillStyle = '#FFF';
-        ctx.beginPath();
-        ctx.arc(boss.x - cameraX, boss.y, boss.radius, 0, Math.PI * 2);
-        ctx.fill();
-        // Eyes
-        ctx.fillStyle = '#000';
-        ctx.fillRect(boss.x - 40 - cameraX, boss.y - 30, 20, 30);
-        ctx.fillRect(boss.x + 20 - cameraX, boss.y - 30, 20, 30);
-        // Mouth
-        ctx.fillRect(boss.x - 30 - cameraX, boss.y + 40, 60, 20);
-        
+        drawBossSkull(boss.x, boss.y, boss.radius);
         // Boss Health Bar
-        ctx.fillStyle = 'red';
-        ctx.fillRect(boss.x - 100 - cameraX, boss.y - 130, 200, 10);
-        ctx.fillStyle = '#0f0';
-        ctx.fillRect(boss.x - 100 - cameraX, boss.y - 130, 200 * (boss.hp / boss.maxHp), 10);
+        ctx.fillStyle = '#330000'; ctx.fillRect(boss.x - 150, boss.y - 180, 300, 20);
+        ctx.fillStyle = '#ff0000'; ctx.fillRect(boss.x - 150, boss.y - 180, 300 * (boss.hp / boss.maxHp), 20);
+        ctx.strokeStyle = 'white'; ctx.strokeRect(boss.x - 150, boss.y - 180, 300, 20);
     }
 
     // Player
-    drawBlockyCharacter(player.x, player.y, '#2196F3', '#FFC107'); // Blue body, yellow head
+    drawPlasticRobot(player.x, player.y, player.w, player.h);
+    
+    // Muzzle flash for active power
+    if(unlockedPowers.length > 0) {
+        ctx.fillStyle = POWER_COLORS[unlockedPowers[currentPowerIndex]];
+        ctx.beginPath(); ctx.arc(player.x+player.w/2, player.y-10, 5, 0, Math.PI*2); ctx.fill();
+    }
 
-    // Update UI
-    document.getElementById('hp').innerText = Math.floor(player.hp);
-    document.getElementById('scrap').innerText = scrapCount;
-    let powers = ["None", "Fire (Red)", "Ice (Cyan)", "Lightning (Yellow)", "Earth (Brown)"];
-    document.getElementById('power').innerText = powers[unlockedPower];
+    ctx.restore(); // END CAMERA SPACE
 
-    // End Game Text
-    if (gameState === 'won') {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    // --- UI OVERLAYS ---
+    if (gameState === 'playing') {
+        document.getElementById('hp').innerText = Math.floor(player.hp);
+        document.getElementById('scrap').innerText = player.scrap;
+        let cPower = unlockedPowers[currentPowerIndex];
+        let pText = document.getElementById('power');
+        pText.innerText = POWER_NAMES[cPower];
+        pText.style.color = POWER_COLORS[cPower];
+
+        // Dialog Box Overlay
+        if (dialog.active) {
+            let npc = npcs[dialog.npcIndex];
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.strokeStyle = npc.color;
+            ctx.lineWidth = 4;
+            ctx.fillRect(100, canvas.height - 180, canvas.width - 200, 140);
+            ctx.strokeRect(100, canvas.height - 180, canvas.width - 200, 140);
+            
+            ctx.fillStyle = npc.color;
+            ctx.font = 'bold 28px "Segoe UI"';
+            ctx.textAlign = 'left';
+            ctx.fillText(npc.name, 120, canvas.height - 140);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '24px "Segoe UI"';
+            ctx.fillText(npc.messages[dialog.textIndex], 120, canvas.height - 90);
+            
+            ctx.fillStyle = '#aaa';
+            ctx.font = '16px "Segoe UI"';
+            ctx.fillText("Press Y or E to continue...", canvas.width - 320, canvas.height - 55);
+        }
+    }
+
+    if (gameState === 'won' || gameState === 'lost') {
+        document.getElementById('hud').style.display = 'none';
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
         ctx.fillRect(0,0,canvas.width, canvas.height);
-        ctx.fillStyle = 'gold';
-        ctx.font = '60px Arial';
-        ctx.fillText("VICTORY! The Skeletons are defeated.", canvas.width/2 - 400, canvas.height/2);
-    } else if (gameState === 'lost') {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(0,0,canvas.width, canvas.height);
-        ctx.fillStyle = 'red';
-        ctx.font = '60px Arial';
-        ctx.fillText("GAME OVER. You fell apart.", canvas.width/2 - 350, canvas.height/2);
+        
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 70px "Segoe UI"';
+        ctx.fillStyle = gameState === 'won' ? '#ffcc00' : '#ff3333';
+        ctx.fillText(gameState === 'won' ? "VICTORY!" : "GAME OVER", canvas.width/2, canvas.height/2 - 20);
+        
+        ctx.font = '30px "Segoe UI"';
+        ctx.fillStyle = '#fff';
+        ctx.fillText("Press START or ENTER to Restart", canvas.width/2, canvas.height/2 + 50);
     }
 }
 
 function gameLoop() {
-    if (gameState === 'playing') {
+    frames++;
+    
+    // Save previous inputs for edge detection
+    Object.assign(prevKeys, keys);
+    Object.assign(prevGamepadState, gamepadState);
+
+    let startPressed = isPressed('Enter') || (getGamepadInput() && gamepadState.start && !prevGamepadState.start);
+
+    if (gameState === 'start' || gameState === 'won' || gameState === 'lost') {
+        if (startPressed) {
+            initGame();
+        }
+    } else if (gameState === 'playing') {
         updateInput();
         updatePhysics();
         spawnSkeletons();
         updateEntities();
     }
+    
     render();
     requestAnimationFrame(gameLoop);
 }
 
+// Kickoff
+initGame();
+gameState = 'start'; // Override initial to show start screen
 gameLoop();
+
 </script>
 </body>
 </html>
