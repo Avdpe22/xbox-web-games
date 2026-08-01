@@ -15,11 +15,55 @@
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
 
-        // Simple player object
-        const player = { x: canvas.width / 2, y: canvas.height / 2, size: 50, color: '#107C10', speed: 8 };
+        // --- Tunable constants (unchanged gameplay values, just named) ---
+        const PLAYER_SIZE = 50;
+        const PLAYER_SPEED = 8;
+        const DEADZONE = 0.2; // Ignore slight stick drift
+        const CORNER_RADIUS = 8; // purely cosmetic, doesn't affect hitbox/logic
+        const COLOR_LERP = 0.15; // how quickly the color eases toward its target
+        const DEFAULT_COLOR = { r: 0x10, g: 0x7C, b: 0x10 }; // #107C10 - Xbox Green
+        const ACTIVE_COLOR = { r: 0x00, g: 0xFF, b: 0x00 };  // #00FF00 - lit up when A is pressed
+        const UI_FONT = '24px Arial';
+        const UI_TEXT_COLOR = 'white';
+        const GLOW_COLOR = 'rgba(0, 0, 0, 0.45)';
+        const GLOW_BLUR = 14;
+
+        // Logical (CSS-pixel) viewport size, kept in sync with devicePixelRatio scaling.
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+
+        // Simple player object. Color is tracked as RGB so it can be eased smoothly.
+        const player = { x: width / 2, y: height / 2, size: PLAYER_SIZE, speed: PLAYER_SPEED };
+        const currentColor = { ...DEFAULT_COLOR };
+
+        function lerp(a, b, t) {
+            return a + (b - a) * t;
+        }
+
+        // Resize the backing store for devicePixelRatio so rendering stays crisp on
+        // high-DPI screens, while all game logic keeps working in CSS-pixel space.
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            width = window.innerWidth;
+            height = window.innerHeight;
+
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+
+            // Setting canvas.width/height above resets all context state, so
+            // re-apply the settings that stay constant across frames here
+            // instead of re-setting them on every animation frame.
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.font = UI_FONT;
+            ctx.textBaseline = 'alphabetic';
+
+            // Keep the player within the new bounds immediately.
+            player.x = Math.min(player.x, width - player.size);
+            player.y = Math.min(player.y, height - player.size);
+        }
 
         // Helper to grab the connected Xbox controller
         function getGamepad() {
@@ -32,40 +76,54 @@
             return null;
         }
 
+        function drawPlayer() {
+            ctx.fillStyle = `rgb(${currentColor.r | 0}, ${currentColor.g | 0}, ${currentColor.b | 0})`;
+            ctx.shadowColor = GLOW_COLOR;
+            ctx.shadowBlur = GLOW_BLUR;
+
+            if (ctx.roundRect) {
+                ctx.beginPath();
+                ctx.roundRect(player.x, player.y, player.size, player.size, CORNER_RADIUS);
+                ctx.fill();
+            } else {
+                ctx.fillRect(player.x, player.y, player.size, player.size);
+            }
+
+            // UI text doesn't need the glow.
+            ctx.shadowBlur = 0;
+        }
+
         function gameLoop() {
             const pad = getGamepad();
-            
+
             if (pad) {
                 // Left Stick Axes (0 = X axis, 1 = Y axis)
                 const lx = pad.axes[0];
                 const ly = pad.axes[1];
-                const deadzone = 0.2; // Ignore slight stick drift
 
-                if (Math.abs(lx) > deadzone) player.x += lx * player.speed;
-                if (Math.abs(ly) > deadzone) player.y += ly * player.speed;
-
-                // Button 0 is the "A" Button on Xbox
-                if (pad.buttons[0].pressed) {
-                    player.color = '#00FF00'; // Light up when A is pressed
-                } else {
-                    player.color = '#107C10'; // Default Xbox Green
-                }
+                if (Math.abs(lx) > DEADZONE) player.x += lx * player.speed;
+                if (Math.abs(ly) > DEADZONE) player.y += ly * player.speed;
             }
 
+            // Button 0 is the "A" Button on Xbox. Ease toward the target color
+            // instead of snapping, for a smoother visual transition.
+            const target = (pad && pad.buttons[0].pressed) ? ACTIVE_COLOR : DEFAULT_COLOR;
+            currentColor.r = lerp(currentColor.r, target.r, COLOR_LERP);
+            currentColor.g = lerp(currentColor.g, target.g, COLOR_LERP);
+            currentColor.b = lerp(currentColor.b, target.b, COLOR_LERP);
+
             // Keep player inside the screen bounds
-            player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
-            player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
+            player.x = Math.max(0, Math.min(width - player.size, player.x));
+            player.y = Math.max(0, Math.min(height - player.size, player.y));
 
             // Draw Background
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
+            ctx.clearRect(0, 0, width, height);
+
             // Draw Player
-            ctx.fillStyle = player.color;
-            ctx.fillRect(player.x, player.y, player.size, player.size);
-            
+            drawPlayer();
+
             // Draw UI Text
-            ctx.fillStyle = 'white';
-            ctx.font = '24px Arial';
+            ctx.fillStyle = UI_TEXT_COLOR;
             if (pad) {
                 ctx.fillText("Controller Connected! Use Left Stick to move, 'A' to interact.", 20, 40);
             } else {
@@ -76,14 +134,12 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // Start the loop
+        // Initial setup, then start the loop
+        resize();
         gameLoop();
 
-        // Handle window resizing
-        window.addEventListener('resize', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        });
+        // Handle window resizing (recomputes DPR scaling, no object churn)
+        window.addEventListener('resize', resize);
     </script>
 </body>
 </html>

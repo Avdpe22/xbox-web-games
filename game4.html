@@ -236,12 +236,29 @@ const Music = {
  */
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d', { alpha: false });
-let width, height;
+let width, height, dpr = 1;
 const CAMERA_ZOOM = 0.6; // Zooms out to see more of the battlefield
 
+// Cache DOM nodes once instead of re-querying every frame/call
+const dom = {
+    uiLayer: document.getElementById('ui-layer'),
+    uiBuddies: document.getElementById('ui-buddies'),
+    uiTime: document.getElementById('ui-time'),
+    overlay: document.getElementById('overlay'),
+    screenTitle: document.getElementById('screen-title'),
+    screenDesc: document.getElementById('screen-desc'),
+    startPrompt: document.getElementById('start-prompt'),
+    gamepadStatus: document.getElementById('gamepad-status')
+};
+
 function resize() {
-    width = canvas.width = window.innerWidth;
-    height = canvas.height = window.innerHeight;
+    // Logical (CSS-pixel) size used for all game/camera math
+    width = window.innerWidth;
+    height = window.innerHeight;
+    // Match backing store to devicePixelRatio for crisper rendering on hi-DPI screens
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
 }
 window.addEventListener('resize', resize);
 
@@ -258,13 +275,13 @@ const Input = {
 
 window.addEventListener("gamepadconnected", (e) => {
     Input.connected = true;
-    document.getElementById('gamepad-status').className = 'pad-connected';
-    document.getElementById('gamepad-status').innerText = `🎮 ${e.gamepad.id.substring(0,25)} Connected`;
+    dom.gamepadStatus.className = 'pad-connected';
+    dom.gamepadStatus.innerText = `🎮 ${e.gamepad.id.substring(0,25)} Connected`;
 });
 window.addEventListener("gamepaddisconnected", (e) => {
     Input.connected = false;
-    document.getElementById('gamepad-status').className = 'pad-disconnected';
-    document.getElementById('gamepad-status').innerText = '🎮 Controller Disconnected';
+    dom.gamepadStatus.className = 'pad-disconnected';
+    dom.gamepadStatus.innerText = '🎮 Controller Disconnected';
 });
 
 let keys = {};
@@ -302,6 +319,8 @@ let game = {
 };
 
 const GRAVITY = 1800;
+const SPAWN_X = 100, SPAWN_Y = 600; // Player start/respawn position
+const DEATH_PIT_Y = 1500; // Falling below this resets the player to spawn
 let camera = { x: 0, y: 0 };
 
 class Player {
@@ -368,26 +387,12 @@ class Player {
         ctx.translate(this.x + this.w/2, this.y + this.h/2);
         if (!this.facingRight) ctx.scale(-1, 1);
 
-        // Toy Soldier Draw
-        ctx.fillStyle = '#22c55e'; // Green plastic base
-        ctx.fillRect(-this.w/2, -this.h/2 + 20, this.w, this.h - 20); // body
-        ctx.fillRect(-this.w/2 + 5, -this.h/2, 20, 20); // head
-        
-        // Helmet rim
-        ctx.fillStyle = '#166534';
-        ctx.beginPath();
-        ctx.ellipse(0, -this.h/2 + 5, 18, 6, 0, 0, Math.PI*2);
-        ctx.fill();
+        // Toy Soldier Draw (green plastic base, dark green helmet)
+        drawSoldierFigure(ctx, this.w, this.h, '#22c55e', '#166534');
 
         // Gun/Arm pointing forward
         ctx.fillStyle = '#15803d';
         ctx.fillRect(0, -this.h/2 + 30, 25, 8);
-        
-        // Base plate (like classic toy soldiers)
-        ctx.fillStyle = '#14532d';
-        ctx.beginPath();
-        ctx.ellipse(0, this.h/2, 22, 6, 0, 0, Math.PI*2);
-        ctx.fill();
 
         ctx.restore();
     }
@@ -432,20 +437,7 @@ class Buddy {
         ctx.shadowBlur = 15;
 
         // Soldier Draw (Standing at attention, lighter green to pop out)
-        ctx.fillStyle = '#4ade80'; 
-        ctx.fillRect(-this.w/2, -this.h/2 + 20, this.w, this.h - 20); // body
-        ctx.fillRect(-this.w/2 + 5, -this.h/2, 20, 20); // head
-        
-        ctx.fillStyle = '#16a34a';
-        ctx.beginPath();
-        ctx.ellipse(0, -this.h/2 + 5, 18, 6, 0, 0, Math.PI*2);
-        ctx.fill();
-
-        // Base plate
-        ctx.fillStyle = '#14532d';
-        ctx.beginPath();
-        ctx.ellipse(0, this.h/2, 22, 6, 0, 0, Math.PI*2);
-        ctx.fill();
+        drawSoldierFigure(ctx, this.w, this.h, '#4ade80', '#16a34a');
 
         // Help bubble
         ctx.shadowBlur = 0;
@@ -481,16 +473,17 @@ class Particle {
         let speed = Math.random() * 200 + 100;
         this.dx = Math.cos(angle) * speed;
         this.dy = Math.sin(angle) * speed;
+        this.vy = 0;
         this.life = 0.5 + Math.random() * 0.5;
         this.maxLife = this.life;
         this.color = color;
         this.size = 4 + Math.random() * 6;
     }
     update(dt) {
-        this.vy = (this.vy || 0) + GRAVITY * 0.5 * dt;
+        this.vy += GRAVITY * 0.5 * dt;
         this.x += this.dx * dt;
         this.y += (this.dy + this.vy) * dt;
-        this.dx *= 0.95; 
+        this.dx *= 0.95;
         this.dy *= 0.95;
         this.life -= dt;
     }
@@ -502,6 +495,25 @@ class Particle {
         ctx.fill();
         ctx.globalAlpha = 1.0;
     }
+}
+
+// Shared toy-soldier silhouette used by both the player and the collectible buddies
+// (body, head, helmet rim, base plate) so the two draw() methods don't duplicate geometry.
+function drawSoldierFigure(ctx, w, h, bodyColor, helmetColor) {
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(-w/2, -h/2 + 20, w, h - 20); // body
+    ctx.fillRect(-w/2 + 5, -h/2, 20, 20); // head
+
+    ctx.fillStyle = helmetColor;
+    ctx.beginPath();
+    ctx.ellipse(0, -h/2 + 5, 18, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Base plate (like classic toy soldiers)
+    ctx.fillStyle = '#14532d';
+    ctx.beginPath();
+    ctx.ellipse(0, h/2, 22, 6, 0, 0, Math.PI*2);
+    ctx.fill();
 }
 
 let player;
@@ -561,17 +573,17 @@ function buildLevel() {
 
 function initGame() {
     buildLevel();
-    player = new Player(100, 600);
+    player = new Player(SPAWN_X, SPAWN_Y);
     particles = [];
-    
+
     game.time = 0;
     game.buddiesFound = 0;
-    
+
     updateHUD();
     State.current = State.PLAYING;
-    document.getElementById('ui-layer').classList.remove('hidden');
-    document.getElementById('overlay').classList.add('hidden');
-    
+    dom.uiLayer.classList.remove('hidden');
+    dom.overlay.classList.add('hidden');
+
     Music.start();
 }
 
@@ -579,26 +591,28 @@ function spawnParticles(x, y, color, count) {
     for(let i=0; i<count; i++) particles.push(new Particle(x, y, color));
 }
 
+// Shared mm:ss formatting used by the HUD clock and the win screen
+function formatTime(seconds) {
+    let mins = Math.floor(seconds / 60);
+    let secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
+}
+
 function updateHUD() {
-    document.getElementById('ui-buddies').innerText = `${game.buddiesFound} / ${game.totalBuddies}`;
-    let mins = Math.floor(game.time / 60);
-    let secs = Math.floor(game.time % 60).toString().padStart(2, '0');
-    document.getElementById('ui-time').innerText = `${mins}:${secs}`;
+    dom.uiBuddies.innerText = `${game.buddiesFound} / ${game.totalBuddies}`;
+    dom.uiTime.innerText = formatTime(game.time);
 }
 
 function gameWin() {
     State.current = State.GAMEOVER;
     Music.stop(); // Stop soundtrack on victory
     Sound.play('win');
-    document.getElementById('ui-layer').classList.add('hidden');
-    document.getElementById('overlay').classList.remove('hidden');
-    document.getElementById('screen-title').innerText = "SQUAD RESCUED!";
-    
-    let mins = Math.floor(game.time / 60);
-    let secs = Math.floor(game.time % 60).toString().padStart(2, '0');
-    
-    document.getElementById('screen-desc').innerHTML = `You found all ${game.totalBuddies} soldiers.<br>Clear Time: ${mins}:${secs}<br><br>Press 'A' or Click to Play Again`;
-    document.getElementById('start-prompt').innerText = "Restart Mission";
+    dom.uiLayer.classList.add('hidden');
+    dom.overlay.classList.remove('hidden');
+    dom.screenTitle.innerText = "SQUAD RESCUED!";
+
+    dom.screenDesc.innerHTML = `You found all ${game.totalBuddies} soldiers.<br>Clear Time: ${formatTime(game.time)}<br><br>Press 'A' or Click to Play Again`;
+    dom.startPrompt.innerText = "Restart Mission";
 }
 
 /**
@@ -628,9 +642,9 @@ function update(dt) {
     }
     
     // Death pit reset
-    if (player.y > 1500) {
-        player.x = 100;
-        player.y = 600;
+    if (player.y > DEATH_PIT_Y) {
+        player.x = SPAWN_X;
+        player.y = SPAWN_Y;
         player.vx = 0;
         player.vy = 0;
     }
@@ -659,7 +673,10 @@ function drawWallpaperBackground() {
 
 function draw() {
     // 1. Draw static background
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // Reset to the device-pixel-ratio scale (instead of pure identity) so all
+    // subsequent drawing can keep using logical/CSS-pixel coordinates while the
+    // canvas backing store renders at native resolution on hi-DPI screens.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawWallpaperBackground();
     
     // 2. Setup Camera transform
@@ -676,50 +693,55 @@ function draw() {
     player.draw(ctx);
 }
 
+function pauseGame() {
+    State.current = State.PAUSED;
+    Music.stop(); // Pause Music
+    dom.overlay.classList.remove('hidden');
+    dom.screenTitle.innerText = "PAUSED";
+    dom.screenDesc.innerText = "Press Menu or Click to Resume";
+    dom.startPrompt.classList.add('hidden');
+}
+
+function resumeGame() {
+    State.current = State.PLAYING;
+    Music.start(); // Resume Music
+    dom.overlay.classList.add('hidden');
+    dom.startPrompt.classList.remove('hidden');
+}
+
 function loop(timestamp) {
     let dt = (timestamp - game.lastTime) / 1000;
-    if (dt > 0.1) dt = 0.1; 
+    if (dt > 0.1) dt = 0.1;
     game.lastTime = timestamp;
 
     pollInput();
 
     if (State.current === State.PLAYING) {
         if (Input.pause && !Input.prevPause) {
-            State.current = State.PAUSED;
-            Music.stop(); // Pause Music
-            document.getElementById('overlay').classList.remove('hidden');
-            document.getElementById('screen-title').innerText = "PAUSED";
-            document.getElementById('screen-desc').innerText = "Press Menu or Click to Resume";
-            document.getElementById('start-prompt').classList.add('hidden');
+            pauseGame();
         } else {
             update(dt);
             draw();
         }
     } else if (State.current === State.PAUSED) {
         if (Input.pause && !Input.prevPause) {
-            State.current = State.PLAYING;
-            Music.start(); // Resume Music
-            document.getElementById('overlay').classList.add('hidden');
-            document.getElementById('start-prompt').classList.remove('hidden');
+            resumeGame();
         }
     } else if (State.current === State.MENU || State.current === State.GAMEOVER) {
         if (Input.jump && !Input.prevJump) {
             initGame();
         }
     }
-    
+
     requestAnimationFrame(loop);
 }
 
 // Mouse/Touch start listeners
-document.getElementById('overlay').addEventListener('mousedown', () => {
+dom.overlay.addEventListener('mousedown', () => {
     if (State.current === State.MENU || State.current === State.GAMEOVER) {
         initGame();
     } else if (State.current === State.PAUSED) {
-        State.current = State.PLAYING;
-        Music.start(); // Resume Music
-        document.getElementById('overlay').classList.add('hidden');
-        document.getElementById('start-prompt').classList.remove('hidden');
+        resumeGame();
     }
 });
 

@@ -11,19 +11,60 @@
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
-    
+
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+
+        // Logical (CSS-pixel) viewport size. Canvas backing-store size is this
+        // scaled by devicePixelRatio for crisper rendering on high-DPI screens;
+        // all game logic/coordinates stay in logical space so behavior is unaffected.
+        let W = window.innerWidth;
+        let H = window.innerHeight;
+        let dpr = 1;
+
+        function resizeCanvas() {
+            W = window.innerWidth;
+            H = window.innerHeight;
+            dpr = Math.max(1, window.devicePixelRatio || 1);
+            canvas.width = W * dpr;
+            canvas.height = H * dpr;
+            canvas.style.width = W + 'px';
+            canvas.style.height = H + 'px';
+        }
+        resizeCanvas();
+
+        // Tunable constants (values unchanged from original implementation)
+        const DEADZONE = 0.2;
+        const FIRE_COOLDOWN_MS = 200;
+        const BULLET_WIDTH = 10;
+        const BULLET_HEIGHT = 20;
+        const BULLET_SPEED = 15;
+        const ENEMY_WIDTH = 40;
+        const ENEMY_HEIGHT = 40;
+        const ENEMY_MIN_SPEED = 3;
+        const ENEMY_SPEED_VARIANCE = 4;
+        const SPAWN_CHANCE = 0.05;
+        const SCORE_PER_KILL = 10;
+        const STAR_COUNT = 90;
+        const HIT_SHAKE = 6;
 
         // Game Objects
-        const player = { x: canvas.width / 2, y: canvas.height - 100, width: 40, height: 40, speed: 10, color: '#00BFFF' };
+        const player = { x: W / 2, y: H - 100, width: 40, height: 40, speed: 10, color: '#00BFFF' };
         const bullets = [];
         const enemies = [];
+        const particles = [];
         let score = 0;
         let lastShotTime = 0;
+        let shake = 0;
+
+        // Persistent parallax starfield (purely visual, no gameplay effect)
+        const stars = Array.from({ length: STAR_COUNT }, () => ({
+            x: Math.random() * W,
+            y: Math.random() * H,
+            speed: 0.5 + Math.random() * 1.5,
+            size: Math.random() < 0.85 ? 1 : 2
+        }));
 
         function getGamepad() {
             const gamepads = navigator.getGamepads();
@@ -37,63 +78,103 @@
 
         function spawnEnemy() {
             // 5% chance to spawn an enemy every frame
-            if (Math.random() < 0.05) {
-                enemies.push({ 
-                    x: Math.random() * (canvas.width - 40), 
-                    y: -40, 
-                    width: 40, 
-                    height: 40, 
-                    speed: 3 + Math.random() * 4, 
-                    color: '#FF3333' 
+            if (Math.random() < SPAWN_CHANCE) {
+                enemies.push({
+                    x: Math.random() * (W - ENEMY_WIDTH),
+                    y: -ENEMY_HEIGHT,
+                    width: ENEMY_WIDTH,
+                    height: ENEMY_HEIGHT,
+                    speed: ENEMY_MIN_SPEED + Math.random() * ENEMY_SPEED_VARIANCE,
+                    color: '#FF3333'
                 });
             }
         }
 
+        function spawnExplosion(cx, cy) {
+            for (let i = 0; i < 10; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1 + Math.random() * 3;
+                particles.push({
+                    x: cx,
+                    y: cy,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 20 + Math.random() * 10,
+                    maxLife: 30,
+                    color: Math.random() < 0.5 ? '#FF3333' : '#FFCC00'
+                });
+            }
+        }
+
+        function rectsIntersect(a, b) {
+            return a.x < b.x + b.width && a.x + a.width > b.x &&
+                   a.y < b.y + b.height && a.y + a.height > b.y;
+        }
+
+        function drawEntity(e) {
+            ctx.fillStyle = e.color;
+            ctx.fillRect(e.x, e.y, e.width, e.height);
+        }
+
         function gameLoop(timestamp) {
             const pad = getGamepad();
-            
+
             if (pad) {
                 const lx = pad.axes[0];
                 const ly = pad.axes[1];
-                const deadzone = 0.2;
 
                 // Movement
-                if (Math.abs(lx) > deadzone) player.x += lx * player.speed;
-                if (Math.abs(ly) > deadzone) player.y += ly * player.speed;
+                if (Math.abs(lx) > DEADZONE) player.x += lx * player.speed;
+                if (Math.abs(ly) > DEADZONE) player.y += ly * player.speed;
 
                 // Firing: Button 0 is 'A', Button 7 is 'Right Trigger'
                 // We check the timestamp to create a fire-rate limit (200ms between shots)
-                if ((pad.buttons[0].pressed || pad.buttons[7].pressed) && timestamp - lastShotTime > 200) {
-                    bullets.push({ 
-                        x: player.x + (player.width / 2) - 5, 
-                        y: player.y, 
-                        width: 10, 
-                        height: 20, 
-                        speed: 15, 
-                        color: '#FFFF00' 
+                if ((pad.buttons[0].pressed || pad.buttons[7].pressed) && timestamp - lastShotTime > FIRE_COOLDOWN_MS) {
+                    bullets.push({
+                        x: player.x + (player.width / 2) - 5,
+                        y: player.y,
+                        width: BULLET_WIDTH,
+                        height: BULLET_HEIGHT,
+                        speed: BULLET_SPEED,
+                        color: '#FFFF00'
                     });
                     lastShotTime = timestamp;
                 }
             }
 
             // Keep player on screen
-            player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
-            player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
+            player.x = Math.max(0, Math.min(W - player.width, player.x));
+            player.y = Math.max(0, Math.min(H - player.height, player.y));
+
+            // Reset transform each frame: apply DPR scale plus a small decaying
+            // screen-shake offset (purely cosmetic, doesn't touch game coordinates).
+            let shakeX = 0, shakeY = 0;
+            if (shake > 0) {
+                shakeX = (Math.random() - 0.5) * shake;
+                shakeY = (Math.random() - 0.5) * shake;
+                shake *= 0.85;
+                if (shake < 0.3) shake = 0;
+            }
+            ctx.setTransform(dpr, 0, 0, dpr, shakeX * dpr, shakeY * dpr);
 
             // Draw Background
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Starfield effect (simple dots)
+            ctx.clearRect(-shakeX - 4, -shakeY - 4, W + 8, H + 8);
+
+            // Starfield parallax
             ctx.fillStyle = 'white';
-            for(let i=0; i<10; i++) ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 2, 2);
+            for (let i = 0; i < stars.length; i++) {
+                const s = stars[i];
+                s.y += s.speed;
+                if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
+                ctx.fillRect(s.x, s.y, s.size, s.size);
+            }
 
             // Update & Draw Bullets
             for (let i = bullets.length - 1; i >= 0; i--) {
-                let b = bullets[i];
+                const b = bullets[i];
                 b.y -= b.speed;
-                ctx.fillStyle = b.color;
-                ctx.fillRect(b.x, b.y, b.width, b.height);
-                
+                drawEntity(b);
+
                 // Remove bullets off screen
                 if (b.y < 0) bullets.splice(i, 1);
             }
@@ -101,37 +182,52 @@
             // Update & Draw Enemies & Check Collisions
             spawnEnemy();
             for (let i = enemies.length - 1; i >= 0; i--) {
-                let e = enemies[i];
+                const e = enemies[i];
                 e.y += e.speed;
-                ctx.fillStyle = e.color;
-                ctx.fillRect(e.x, e.y, e.width, e.height);
+                drawEntity(e);
 
                 // Check collision with bullets
                 for (let j = bullets.length - 1; j >= 0; j--) {
-                    let b = bullets[j];
-                    if (b.x < e.x + e.width && b.x + b.width > e.x && 
-                        b.y < e.y + e.height && b.y + b.height > e.y) {
+                    const b = bullets[j];
+                    if (rectsIntersect(b, e)) {
                         // Hit!
+                        spawnExplosion(e.x + e.width / 2, e.y + e.height / 2);
+                        shake = HIT_SHAKE;
                         enemies.splice(i, 1);
                         bullets.splice(j, 1);
-                        score += 10;
+                        score += SCORE_PER_KILL;
                         break;
                     }
                 }
-                
+
                 // Remove enemies off screen
-                if (e && e.y > canvas.height) enemies.splice(i, 1);
+                if (enemies[i] === e && e.y > H) enemies.splice(i, 1);
+            }
+
+            // Update & Draw Explosion Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+                ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, 3, 3);
+                ctx.globalAlpha = 1;
             }
 
             // Draw Player Ship
-            ctx.fillStyle = player.color;
-            ctx.fillRect(player.x, player.y, player.width, player.height);
-            
+            drawEntity(player);
+
             // Draw UI
             ctx.fillStyle = 'white';
             ctx.font = '28px Arial';
             ctx.fillText(`Score: ${score}`, 20, 40);
-            
+
             if (!pad) {
                 ctx.fillText("Press 'A' on your Xbox Controller to connect...", 20, 80);
             }
@@ -144,10 +240,7 @@
         requestAnimationFrame(gameLoop);
 
         // Handle resize
-        window.addEventListener('resize', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        });
+        window.addEventListener('resize', resizeCanvas);
     </script>
 </body>
 </html>

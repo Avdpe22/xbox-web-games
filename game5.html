@@ -257,7 +257,7 @@
         let bossSpawnedThisWave = false;
         let screenFlash = 0;
 
-        let spawnCounts = { spiders: 0, mice: 0, rabbits: 0, greys: 0, bosses: 0 };
+        let spawnCounts = { spiders: 0, mice: 0, rabbits: 0, greys: 0 };
         let globalTurretLevel = 1;
         let turretUpgradeCost = 50;
         
@@ -358,7 +358,7 @@
                 
                 if (gameState === 'PLAYING') drawAimGuide(ctx, this.radius, PLAYER_MAX_RANGE, 'rgba(255, 0, 0, 0.4)');
                 
-                ctx.fillStyle = 'var(--plastic-green)';
+                ctx.fillStyle = '#2ecc71';
                 ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI * 2); ctx.fill();
                 ctx.strokeStyle = '#1d8046'; ctx.lineWidth = 2; ctx.stroke();
                 ctx.fillStyle = '#111'; ctx.fillRect(this.radius - 2, -3, 16, 6);
@@ -381,11 +381,7 @@
                 if (this.shootCooldown > 0) this.shootCooldown -= dt;
                 this.repathTimer -= dt;
 
-                let nearestEnemy = null, minDist = SOLDIER_MAX_RANGE;
-                for (let e of enemies) {
-                    let dist = Math.sqrt(Math.pow(e.x - this.x, 2) + Math.pow(e.y - this.y, 2));
-                    if (dist < minDist) { minDist = dist; nearestEnemy = e; }
-                }
+                const { target: nearestEnemy } = findNearestTarget(this.x, this.y, enemies, SOLDIER_MAX_RANGE);
 
                 if (nearestEnemy) {
                     const dx = nearestEnemy.x - this.x, dy = nearestEnemy.y - this.y;
@@ -403,9 +399,9 @@
                         this.repathTimer = 2 + Math.random() * 2;
                     }
                     const dx = this.targetX - this.x, dy = this.targetY - this.y;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
-                    if (dist > 5) {
-                        this.dirX = dx / dist; this.dirY = dy / dist;
+                    const distToTarget = Math.sqrt(dx*dx + dy*dy);
+                    if (distToTarget > 5) {
+                        this.dirX = dx / distToTarget; this.dirY = dy / distToTarget;
                         let nextX = this.x + this.dirX * this.speed * dt;
                         let nextY = this.y + this.dirY * this.speed * dt;
                         if (!checkStructureCollision(nextX, this.y, this.radius)) this.x = nextX;
@@ -439,11 +435,7 @@
                 if (this.shootCooldown > 0) this.shootCooldown -= dt;
                 this.repathTimer -= dt;
 
-                let nearestEnemy = null, minDist = TANK_MAX_RANGE;
-                for (let e of enemies) {
-                    let dist = Math.sqrt(Math.pow(e.x - this.x, 2) + Math.pow(e.y - this.y, 2));
-                    if (dist < minDist) { minDist = dist; nearestEnemy = e; }
-                }
+                const { target: nearestEnemy } = findNearestTarget(this.x, this.y, enemies, TANK_MAX_RANGE);
 
                 if (nearestEnemy) {
                     const dx = nearestEnemy.x - this.x, dy = nearestEnemy.y - this.y;
@@ -463,9 +455,9 @@
                         this.repathTimer = 3 + Math.random() * 3;
                     }
                     const dx = this.targetX - this.x, dy = this.targetY - this.y;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
-                    if (dist > 5) {
-                        this.dirX = dx / dist; this.dirY = dy / dist;
+                    const distToTarget = Math.sqrt(dx*dx + dy*dy);
+                    if (distToTarget > 5) {
+                        this.dirX = dx / distToTarget; this.dirY = dy / distToTarget;
                         let nextX = this.x + this.dirX * this.speed * dt;
                         let nextY = this.y + this.dirY * this.speed * dt;
                         if (!checkStructureCollision(nextX, this.y, this.radius)) this.x = nextX;
@@ -505,11 +497,7 @@
                     if (this.type.id === 'TURRET') {
                         this.shootCooldown -= dt;
                         if (this.shootCooldown <= 0 && enemies.length > 0) {
-                            let nearest = null, minDist = 300 + (globalTurretLevel * 20);
-                            for (let e of enemies) {
-                                let dist = Math.sqrt(Math.pow(e.x - this.x, 2) + Math.pow(e.y - this.y, 2));
-                                if (dist < minDist) { minDist = dist; nearest = e; }
-                            }
+                            const { target: nearest, dist: minDist } = findNearestTarget(this.x, this.y, enemies, 300 + (globalTurretLevel * 20));
                             if (nearest) {
                                 const dx = nearest.x - this.x, dy = nearest.y - this.y;
                                 const len = Math.sqrt(dx*dx + dy*dy);
@@ -539,6 +527,7 @@
             }
             draw(ctx) {
                 ctx.save(); ctx.translate(this.x, this.y);
+                let turretAngle = 0;
                 if (this.type.id === 'WALL') {
                     ctx.fillStyle = this.type.color;
                     ctx.fillRect(-this.size/2 + 2, -this.size/2 + 2, this.size - 4, this.size - 4);
@@ -547,15 +536,14 @@
                     ctx.beginPath(); ctx.moveTo(-this.size/2 + 4, 0); ctx.lineTo(this.size/2 - 4, 0); ctx.stroke();
                 } else if (this.type.id === 'TURRET') {
                     ctx.fillStyle = '#c2b280'; ctx.beginPath(); ctx.arc(0, 0, this.size/2 - 2, 0, Math.PI*2); ctx.fill();
-                    let angle = 0;
                     if (gameState === 'PLAYING' && enemies.length > 0) {
                          let nearest = enemies.reduce((prev, curr) => {
-                            return (Math.pow(curr.x - this.x, 2) + Math.pow(curr.y - this.y, 2)) < 
+                            return (Math.pow(curr.x - this.x, 2) + Math.pow(curr.y - this.y, 2)) <
                                    (Math.pow(prev.x - this.x, 2) + Math.pow(prev.y - this.y, 2)) ? curr : prev;
                          });
-                         angle = Math.atan2(nearest.y - this.y, nearest.x - this.x);
+                         turretAngle = Math.atan2(nearest.y - this.y, nearest.x - this.x);
                     }
-                    ctx.rotate(angle);
+                    ctx.rotate(turretAngle);
                     ctx.fillStyle = globalTurretLevel > 1 ? '#7cb342' : this.type.color;
                     ctx.beginPath(); ctx.arc(0, 0, this.size/3, 0, Math.PI*2); ctx.fill();
                     ctx.fillStyle = '#222'; ctx.fillRect(this.size/4, -3, this.size/2, 6);
@@ -574,8 +562,7 @@
                     ctx.fillRect(-2, -10, 4, 20);
                 }
                 
-                ctx.setTransform(1, 0, 0, 1, 0, 0); 
-                ctx.translate(this.x, this.y); 
+                ctx.rotate(-turretAngle);
                 if (this.hp < this.maxHp) {
                     ctx.fillStyle = 'rgba(255,0,0,0.5)';
                     ctx.fillRect(-this.size/2, this.size/2 - 4, this.size * (this.hp/this.maxHp), 4);
@@ -644,21 +631,15 @@
                 }
             }
             
-            update(dt) {
+            update(dt, allUnits) {
                 this.animTime += dt * 15;
                 if (this.attackCooldown > 0) this.attackCooldown -= dt;
 
                 if (this.type === 'MOUSE' || this.type === 'GREY' || this.type === 'BOSS') {
                     this.shootCooldown -= dt;
                     if (this.shootCooldown <= 0) {
-                        let targets = [hq, player, ...soldiers, ...tanks];
-                        let nearest = null;
-                        let minDist = this.type === 'BOSS' ? 600 : (this.type === 'GREY' ? 450 : 350);
-                        
-                        for (let t of targets) {
-                            let dist = Math.sqrt(Math.pow(t.x - this.x, 2) + Math.pow(t.y - this.y, 2));
-                            if (dist < minDist) { minDist = dist; nearest = t; }
-                        }
+                        const range = this.type === 'BOSS' ? 600 : (this.type === 'GREY' ? 450 : 350);
+                        const { target: nearest } = findNearestTarget(this.x, this.y, [hq, player, ...allUnits], range);
                         if (nearest) {
                             const dx = nearest.x - this.x, dy = nearest.y - this.y;
                             const len = Math.sqrt(dx*dx + dy*dy);
@@ -688,44 +669,22 @@
                 }
 
                 let targetX = hq.x, targetY = hq.y;
-                let units = [...soldiers, ...tanks];
-                if (units.length > 0 && this.type !== 'BOSS') { 
-                    let nearestU = units[0];
-                    let uDist = Math.sqrt(Math.pow(nearestU.x - this.x, 2) + Math.pow(nearestU.y - this.y, 2));
-                    let hDist = Math.sqrt(Math.pow(hq.x - this.x, 2) + Math.pow(hq.y - this.y, 2));
+                if (allUnits.length > 0 && this.type !== 'BOSS') {
+                    const nearestU = allUnits[0];
+                    const uDist = dist(nearestU.x, nearestU.y, this.x, this.y);
+                    const hDist = dist(hq.x, hq.y, this.x, this.y);
                     if (uDist < hDist) { targetX = nearestU.x; targetY = nearestU.y; }
                 }
 
                 const dx = targetX - this.x, dy = targetY - this.y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                
-                if (dist > 0) {
-                    let nx = dx / dist, ny = dy / dist;
-                    let nextX = this.x + nx * currentSpeed * dt;
-                    let nextY = this.y + ny * currentSpeed * dt;
-                    
-                    let hitTarget = null;
-                    if (Math.abs(nextX - hq.x) < hq.size/2 + this.radius && Math.abs(nextY - hq.y) < hq.size/2 + this.radius) hitTarget = hq;
-                    
-                    if (!hitTarget) {
-                        for (let s of structures) {
-                            if (Math.abs(nextX - s.x) < s.size/2 + this.radius && Math.abs(nextY - s.y) < s.size/2 + this.radius) {
-                                hitTarget = s; break;
-                            }
-                        }
-                    }
+                const distToTarget = dist(this.x, this.y, targetX, targetY);
 
-                    if (!hitTarget) {
-                        for (let s of units) {
-                            if (Math.abs(nextX - s.x) < s.radius + this.radius && Math.abs(nextY - s.y) < s.radius + this.radius) {
-                                hitTarget = s; break;
-                            }
-                        }
-                    }
+                if (distToTarget > 0) {
+                    const nx = dx / distToTarget, ny = dy / distToTarget;
+                    const nextX = this.x + nx * currentSpeed * dt;
+                    const nextY = this.y + ny * currentSpeed * dt;
 
-                    if (!hitTarget && Math.abs(nextX - player.x) < player.radius + this.radius && Math.abs(nextY - player.y) < player.radius + this.radius) {
-                        hitTarget = player;
-                    }
+                    const hitTarget = firstAABBHit(nextX, nextY, this.radius, [[hq], structures, allUnits, [player]]);
 
                     if (hitTarget) {
                         if (this.attackCooldown <= 0) {
@@ -841,9 +800,42 @@
         }
 
         function checkStructureCollision(px, py, radius) {
-            if (Math.abs(px - hq.x) < hq.size/2 + radius && Math.abs(py - hq.y) < hq.size/2 + radius) return true;
-            for (let s of structures) if (Math.abs(px - s.x) < s.size/2 + radius && Math.abs(py - s.y) < s.size/2 + radius) return true;
-            return false;
+            return firstAABBHit(px, py, radius, [[hq], structures]) !== null;
+        }
+
+        // Euclidean distance (avoids repeated Math.pow(...,2) allocations in hot loops)
+        function dist(x1, y1, x2, y2) {
+            const dx = x1 - x2, dy = y1 - y2;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        // Scans `list` for the closest entity to (x,y) within maxDist. Shared by
+        // soldiers/tanks/turrets (targeting enemies) and enemies (targeting units/hq/player).
+        function findNearestTarget(x, y, list, maxDist) {
+            let nearest = null, minDist = maxDist;
+            for (const t of list) {
+                const d = dist(x, y, t.x, t.y);
+                if (d < minDist) { minDist = d; nearest = t; }
+            }
+            return { target: nearest, dist: minDist };
+        }
+
+        // Structures/HQ expose `.size` (square footprint), units/player expose `.radius`.
+        function halfExtent(entity) {
+            return entity.size !== undefined ? entity.size / 2 : entity.radius;
+        }
+
+        // Axis-aligned "box" overlap test against ordered candidate lists; returns the
+        // first match (preserving priority order) or null. Shared by movement-blocking
+        // collision checks and enemy-bullet impact checks.
+        function firstAABBHit(px, py, radius, candidateLists) {
+            for (const list of candidateLists) {
+                for (const obj of list) {
+                    const half = halfExtent(obj);
+                    if (Math.abs(px - obj.x) < half + radius && Math.abs(py - obj.y) < half + radius) return obj;
+                }
+            }
+            return null;
         }
 
         function getGridPos(x, y) {
@@ -909,7 +901,7 @@
             
             plastic = 120; wave = 1; globalTurretLevel = 1; turretUpgradeCost = 50;
             bossSpawnedThisWave = false; screenFlash = 0;
-            spawnCounts = { spiders: 0, mice: 0, rabbits: 0, greys: 0, bosses: 0 };
+            spawnCounts = { spiders: 0, mice: 0, rabbits: 0, greys: 0 };
             
             gameState = 'BUILD';
             updateHUD(); updateBuildUI();
@@ -1093,9 +1085,9 @@
                     
                     for (let j = enemies.length - 1; j >= 0; j--) {
                         const e = enemies[j];
-                        if (Math.sqrt(Math.pow(e.x - b.x, 2) + Math.pow(e.y - b.y, 2)) < e.radius + b.radius) {
+                        if (dist(e.x, e.y, b.x, b.y) < e.radius + b.radius) {
                             e.hp -= b.damage; friendlyBullets.splice(i, 1);
-                            spawnParticles(b.x, b.y, (e.type === 'GREY' || e.type === 'BOSS') ? '#808080' : 'var(--blood)', 3);
+                            spawnParticles(b.x, b.y, (e.type === 'GREY' || e.type === 'BOSS') ? '#808080' : '#8a0303', 3);
                             break;
                         }
                     }
@@ -1105,12 +1097,7 @@
                     const b = enemyBullets[i]; b.update(dt);
                     if (b.distanceTraveled >= b.maxRange || b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) { enemyBullets.splice(i, 1); continue; }
                     
-                    let hitTarget = null;
-                    if (Math.abs(b.x - hq.x) < hq.size/2 && Math.abs(b.y - hq.y) < hq.size/2) hitTarget = hq;
-                    if (!hitTarget) for (let s of structures) if (Math.abs(b.x - s.x) < s.size/2 && Math.abs(b.y - s.y) < s.size/2) { hitTarget = s; break; }
-                    if (!hitTarget) for (let s of soldiers) if (Math.abs(b.x - s.x) < s.radius && Math.abs(b.y - s.y) < s.radius) { hitTarget = s; break; }
-                    if (!hitTarget) for (let s of tanks) if (Math.abs(b.x - s.x) < s.radius && Math.abs(b.y - s.y) < s.radius) { hitTarget = s; break; }
-                    if (!hitTarget && Math.abs(b.x - player.x) < player.radius && Math.abs(b.y - player.y) < player.radius) hitTarget = player;
+                    const hitTarget = firstAABBHit(b.x, b.y, 0, [[hq], structures, soldiers, tanks, [player]]);
 
                     if (hitTarget) {
                         if (hitTarget.hp !== undefined) hitTarget.hp -= b.damage;
@@ -1119,9 +1106,10 @@
                     }
                 }
 
+                const allUnits = soldiers.concat(tanks);
                 for (let i = enemies.length - 1; i >= 0; i--) {
                     let e = enemies[i];
-                    e.update(dt);
+                    e.update(dt, allUnits);
                     if (e.hp <= 0) {
                         if (e.type === 'BOSS') {
                             spawnParticles(e.x, e.y, '#e74c3c', 100);

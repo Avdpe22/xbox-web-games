@@ -38,7 +38,20 @@
         const projectiles = [];
         const particles = [];
 
-        let buttonState = { A: false, X: false, Y: false };
+        let buttonState = { A: false, X: false, Y: false, A_Attack: false };
+
+        // --- Tuning Constants (values unchanged from original; named for clarity) ---
+        const GAMEPAD_DEADZONE = 0.2;
+        const DEPLOY_LINE_OFFSET = 300; // Deploy zone boundary, measured from right edge
+        const ENERGY_REGEN_RATE = 0.18;
+        const SOLDIER_COST = 10;
+        const TANK_COST = 30;
+        const BUNKER_COST = 50;
+        const TADPOLE_DETECTION_RADIUS = 250;
+        const PARTICLE_LIFETIME = 15;
+        const TADPOLE_KILL_SCORE = 1000;
+        const MULTI_KILL_THRESHOLD = 5;
+        const MULTI_KILL_BONUS = 10000000000000;
 
         function getGamepad() {
             const gamepads = navigator.getGamepads();
@@ -46,6 +59,26 @@
                 if (gamepads[i] && gamepads[i].mapping === 'standard') return gamepads[i];
             }
             return null;
+        }
+
+        // Returns true on the frame a button transitions from released to pressed.
+        function wasJustPressed(pad, buttonIndex, stateKey) {
+            const isPressed = pad.buttons[buttonIndex].pressed;
+            const justPressed = isPressed && !buttonState[stateKey];
+            buttonState[stateKey] = isPressed;
+            return justPressed;
+        }
+
+        // Finds the nearest entity (by squared distance, avoids sqrt) within maxDist.
+        function findClosestTarget(x, y, entities, maxDist) {
+            let closest = null;
+            let closestDistSq = maxDist * maxDist;
+            for (const e of entities) {
+                const dx = x - e.x, dy = y - e.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq < closestDistSq) { closestDistSq = distSq; closest = e; }
+            }
+            return closest;
         }
 
         function resetGame() {
@@ -110,7 +143,7 @@
                 particles.push({
                     x: x, y: y,
                     vx: (Math.random() - 0.5) * 4, vy: (Math.random() - 0.5) * 4,
-                    life: 15, color: color, size: (Math.random() * 3 + 1) * sizeMultiplier
+                    life: PARTICLE_LIFETIME, color: color, size: (Math.random() * 3 + 1) * sizeMultiplier
                 });
             }
         }
@@ -127,58 +160,47 @@
             const pad = getGamepad();
             
             if (pad) {
-                if (pad.buttons[0].pressed && !buttonState.A) {
+                if (wasJustPressed(pad, 0, 'A')) {
                     if (gameState !== 'PLAYING') resetGame();
-                    buttonState.A = true;
-                } else if (!pad.buttons[0].pressed) buttonState.A = false;
+                }
 
                 if (gameState === 'PLAYING') {
                     const lx = pad.axes[0];
                     const ly = pad.axes[1];
-                    const deadzone = 0.2;
 
-                    if (Math.abs(lx) > deadzone) crosshair.x += lx * crosshair.speed;
-                    if (Math.abs(ly) > deadzone) crosshair.y += ly * crosshair.speed;
+                    if (Math.abs(lx) > GAMEPAD_DEADZONE) crosshair.x += lx * crosshair.speed;
+                    if (Math.abs(ly) > GAMEPAD_DEADZONE) crosshair.y += ly * crosshair.speed;
 
-                    const maxDeployX = canvas.width - 300;
+                    const maxDeployX = canvas.width - DEPLOY_LINE_OFFSET;
                     crosshair.x = Math.max(playerBase.width + 10, Math.min(maxDeployX, crosshair.x));
                     crosshair.y = Math.max(10, Math.min(canvas.height - 10, crosshair.y));
 
                     // [A] 3x Paratroopers
-                    if (pad.buttons[0].pressed && buttonState.A === true && !buttonState.A_Attack) {
-                        if (commandEnergy >= 10) {
-                            commandEnergy -= 10;
-                            spawnSoldier(crosshair.x, crosshair.y - 15);
-                            spawnSoldier(crosshair.x - 10, crosshair.y + 10);
-                            spawnSoldier(crosshair.x + 10, crosshair.y + 10);
-                        }
-                        buttonState.A_Attack = true;
-                    } else if (!pad.buttons[0].pressed) buttonState.A_Attack = false;
+                    if (wasJustPressed(pad, 0, 'A_Attack') && commandEnergy >= SOLDIER_COST) {
+                        commandEnergy -= SOLDIER_COST;
+                        spawnSoldier(crosshair.x, crosshair.y - 15);
+                        spawnSoldier(crosshair.x - 10, crosshair.y + 10);
+                        spawnSoldier(crosshair.x + 10, crosshair.y + 10);
+                    }
 
                     // [X] Tank Platoon
-                    if (pad.buttons[2].pressed && !buttonState.X) {
-                        if (commandEnergy >= 30) {
-                            commandEnergy -= 30;
-                            spawnTank(crosshair.x, crosshair.y);
-                            for(let i=0; i<4; i++) spawnSoldier(crosshair.x - 20 - (Math.random()*15), crosshair.y - 20 + (i*15));
-                        }
-                        buttonState.X = true;
-                    } else if (!pad.buttons[2].pressed) buttonState.X = false;
+                    if (wasJustPressed(pad, 2, 'X') && commandEnergy >= TANK_COST) {
+                        commandEnergy -= TANK_COST;
+                        spawnTank(crosshair.x, crosshair.y);
+                        for(let i=0; i<4; i++) spawnSoldier(crosshair.x - 20 - (Math.random()*15), crosshair.y - 20 + (i*15));
+                    }
 
                     // [Y] Heavy Bunker
-                    if (pad.buttons[3].pressed && !buttonState.Y) {
-                        if (commandEnergy >= 50) {
-                            commandEnergy -= 50;
-                            spawnBunker(crosshair.x, crosshair.y);
-                        }
-                        buttonState.Y = true;
-                    } else if (!pad.buttons[3].pressed) buttonState.Y = false;
+                    if (wasJustPressed(pad, 3, 'Y') && commandEnergy >= BUNKER_COST) {
+                        commandEnergy -= BUNKER_COST;
+                        spawnBunker(crosshair.x, crosshair.y);
+                    }
                 }
             }
 
             // --- UPDATE LOGIC ---
             if (gameState === 'PLAYING') {
-                commandEnergy = Math.min(100, commandEnergy + 0.18);
+                commandEnergy = Math.min(100, commandEnergy + ENERGY_REGEN_RATE);
                 spawnTadpole();
 
                 // 1. Update Units
@@ -186,14 +208,8 @@
                     let u = units[i];
                     if (u.fireCooldown > 0) u.fireCooldown--;
 
-                    let target = null;
-                    let closestDist = u.range;
-
-                    // Find closest tadpole
-                    for (let t of tadpoles) {
-                        let dist = Math.hypot(u.x - t.x, u.y - t.y);
-                        if (dist < closestDist) { closestDist = dist; target = t; }
-                    }
+                    // Find closest tadpole in range
+                    let target = findClosestTarget(u.x, u.y, tadpoles, u.range);
 
                     // Check Nest if no tadpole in range
                     if (!target && (tadpoleNest.x - u.x) < u.range) {
@@ -238,18 +254,20 @@
                     } else {
                         for (let j = tadpoles.length - 1; j >= 0; j--) {
                             let t = tadpoles[j];
-                            if (Math.hypot(p.x - t.x, p.y - t.y) < t.radius + 3) {
+                            const dx = p.x - t.x, dy = p.y - t.y;
+                            const hitRadius = t.radius + 3;
+                            if (dx * dx + dy * dy < hitRadius * hitRadius) {
                                 t.hp -= p.damage;
                                 hit = true;
                                 if (p.isExplosive) createExplosion(p.x, p.y, '#ff4400', 1.5);
                                 else createExplosion(p.x, p.y, '#88ff88', 0.5);
-                                
+
                                 if (t.hp <= 0) {
                                     tadpoles.splice(j, 1);
-                                    score += 1000;
+                                    score += TADPOLE_KILL_SCORE;
                                     tadpolesDestroyedCounter++;
-                                    if (tadpolesDestroyedCounter >= 5) {
-                                        score += 10000000000000;
+                                    if (tadpolesDestroyedCounter >= MULTI_KILL_THRESHOLD) {
+                                        score += MULTI_KILL_BONUS;
                                         tadpolesDestroyedCounter = 0;
                                     }
                                 }
@@ -269,19 +287,21 @@
                     
                     // Swarm AI: Find closest unit within detection radius
                     let aggroUnit = null;
-                    let closestDist = 250; // Detection radius
+                    let closestDistSq = TADPOLE_DETECTION_RADIUS * TADPOLE_DETECTION_RADIUS;
                     let eatingUnit = null;
 
                     for (let u of units) {
-                        let dist = Math.hypot(u.x - t.x, u.y - t.y);
+                        const dx = u.x - t.x, dy = u.y - t.y;
+                        const distSq = dx * dx + dy * dy;
+                        const eatRange = t.radius + u.size + 2;
                         // Check collision
-                        if (dist < t.radius + u.size + 2) {
+                        if (distSq < eatRange * eatRange) {
                             eatingUnit = u;
                             break;
                         }
                         // Check sight
-                        if (dist < closestDist) {
-                            closestDist = dist;
+                        if (distSq < closestDistSq) {
+                            closestDistSq = distSq;
                             aggroUnit = u;
                         }
                     }
@@ -363,7 +383,7 @@
 
                 // Deploy Line Marker
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-                ctx.beginPath(); ctx.moveTo(canvas.width - 300, 0); ctx.lineTo(canvas.width - 300, canvas.height); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(canvas.width - DEPLOY_LINE_OFFSET, 0); ctx.lineTo(canvas.width - DEPLOY_LINE_OFFSET, canvas.height); ctx.stroke();
 
                 // Draw Mutant Nest (Right Side Organic Structure)
                 ctx.fillStyle = '#0a2e15';
@@ -451,20 +471,25 @@
                     ctx.beginPath(); ctx.arc(t.x - 2.5, t.y - 2, 1, 0, Math.PI * 2); ctx.fill();
                 }
 
-                // Particles
+                // Particles (soft glow for a bit of extra juice)
+                ctx.shadowBlur = 6;
                 for (let p of particles) {
                     ctx.fillStyle = p.color;
-                    ctx.globalAlpha = p.life / 15;
+                    ctx.shadowColor = p.color;
+                    ctx.globalAlpha = p.life / PARTICLE_LIFETIME;
                     ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
                 }
+                ctx.shadowBlur = 0;
                 ctx.globalAlpha = 1.0;
 
                 // Crosshair
                 ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
+                ctx.shadowColor = '#00aaff'; ctx.shadowBlur = 6;
                 ctx.beginPath(); ctx.arc(crosshair.x, crosshair.y, crosshair.radius, 0, Math.PI * 2);
                 ctx.moveTo(crosshair.x - crosshair.radius - 4, crosshair.y); ctx.lineTo(crosshair.x + crosshair.radius + 4, crosshair.y);
                 ctx.moveTo(crosshair.x, crosshair.y - crosshair.radius - 4); ctx.lineTo(crosshair.x, crosshair.y + crosshair.radius + 4);
                 ctx.stroke();
+                ctx.shadowBlur = 0;
 
                 // UI
                 ctx.fillStyle = 'white';
@@ -477,7 +502,7 @@
                 // Command Energy
                 ctx.fillStyle = 'white'; ctx.font = '14px Arial'; ctx.fillText("Energy:", 80, 85);
                 ctx.strokeStyle = 'white'; ctx.strokeRect(140, 72, 150, 15);
-                ctx.fillStyle = commandEnergy >= 50 ? '#00aaff' : (commandEnergy >= 10 ? '#44ff44' : '#ff4444');
+                ctx.fillStyle = commandEnergy >= BUNKER_COST ? '#00aaff' : (commandEnergy >= SOLDIER_COST ? '#44ff44' : '#ff4444');
                 ctx.fillRect(142, 74, 146 * (commandEnergy/100), 11);
 
                 // Controls HUD
@@ -485,9 +510,9 @@
                 ctx.fillRect(80, 100, 240, 85);
                 ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Arial';
                 ctx.fillText("Deploy Units (Costs Energy):", 90, 115);
-                ctx.fillStyle = commandEnergy >= 10 ? '#00aaff' : '#555'; ctx.fillText(`[A] 3x Paratroopers (-10)`, 90, 135);
-                ctx.fillStyle = commandEnergy >= 30 ? '#44ff44' : '#555'; ctx.fillText(`[X] Tank Platoon (-30)`, 90, 155);
-                ctx.fillStyle = commandEnergy >= 50 ? '#ff4444' : '#555'; ctx.fillText(`[Y] Heavy Bunker (-50)`, 90, 175);
+                ctx.fillStyle = commandEnergy >= SOLDIER_COST ? '#00aaff' : '#555'; ctx.fillText(`[A] 3x Paratroopers (-${SOLDIER_COST})`, 90, 135);
+                ctx.fillStyle = commandEnergy >= TANK_COST ? '#44ff44' : '#555'; ctx.fillText(`[X] Tank Platoon (-${TANK_COST})`, 90, 155);
+                ctx.fillStyle = commandEnergy >= BUNKER_COST ? '#ff4444' : '#555'; ctx.fillText(`[Y] Heavy Bunker (-${BUNKER_COST})`, 90, 175);
             }
 
             if (!pad && gameState !== 'START') {
