@@ -14,6 +14,32 @@
             margin: 0; 
             padding: 40px 20px;
             min-height: 100vh;
+            position: relative;
+        }
+
+        /* Audio controls positioning */
+        #audioControls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #333;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+            z-index: 100;
+            outline: none;
+        }
+
+        #audioControls:hover, #audioControls:focus {
+            border-color: #107C10;
+            transform: scale(1.1);
         }
 
         h1 { 
@@ -29,7 +55,7 @@
             display: flex; 
             justify-content: center; 
             align-items: stretch;
-            gap: 20px; /* Reduced gap to fit more items */
+            gap: 20px; 
             flex-wrap: wrap; 
             max-width: 1400px;
             margin: 0 auto;
@@ -42,7 +68,7 @@
             cursor: pointer; 
             border: 2px solid #333; 
             transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            width: 170px; /* Shrunk from 260px */
+            width: 170px; 
             box-shadow: 0 8px 15px rgba(0,0,0,0.5);
             display: flex;
             flex-direction: column;
@@ -52,12 +78,12 @@
 
         /* Scaled down artwork area */
         .game-art {
-            height: 90px; /* Shrunk from 140px */
+            height: 90px; 
             background: linear-gradient(145deg, #107C10, #0a4f0a);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 2.2rem; /* Shrunk from 3rem */
+            font-size: 2.2rem; 
             opacity: 0.8;
             transition: opacity 0.3s;
         }
@@ -73,14 +99,14 @@
 
         .game-info h2 {
             margin: 0 0 6px 0;
-            font-size: 1.1rem; /* Shrunk from 1.5rem */
+            font-size: 1.1rem; 
             line-height: 1.2;
         }
 
         .game-info p {
             margin: 0;
             color: #aaaaaa;
-            font-size: 0.8rem; /* Shrunk from 0.95rem */
+            font-size: 0.8rem; 
         }
         
         /* Highlight effect */
@@ -145,6 +171,14 @@
     </style>
 </head>
 <body>
+    
+    <!-- Audio Elements -->
+    <audio id="bgMusic" src="bg-music.mp3" loop></audio>
+    <audio id="selectSound" src="select.mp3"></audio>
+
+    <!-- Mute/Unmute UI Button -->
+    <button id="audioControls" tabindex="0" onclick="toggleMute()" onkeypress="handleMuteKeyPress(event)" title="Toggle Audio">🔊</button>
+
     <h1>My Xbox Series X Arcade</h1>
     
     <div class="game-grid">
@@ -219,7 +253,52 @@
     </div>
 
     <script>
-        // Accessibility addition: Allow launching games by pressing 'Enter' or 'A' button (if mapped to Enter)
+        const bgMusic = document.getElementById('bgMusic');
+        const selectSound = document.getElementById('selectSound');
+        const audioBtn = document.getElementById('audioControls');
+        
+        let bgmStarted = false;
+        let isMuted = false;
+
+        // Keep BGM volume comfortable
+        bgMusic.volume = 0.4; 
+        selectSound.volume = 0.8;
+
+        // Start BGM on the very first user interaction anywhere on the page (browser policy requirement)
+        const startAudio = () => {
+            if (!bgmStarted && !isMuted) {
+                bgMusic.play().catch(() => { /* Handle strict autoplay policies gracefully */ });
+                bgmStarted = true;
+            }
+            // Remove listeners once audio has started
+            document.removeEventListener('click', startAudio);
+            document.removeEventListener('keydown', startAudio);
+        };
+
+        document.addEventListener('click', startAudio);
+        document.addEventListener('keydown', startAudio);
+
+        // Audio controls logic
+        function toggleMute() {
+            isMuted = !isMuted;
+            bgMusic.muted = isMuted;
+            selectSound.muted = isMuted;
+            audioBtn.innerText = isMuted ? '🔇' : '🔊';
+
+            if (!isMuted && !bgmStarted) {
+                bgMusic.play();
+                bgmStarted = true;
+            }
+        }
+
+        function handleMuteKeyPress(event) {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                toggleMute();
+            }
+        }
+
+        // Standard inputs
         function handleKeyPress(event, gameUrl) {
             if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
@@ -235,6 +314,12 @@
         }
 
         function launchGame(gameUrl) {
+            // Play select sound effect
+            if (!isMuted) {
+                selectSound.currentTime = 0; // Reset sound to beginning if clicked quickly
+                selectSound.play().catch(() => {});
+            }
+
             const frame = document.getElementById('gameFrame');
             const container = document.getElementById('gameContainer');
             

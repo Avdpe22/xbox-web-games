@@ -22,7 +22,7 @@
         let level = 1;
 
         // Game Variables
-        let nestMaxHealth = 10000; // Lower starting health for faster Level 1
+        let nestMaxHealth = 10000; 
         let nestHealth = nestMaxHealth;
         let playerHealth = 100;
         let commandEnergy = 100;
@@ -40,6 +40,93 @@
 
         let buttonState = { A: false, X: false, Y: false };
 
+        // --- WEB AUDIO API (SYNTHESIZER) ---
+        let audioCtx;
+        let lastHitSoundTime = 0;
+
+        function initAudio() {
+            if (audioCtx) return;
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+            startSynthwaveTrack();
+        }
+
+        function playDeploySound() {
+            if (!audioCtx) return;
+            let now = audioCtx.currentTime;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.exponentialRampToValueAtTime(600, now + 0.15);
+            
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.linearRampToValueAtTime(0, now + 0.15);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.15);
+        }
+
+        function playHitSound() {
+            if (!audioCtx) return;
+            let now = audioCtx.currentTime;
+            // Throttle hit sounds so it doesn't clip when 50 bullets hit at once
+            if (now - lastHitSoundTime < 0.08) return; 
+            lastHitSoundTime = now;
+
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+            
+            gain.gain.setValueAtTime(0.03, now); // Low volume
+            gain.gain.linearRampToValueAtTime(0, now + 0.1);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        }
+
+        function startSynthwaveTrack() {
+            // Retro synthwave bassline sequence (C minor pentatonic vibe)
+            const bassNotes = [65.41, 65.41, 130.81, 98.00, 65.41, 155.56, 130.81, 98.00];
+            let step = 0;
+
+            setInterval(() => {
+                if (gameState !== 'PLAYING') return; // Only play during action
+
+                let now = audioCtx.currentTime;
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                let filter = audioCtx.createBiquadFilter();
+
+                osc.type = 'sawtooth';
+                osc.frequency.value = bassNotes[step % bassNotes.length];
+                
+                // Plucky retro synth filter sweep
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(600, now);
+                filter.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+
+                gain.gain.setValueAtTime(0.06, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.15);
+                step++;
+            }, 180); // BPM pacing
+        }
+
         function getGamepad() {
             const gamepads = navigator.getGamepads();
             for (let i = 0; i < gamepads.length; i++) {
@@ -55,7 +142,7 @@
                 nestMaxHealth = 10000;
             } else {
                 level++;
-                nestMaxHealth += 3000; // Gentler scaling
+                nestMaxHealth += 3000; 
             }
             
             nestHealth = nestMaxHealth;
@@ -76,7 +163,7 @@
                 type: 'soldier', x: x, y: y, hp: 12, maxHp: 12, speed: 0.8, 
                 range: 250, prefDist: 200 + Math.random() * 80,
                 damage: 6, fireRate: 20, fireCooldown: 0, color: '#4CAF50', size: 5,
-                animTimer: 0 // Used for walking animation
+                animTimer: 0 
             });
         }
 
@@ -110,16 +197,12 @@
                 };
 
                 if (level >= 4 && typeRand < 0.10) {
-                    // Goliath Frog
                     enemy.type = 'frog'; enemy.hp = 250; enemy.radius = 18; enemy.speed = 0; enemy.maxSpeed = 6;
                 } else if (level >= 3 && typeRand < 0.35) {
-                    // Froglet / Legs
                     enemy.type = 'froglet'; enemy.hp = 25; enemy.radius = 7; enemy.speed = 2.8; 
                 } else if (level >= 2 && typeRand < 0.60) {
-                    // Shielded Tadpole (Nerfed HP)
                     enemy.type = 'shielded'; enemy.hp = 45; enemy.radius = 6; enemy.speed = 1.2;
                 } else {
-                    // Basic Tadpole
                     enemy.type = 'basic'; enemy.hp = 15; enemy.radius = 6; enemy.speed = 1.0 + Math.random();
                 }
 
@@ -147,6 +230,9 @@
             
             if (pad) {
                 if (pad.buttons[0].pressed && !buttonState.A) {
+                    // Initialize audio engine on first start
+                    initAudio(); 
+
                     if (gameState === 'START' || gameState === 'GAME_OVER') resetGame(true);
                     else if (gameState === 'LEVEL_CLEAR') resetGame(false);
                     buttonState.A = true;
@@ -169,6 +255,7 @@
                             spawnSoldier(crosshair.x, crosshair.y - 15);
                             spawnSoldier(crosshair.x - 12, crosshair.y + 12);
                             spawnSoldier(crosshair.x + 12, crosshair.y + 12);
+                            playDeploySound();
                         }
                         buttonState.A_Attack = true;
                     } else if (!pad.buttons[0].pressed) buttonState.A_Attack = false;
@@ -179,6 +266,7 @@
                             commandEnergy -= 45;
                             spawnTank(crosshair.x, crosshair.y);
                             for(let i=0; i<4; i++) spawnSoldier(crosshair.x - 25 - (Math.random()*15), crosshair.y - 25 + (i*18));
+                            playDeploySound();
                         }
                         buttonState.X = true;
                     } else if (!pad.buttons[2].pressed) buttonState.X = false;
@@ -188,6 +276,7 @@
                         if (commandEnergy >= 70) {
                             commandEnergy -= 70;
                             spawnBunker(crosshair.x, crosshair.y);
+                            playDeploySound();
                         }
                         buttonState.Y = true;
                     } else if (!pad.buttons[3].pressed) buttonState.Y = false;
@@ -196,7 +285,7 @@
 
             // --- UPDATE LOGIC ---
             if (gameState === 'PLAYING') {
-                commandEnergy = Math.min(100, commandEnergy + 0.22); // Faster recharge
+                commandEnergy = Math.min(100, commandEnergy + 0.22); 
                 spawnEnemy();
 
                 // 1. Update Units
@@ -221,7 +310,6 @@
                             let targetY = target === tadpoleNest ? u.y + (Math.random()*20-10) : target.y;
                             let angle = Math.atan2(targetY - u.y, (target === tadpoleNest ? tadpoleNest.x : target.x) - u.x);
                             
-                            // Much faster projectiles for tracers
                             projectiles.push({
                                 x: u.x + (u.type === 'tank' ? u.size : 5), y: u.y,
                                 vx: Math.cos(angle) * 20, vy: Math.sin(angle) * 20,
@@ -234,11 +322,10 @@
                         isMoving = true;
                     }
 
-                    // Animate legs/treads if moving
                     if (isMoving) {
                         u.animTimer += (u.type === 'soldier' ? 0.4 : 0.2);
                     } else {
-                        u.animTimer = 0; // Stand still
+                        u.animTimer = 0; 
                     }
 
                     if (u.hp <= 0) {
@@ -256,6 +343,7 @@
                     if (p.x > tadpoleNest.x) {
                         nestHealth -= p.damage;
                         createExplosion(p.x, p.y, '#88ffaa', 1.0);
+                        playHitSound();
                         hit = true;
                     } else {
                         for (let j = enemies.length - 1; j >= 0; j--) {
@@ -266,6 +354,8 @@
                                 if (p.isExplosive) createExplosion(p.x, p.y, '#ff4400', 1.5);
                                 else createExplosion(p.x, p.y, e.type === 'shielded' && e.hp > 0 ? '#00ffff' : '#88ff88', 0.5);
                                 
+                                playHitSound();
+
                                 if (e.hp <= 0) {
                                     score += (e.type === 'frog' ? 5000 : (e.type === 'shielded' ? 2000 : 1000));
                                     enemies.splice(j, 1);
@@ -366,13 +456,10 @@
                 drawTextCentered("Press [A] to Proceed to Next Level", 100, 20, "#00aaff");
             }
             else if (gameState === 'PLAYING') {
-
                 // Draw Player Base
                 ctx.fillStyle = '#223'; ctx.fillRect(playerBase.x, playerBase.y, playerBase.width, playerBase.height);
                 ctx.fillStyle = '#445'; for(let i=0; i<canvas.height; i+=40) ctx.fillRect(playerBase.width - 10, i, 10, 20); 
-                
-                ctx.fillStyle = `rgba(255, 0, 0, ${1 - (playerHealth/100)})`;
-                ctx.fillRect(playerBase.width, 0, 20, canvas.height);
+                ctx.fillStyle = `rgba(255, 0, 0, ${1 - (playerHealth/100)})`; ctx.fillRect(playerBase.width, 0, 20, canvas.height);
 
                 // Deploy Line
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
@@ -392,87 +479,50 @@
                 ctx.fillStyle = 'white'; ctx.font = 'bold 12px Arial';
                 ctx.fillText(`Nest Integrity: ${Math.floor((nestHealth/nestMaxHealth)*100)}%`, tadpoleNest.x + 30, 70);
 
-                // Draw Units (High Res Sprites)
+                // Draw Units 
                 for (let u of units) {
                     if(u.type === 'soldier') {
                         let legOffset = Math.sin(u.animTimer) * 4;
-                        
-                        // Swinging Legs
                         ctx.fillStyle = '#1b5e20';
-                        ctx.beginPath(); ctx.ellipse(u.x - 1 + legOffset, u.y - 4, 3, 2, 0, 0, Math.PI*2); ctx.fill(); // Top foot
-                        ctx.beginPath(); ctx.ellipse(u.x - 1 - legOffset, u.y + 4, 3, 2, 0, 0, Math.PI*2); ctx.fill(); // Bottom foot
-                        
-                        // Torso / Shoulders
+                        ctx.beginPath(); ctx.ellipse(u.x - 1 + legOffset, u.y - 4, 3, 2, 0, 0, Math.PI*2); ctx.fill(); 
+                        ctx.beginPath(); ctx.ellipse(u.x - 1 - legOffset, u.y + 4, 3, 2, 0, 0, Math.PI*2); ctx.fill(); 
                         ctx.fillStyle = u.color;
                         ctx.beginPath(); ctx.ellipse(u.x, u.y, 4, 6, 0, 0, Math.PI*2); ctx.fill();
-                        
-                        // Gun
-                        ctx.fillStyle = '#111';
-                        ctx.fillRect(u.x, u.y - 1, 12, 2); 
-                        
-                        // Helmet
-                        ctx.fillStyle = '#2e7d32'; 
-                        ctx.beginPath(); ctx.arc(u.x, u.y, 4, 0, Math.PI*2); ctx.fill();
-
-                        // Muzzle Flash
+                        ctx.fillStyle = '#111'; ctx.fillRect(u.x, u.y - 1, 12, 2); 
+                        ctx.fillStyle = '#2e7d32'; ctx.beginPath(); ctx.arc(u.x, u.y, 4, 0, Math.PI*2); ctx.fill();
                         if (u.fireCooldown > u.fireRate - 3) {
-                            ctx.fillStyle = '#ffcc00';
-                            ctx.beginPath(); ctx.arc(u.x + 13, u.y, 3, 0, Math.PI*2); ctx.fill();
+                            ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(u.x + 13, u.y, 3, 0, Math.PI*2); ctx.fill();
                         }
-
                     } else if (u.type === 'tank') {
-                        let treadOffset = (u.animTimer * 5) % 8; // Treads animation trick
-                        
-                        // Treads
+                        let treadOffset = (u.animTimer * 5) % 8; 
                         ctx.fillStyle = '#111'; ctx.fillRect(u.x - u.size - 2, u.y - u.size, u.size*2 + 4, u.size*2);
-                        // Tread details
                         ctx.fillStyle = '#333';
-                        for(let t = 0; t < u.size*2; t+=4) {
-                            ctx.fillRect(u.x - u.size + t - treadOffset, u.y - u.size, 2, u.size*2);
-                        }
-
-                        // Hull
+                        for(let t = 0; t < u.size*2; t+=4) ctx.fillRect(u.x - u.size + t - treadOffset, u.y - u.size, 2, u.size*2);
                         ctx.fillStyle = u.color; ctx.fillRect(u.x - u.size, u.y - u.size + 2, u.size*2, u.size*2 - 4);
-                        // Turret
                         ctx.fillStyle = '#1b5e20'; ctx.beginPath(); ctx.arc(u.x, u.y, u.size-3, 0, Math.PI*2); ctx.fill();
-                        // Barrel
                         ctx.fillStyle = '#111'; ctx.fillRect(u.x, u.y - 1.5, u.size + 12, 4);
-
-                        // Tank Muzzle Flash
                         if (u.fireCooldown > u.fireRate - 4) {
-                            ctx.fillStyle = '#ff6600';
-                            ctx.beginPath(); ctx.arc(u.x + u.size + 14, u.y, 6, 0, Math.PI*2); ctx.fill();
+                            ctx.fillStyle = '#ff6600'; ctx.beginPath(); ctx.arc(u.x + u.size + 14, u.y, 6, 0, Math.PI*2); ctx.fill();
                         }
-
                     } else if (u.type === 'bunker') {
                         ctx.fillStyle = '#757575';
                         ctx.beginPath(); ctx.arc(u.x, u.y, u.size, Math.PI/2, Math.PI*1.5, true); ctx.fill();
                         ctx.fillRect(u.x, u.y - u.size, u.size+5, u.size*2);
                         ctx.fillStyle = '#111'; ctx.fillRect(u.x+5, u.y-2, 10, 4); 
-
-                        // Bunker Muzzle Flash
                         if (u.fireCooldown > u.fireRate - 2) {
-                            ctx.fillStyle = '#ffcc00';
-                            ctx.beginPath(); ctx.arc(u.x + 16, u.y, 4, 0, Math.PI*2); ctx.fill();
+                            ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(u.x + 16, u.y, 4, 0, Math.PI*2); ctx.fill();
                         }
                     }
-
-                    // HP Bars
                     if(u.hp < u.maxHp) {
                         ctx.fillStyle = 'red'; ctx.fillRect(u.x - u.size, u.y - u.size - 6, u.size*2, 2);
                         ctx.fillStyle = 'green'; ctx.fillRect(u.x - u.size, u.y - u.size - 6, (u.size*2) * (u.hp/u.maxHp), 2);
                     }
                 }
 
-                // Draw Projectiles (Tracers)
+                // Draw Projectiles
                 for (let p of projectiles) {
-                    ctx.strokeStyle = p.isExplosive ? '#ffaa00' : '#ffff55';
-                    ctx.lineWidth = p.isExplosive ? 3 : 1.5;
-                    ctx.beginPath(); 
-                    ctx.moveTo(p.x, p.y);
-                    // Draw line opposite of velocity to create a motion blur tail
-                    ctx.lineTo(p.x - p.vx * 0.7, p.y - p.vy * 0.7);
-                    ctx.stroke();
+                    ctx.strokeStyle = p.isExplosive ? '#ffaa00' : '#ffff55'; ctx.lineWidth = p.isExplosive ? 3 : 1.5;
+                    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.7, p.y - p.vy * 0.7); ctx.stroke();
                 }
 
                 // Draw Enemies
@@ -482,7 +532,6 @@
                         ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 4, 0, Math.PI*2); ctx.fill();
                         ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 1; ctx.stroke();
                     }
-
                     if (e.type === 'froglet' || e.type === 'frog') {
                         ctx.strokeStyle = '#007733'; ctx.lineWidth = e.type === 'frog' ? 4 : 2;
                         let legExt = e.type === 'frog' && e.jumpTimer > 90 ? 15 : 5; 
@@ -494,18 +543,13 @@
                         ctx.strokeStyle = '#00aa55'; ctx.lineWidth = 2;
                         ctx.beginPath(); ctx.moveTo(e.x, e.y);
                         ctx.lineTo(e.x + e.radius + 4, e.y + Math.sin(e.wobble) * 4);
-                        ctx.lineTo(e.x + e.radius + 8, e.y + Math.sin(e.wobble - 1) * 6);
-                        ctx.stroke();
+                        ctx.lineTo(e.x + e.radius + 8, e.y + Math.sin(e.wobble - 1) * 6); ctx.stroke();
                     }
-
                     ctx.fillStyle = e.type === 'frog' ? '#006622' : '#00ff88';
                     ctx.beginPath(); ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2); ctx.fill();
-                    
                     let eyeOffset = e.type === 'frog' ? 4 : 2;
-                    ctx.fillStyle = 'white';
-                    ctx.beginPath(); ctx.arc(e.x - eyeOffset, e.y - eyeOffset, eyeOffset, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = 'red';
-                    ctx.beginPath(); ctx.arc(e.x - (eyeOffset+0.5), e.y - eyeOffset, eyeOffset/2, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(e.x - eyeOffset, e.y - eyeOffset, eyeOffset, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(e.x - (eyeOffset+0.5), e.y - eyeOffset, eyeOffset/2, 0, Math.PI * 2); ctx.fill();
                 }
 
                 // Particles
@@ -523,12 +567,9 @@
                 ctx.stroke();
 
                 // UI
-                ctx.fillStyle = 'white';
-                ctx.font = 'bold 20px Arial';
+                ctx.fillStyle = 'white'; ctx.font = 'bold 20px Arial';
                 ctx.fillText(`Level ${level} | Score: ${score.toLocaleString()}`, 80, 30);
-                
-                ctx.fillStyle = playerHealth > 30 ? '#44ff44' : '#ff4444';
-                ctx.fillText(`Base HP: ${playerHealth}%`, 80, 55);
+                ctx.fillStyle = playerHealth > 30 ? '#44ff44' : '#ff4444'; ctx.fillText(`Base HP: ${playerHealth}%`, 80, 55);
 
                 // Command Energy
                 ctx.fillStyle = 'white'; ctx.font = '14px Arial'; ctx.fillText("Energy:", 80, 85);
