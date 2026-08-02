@@ -6,8 +6,38 @@
     <title>Pictionary - TV Display</title>
     <style>
         body { margin: 0; padding: 0; background: #f0f0f0; font-family: sans-serif; overflow: hidden; }
-        #ui-bar { background: #333; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
-        #room-code { font-size: 2em; font-weight: bold; color: #ffeb3b; letter-spacing: 2px; }
+        
+        #ui-bar { 
+            background: #333; 
+            color: white; 
+            padding: 15px 30px; 
+            display: flex; 
+            align-items: center;
+            position: relative; /* Allows us to absolutely position the center element */
+            height: 60px; /* Gives the bar a fixed height to contain the large text */
+        }
+        
+        .url-info {
+            font-size: 1.2em;
+            z-index: 1; /* Ensures it stays visible */
+        }
+
+        .room-code-container {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%); /* Pulls it back exactly halfway to perfectly center it */
+            font-size: 1.5em;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        #room-code { 
+            font-size: 1.5em; 
+            font-weight: bold; 
+            color: #ffeb3b; 
+            letter-spacing: 2px; 
+        }
+        
         /* Force the canvas to be a specific 16:9 ratio for the TV */
         #tvCanvas { background: white; box-shadow: 0 0 10px rgba(0,0,0,0.2); display: block; margin: 20px auto; }
     </style>
@@ -15,8 +45,8 @@
 </head>
 <body>
     <div id="ui-bar">
-        <div>Go to: <strong>https://avdpe22.github.io/xbox-web-games/pictionary/controller.html</strong></div>
-        <div>Room Code: <span id="room-code">GENERATING...</span></div>
+        <div class="url-info">Go to: <strong>https://avdpe22.github.io/xbox-web-games/pictionary/controller.html</strong></div>
+        <div class="room-code-container">Room Code: <span id="room-code">GENERATING...</span></div>
     </div>
     
     <!-- 1920x1080 resolution for high quality TV rendering -->
