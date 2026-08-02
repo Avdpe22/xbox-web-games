@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Controller</title>
+    <style>
+        /* Prevents pull-to-refresh and zooming on mobile */
+        body { margin: 0; padding: 0; font-family: sans-serif; background: #222; overflow: hidden; touch-action: none; }
+        
+        #login-screen { padding: 50px 20px; text-align: center; color: white; }
+        input { font-size: 2em; width: 60%; text-align: center; text-transform: uppercase; margin-bottom: 20px; }
+        button { font-size: 1.5em; padding: 10px 30px; background: #007bff; color: white; border: none; border-radius: 5px; }
+        
+        #drawing-screen { display: none; display: flex; flex-direction: column; height: 100vh; }
+        
+        #toolbar { background: #333; padding: 10px; display: flex; justify-content: space-around; align-items: center; }
+        .color-btn { width: 40px; height: 40px; border-radius: 50%; border: 3px solid #555; }
+        .color-btn.active { border-color: white; }
+        #btn-clear { background: #dc3545; font-size: 1em; padding: 10px 15px; }
+
+        /* The phone canvas expands to fill the remaining screen space */
+        #phoneCanvas { flex-grow: 1; background: white; touch-action: none; width: 100%; }
+    </style>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+    <!-- Connection Screen -->
+    <div id="login-screen">
+        <h2>Enter Room Code</h2>
+        <input type="text" id="room-code-input" maxlength="4">
+        <br>
+        <button onclick="joinGame()">Connect</button>
+    </div>
+
+    <!-- Drawing Screen -->
+    <div id="drawing-screen" style="display: none;">
+        <div id="toolbar">
+            <div class="color-btn active" style="background: black;" onclick="setColor('black', this)"></div>
+            <div class="color-btn" style="background: red;" onclick="setColor('red', this)"></div>
+            <div class="color-btn" style="background: blue;" onclick="setColor('blue', this)"></div>
+            <div class="color-btn" style="background: green;" onclick="setColor('green', this)"></div>
+            <button id="btn-clear" onclick="clearCanvas()">Clear TV</button>
+        </div>
+        <canvas id="phoneCanvas"></canvas>
+    </div>
+
+    <script src="phone.js"></script>
+</body>
+</html>

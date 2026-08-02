@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pictionary - TV Display</title>
+    <style>
+        body { margin: 0; padding: 0; background: #f0f0f0; font-family: sans-serif; overflow: hidden; }
+        #ui-bar { background: #333; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        #room-code { font-size: 2em; font-weight: bold; color: #ffeb3b; letter-spacing: 2px; }
+        /* Force the canvas to be a specific 16:9 ratio for the TV */
+        #tvCanvas { background: white; box-shadow: 0 0 10px rgba(0,0,0,0.2); display: block; margin: 20px auto; }
+    </style>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <div id="ui-bar">
+        <div>Go to: <strong>yoursite.com/pictionary/controller.html</strong></div>
+        <div>Room Code: <span id="room-code">GENERATING...</span></div>
+    </div>
+    
+    <!-- 1920x1080 resolution for high quality TV rendering -->
+    <canvas id="tvCanvas" width="1920" height="1080" style="width: 90vw; max-width: 1920px; aspect-ratio: 16/9;"></canvas>
+
+    <script src="host.js"></script>
+</body>
+</html>
