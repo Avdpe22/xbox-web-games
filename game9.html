@@ -54,8 +54,8 @@ let frames = 0;
 // Inputs
 const keys = {};
 let prevKeys = {};
-let gamepadState = { a: false, x: false, y: false, start: false, lb: false, rb: false };
-let prevGamepadState = { a: false, x: false, y: false, start: false, lb: false, rb: false };
+let buttonState = { y: false, lb: false, rb: false, start: false };
+const GAMEPAD_DEADZONE = 0.4;
 
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
@@ -142,38 +142,41 @@ function initGame() {
 }
 
 // --- INPUT & UPDATE ---
-function getGamepadInput() {
+function getGamepad() {
     const gamepads = navigator.getGamepads();
-    if (gamepads && gamepads[0]) {
-        const gp = gamepads[0];
-        gamepadState.a = gp.buttons[0].pressed;
-        gamepadState.x = gp.buttons[2].pressed;
-        gamepadState.y = gp.buttons[3].pressed;
-        gamepadState.lb = gp.buttons[4].pressed;
-        gamepadState.rb = gp.buttons[5].pressed;
-        gamepadState.start = gp.buttons[9].pressed;
-        return gp;
+    for (let i = 0; i < gamepads.length; i++) {
+        if (gamepads[i] && gamepads[i].mapping === 'standard') return gamepads[i];
     }
     return null;
 }
 
+// Returns true on the frame a button transitions from released to pressed.
+function wasJustPressed(pad, buttonIndex, stateKey) {
+    const isPressed = pad.buttons[buttonIndex].pressed;
+    const justPressed = isPressed && !buttonState[stateKey];
+    buttonState[stateKey] = isPressed;
+    return justPressed;
+}
+
 function updateInput() {
-    const gp = getGamepadInput();
-    
+    const gp = getGamepad();
+
     let moveLeft = keys['ArrowLeft'] || keys['KeyA'];
     let moveRight = keys['ArrowRight'] || keys['KeyD'];
     let jump = keys['ArrowUp'] || keys['KeyW'] || keys['Space'];
     let build = keys['KeyB'] || keys['KeyX'];
     let interact = isPressed('KeyE') || isPressed('KeyY');
-    let prevPower = isPressed('KeyQ') || (gamepadState.lb && !prevGamepadState.lb);
-    let nextPower = isPressed('KeyE') || (gamepadState.rb && !prevGamepadState.rb);
+    let prevPower = isPressed('KeyQ');
+    let nextPower = isPressed('KeyE');
 
     if (gp) {
-        if (gp.axes[0] < -0.4 || gp.buttons[14].pressed) moveLeft = true;
-        if (gp.axes[0] > 0.4 || gp.buttons[15].pressed) moveRight = true;
-        if (gamepadState.a) jump = true;
-        if (gamepadState.x) build = true;
-        if (gamepadState.y && !prevGamepadState.y) interact = true;
+        if (gp.axes[0] < -GAMEPAD_DEADZONE || gp.buttons[14].pressed) moveLeft = true;
+        if (gp.axes[0] > GAMEPAD_DEADZONE || gp.buttons[15].pressed) moveRight = true;
+        if (gp.buttons[0].pressed) jump = true;
+        if (gp.buttons[2].pressed) build = true;
+        if (wasJustPressed(gp, 3, 'y')) interact = true;
+        if (wasJustPressed(gp, 4, 'lb')) prevPower = true;
+        if (wasJustPressed(gp, 5, 'rb')) nextPower = true;
     }
 
     if (dialog.active) {
@@ -796,9 +799,10 @@ function gameLoop() {
     
     // Save previous inputs for edge detection
     Object.assign(prevKeys, keys);
-    Object.assign(prevGamepadState, gamepadState);
 
-    let startPressed = isPressed('Enter') || (getGamepadInput() && gamepadState.start && !prevGamepadState.start);
+    let startPressed = isPressed('Enter');
+    const startGp = getGamepad();
+    if (startGp && wasJustPressed(startGp, 9, 'start')) startPressed = true;
 
     if (gameState === 'start' || gameState === 'won' || gameState === 'lost') {
         if (startPressed) {

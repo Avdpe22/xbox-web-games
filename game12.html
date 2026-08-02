@@ -217,15 +217,25 @@ window.addEventListener('keyup', (e) => {
     if (e.key === 't') keys.x = false; if (e.key === 'Enter') keys.y = false;
 });
 
+const GAMEPAD_DEADZONE = 0.5;
+
+function getGamepad() {
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    for (let i = 0; i < gamepads.length; i++) {
+        if (gamepads[i] && gamepads[i].mapping === 'standard') return gamepads[i];
+    }
+    return null;
+}
+
 function pollInput() {
-    const pad = navigator.getGamepads ? navigator.getGamepads()[0] : null;
+    const pad = getGamepad();
     let up=keys.up, down=keys.down, left=keys.left, right=keys.right, a=keys.a, b=keys.b, x=keys.x, y=keys.y;
 
     if (pad) {
-        if (pad.buttons[12]?.pressed || pad.axes[1] < -0.5) up = true;
-        if (pad.buttons[13]?.pressed || pad.axes[1] > 0.5) down = true;
-        if (pad.buttons[14]?.pressed || pad.axes[0] < -0.5) left = true;
-        if (pad.buttons[15]?.pressed || pad.axes[0] > 0.5) right = true;
+        if (pad.buttons[12]?.pressed || pad.axes[1] < -GAMEPAD_DEADZONE) up = true;
+        if (pad.buttons[13]?.pressed || pad.axes[1] > GAMEPAD_DEADZONE) down = true;
+        if (pad.buttons[14]?.pressed || pad.axes[0] < -GAMEPAD_DEADZONE) left = true;
+        if (pad.buttons[15]?.pressed || pad.axes[0] > GAMEPAD_DEADZONE) right = true;
         if (pad.buttons[0]?.pressed) a = true; // A 
         if (pad.buttons[1]?.pressed) b = true; // B 
         if (pad.buttons[2]?.pressed) x = true; // X (Trade)

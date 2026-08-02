@@ -92,22 +92,31 @@
             if(e.code === 'Space') keys.Space = false;
         });
 
+        const GAMEPAD_DEADZONE = 0.2;
+
+        // HTML5 Gamepad API (Xbox Controller Support)
+        function getGamepad() {
+            const gamepads = navigator.getGamepads();
+            for (let i = 0; i < gamepads.length; i++) {
+                if (gamepads[i] && gamepads[i].mapping === 'standard') return gamepads[i];
+            }
+            return null;
+        }
+
         function update() {
             if (gameState === 'gameover') return;
 
-            // HTML5 Gamepad API (Xbox Controller Support)
-            const gamepads = navigator.getGamepads();
-            const gp = gamepads[0]; // Player 1
-            
+            const gp = getGamepad();
+
             let moveLeft = keys.ArrowLeft;
             let moveRight = keys.ArrowRight;
             let drop = keys.Space;
 
             if (gp) {
                 // Left Stick or D-Pad Left
-                if (gp.axes[0] < -0.2 || gp.buttons[14]?.pressed) moveLeft = true;
+                if (gp.axes[0] < -GAMEPAD_DEADZONE || gp.buttons[14]?.pressed) moveLeft = true;
                 // Left Stick or D-Pad Right
-                if (gp.axes[0] > 0.2 || gp.buttons[15]?.pressed) moveRight = true;
+                if (gp.axes[0] > GAMEPAD_DEADZONE || gp.buttons[15]?.pressed) moveRight = true;
                 // A Button (Button 0)
                 if (gp.buttons[0]?.pressed) drop = true;
             }
