@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Xbox Claw Machine</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a2e;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; /* Prevents Xbox browser scrolling */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            background-color: #16213e;
+            border: 4px solid #0f3460;
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+            max-width: 100%;
+            max-height: 100%;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            text-align: center;
+            color: #e94560;
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas" width="1280" height="720"></canvas>
+    <div id="instructions">Xbox: Left Stick/D-Pad to Move | 'A' Button to Drop<br>PC: Arrows to Move | Spacebar to Drop</div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game State
+        let attempts = 3;
+        let prizesWon = 0;
+        let gameState = 'playing'; // 'playing' or 'gameover'
+        let dropButtonLocked = false; 
+
+        // Claw Object
+        const claw = {
+            x: canvas.width / 2,
+            y: 80,
+            width: 60,
+            speed: 8,
+            dropSpeed: 12,
+            state: 'idle', // idle, dropping, retracting
+            grabbedPrize: null
+        };
+
+        // Plush Toys Setup
+        const plushies = [];
+        const colors = ['#e94560', '#0f3460', '#f9a826', '#4caf50', '#9c27b0'];
+        
+        function initPlushies() {
+            for(let i = 0; i < 15; i++) {
+                plushies.push({
+                    x: 150 + Math.random() * (canvas.width - 300),
+                    y: canvas.height - 80 - Math.random() * 60,
+                    radius: 35,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    active: true,
+                    isCat: Math.random() > 0.5
+                });
+            }
+        }
+        initPlushies();
+
+        // Keyboard Input (Fallback for PC testing)
+        const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
+        window.addEventListener('keydown', (e) => {
+            if(e.code === 'ArrowLeft') keys.ArrowLeft = true;
+            if(e.code === 'ArrowRight') keys.ArrowRight = true;
+            if(e.code === 'Space') keys.Space = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            if(e.code === 'ArrowLeft') keys.ArrowLeft = false;
+            if(e.code === 'ArrowRight') keys.ArrowRight = false;
+            if(e.code === 'Space') keys.Space = false;
+        });
+
+        function update() {
+            if (gameState === 'gameover') return;
+
+            // HTML5 Gamepad API (Xbox Controller Support)
+            const gamepads = navigator.getGamepads();
+            const gp = gamepads[0]; // Player 1
+            
+            let moveLeft = keys.ArrowLeft;
+            let moveRight = keys.ArrowRight;
+            let drop = keys.Space;
+
+            if (gp) {
+                // Left Stick or D-Pad Left
+                if (gp.axes[0] < -0.2 || gp.buttons[14]?.pressed) moveLeft = true;
+                // Left Stick or D-Pad Right
+                if (gp.axes[0] > 0.2 || gp.buttons[15]?.pressed) moveRight = true;
+                // A Button (Button 0)
+                if (gp.buttons[0]?.pressed) drop = true;
+            }
+
+            // Logic Tree
+            if (claw.state === 'idle') {
+                if (moveLeft) claw.x -= claw.speed;
+                if (moveRight) claw.x += claw.speed;
+                
+                // Keep claw on screen
+                claw.x = Math.max(80, Math.min(canvas.width - 80, claw.x));
+
+                // Initiate Drop
+                if (drop && attempts > 0 && !dropButtonLocked) {
+                    claw.state = 'dropping';
+                    attempts--;
+                    dropButtonLocked = true; // Prevent holding the button down
+                }
+                if (!drop) {
+                    dropButtonLocked = false;
+                }
+            } 
+            else if (claw.state === 'dropping') {
+                claw.y += claw.dropSpeed;
+                
+                // Hit the floor
+                if (claw.y > canvas.height - 120) {
+                    claw.state = 'retracting';
+                    
+                    // Collision detection with plushies
+                    for (let p of plushies) {
+                        if (p.active) {
+                            let dist = Math.abs(p.x - claw.x);
+                            // If claw is perfectly centered over a plushie
+                            if (dist < 40) {
+                                claw.grabbedPrize = p;
+                                break;
+                            }
+                        }
+                    }
+                }
+            } 
+            else if (claw.state === 'retracting') {
+                claw.y -= claw.dropSpeed;
+                
+                // Carry the plushie up
+                if (claw.grabbedPrize) {
+                    claw.grabbedPrize.x = claw.x;
+                    claw.grabbedPrize.y = claw.y + 60;
+                }
+
+                // Hit the ceiling
+                if (claw.y <= 80) {
+                    claw.y = 80;
+                    claw.state = 'idle';
+                    
+                    if (claw.grabbedPrize) {
+                        claw.grabbedPrize.active = false; // Remove from pool
+                        prizesWon++;
+                        claw.grabbedPrize = null;
+                    }
+
+                    if (attempts <= 0) {
+                        gameState = 'gameover';
+                    }
+                }
+            }
+        }
+
+        function drawPlushie(p) {
+            if (!p.active && claw.grabbedPrize !== p) return;
+            
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw Ears (to look like a plush toy)
+            ctx.beginPath();
+            if (p.isCat) {
+                // Pointy cat ears
+                ctx.moveTo(p.x - 20, p.y - 20);
+                ctx.lineTo(p.x - 30, p.y - 45);
+                ctx.lineTo(p.x - 5, p.y - 30);
+                
+                ctx.moveTo(p.x + 20, p.y - 20);
+                ctx.lineTo(p.x + 30, p.y - 45);
+                ctx.lineTo(p.x + 5, p.y - 30);
+            } else {
+                // Round bear ears
+                ctx.arc(p.x - 20, p.y - 25, 15, 0, Math.PI * 2);
+                ctx.arc(p.x + 20, p.y - 25, 15, 0, Math.PI * 2);
+            }
+            ctx.fill();
+            
+            // Eyes
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.arc(p.x - 12, p.y - 5, 6, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(p.x + 12, p.y - 5, 6, 0, Math.PI*2); ctx.fill();
+            
+            ctx.fillStyle = 'black';
+            ctx.beginPath(); ctx.arc(p.x - 12, p.y - 5, 3, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(p.x + 12, p.y - 5, 3, 0, Math.PI*2); ctx.fill();
+        }
+
+        function draw() {
+            // Clear Canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Floor
+            ctx.fillStyle = '#0f3460';
+            ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+
+            // Draw Plushies
+            plushies.forEach(drawPlushie);
+
+            // Draw Claw Cable
+            ctx.strokeStyle = '#aaaaaa';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(claw.x, 0);
+            ctx.lineTo(claw.x, claw.y);
+            ctx.stroke();
+
+            // Draw Claw Mechanism
+            ctx.fillStyle = '#silver';
+            ctx.fillRect(claw.x - 20, claw.y, 40, 20);
+            
+            // Draw Prongs
+            ctx.strokeStyle = '#e94560';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            
+            // Left prong
+            ctx.moveTo(claw.x - 20, claw.y + 20);
+            let prongOffset = (claw.state === 'dropping' || claw.state === 'idle') ? 35 : 15;
+            ctx.lineTo(claw.x - prongOffset, claw.y + 60);
+            
+            // Right prong
+            ctx.moveTo(claw.x + 20, claw.y + 20);
+            ctx.lineTo(claw.x + prongOffset, claw.y + 60);
+            ctx.stroke();
+
+            // HUD
+            ctx.fillStyle = 'white';
+            ctx.font = '30px "Segoe UI"';
+            ctx.fillText(`Chances Left: ${attempts}`, 30, 50);
+            ctx.fillText(`Prizes Won: ${prizesWon}`, canvas.width - 250, 50);
+
+            if (gameState === 'gameover') {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#e94560';
+                ctx.font = '80px "Segoe UI"';
+                ctx.textAlign = 'center';
+                ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 40);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = '40px "Segoe UI"';
+                ctx.fillText(`You won ${prizesWon} plushies!`, canvas.width / 2, canvas.height / 2 + 30);
+                ctx.fillText("Refresh the browser to play again.", canvas.width / 2, canvas.height / 2 + 100);
+            }
+        }
+
+        // Game Loop
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // Start Game
+        loop();
+    </script>
+</body>
+</html>

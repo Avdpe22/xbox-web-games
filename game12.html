@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hex & Hearth: Open Realm</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        canvas { display: block; }
+        
+        /* UI Overlays */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; padding: 20px; box-sizing: border-box; display: flex; justify-content: space-between; z-index: 10; }
+        .player-card { background: rgba(0, 0, 0, 0.8); border: 2px solid #444; padding: 15px; border-radius: 8px; width: 220px; transition: border-color 0.3s; }
+        .active-player { border-color: #00ffcc; box-shadow: 0 0 15px rgba(0, 255, 204, 0.3); }
+        .resources { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .res-badge { background: #333; padding: 4px 8px; border-radius: 4px; font-size: 14px; min-width: 60px; }
+        
+        #center-display { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(0,0,0,0.8); padding: 10px 30px; border-radius: 8px; border: 1px solid #555; z-index: 10;}
+        #dice-result { font-size: 2rem; font-weight: bold; color: #ffeb3b; }
+        
+        /* Modals */
+        .modal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center;}
+        .modal h1 { font-size: 2.5rem; color: #ffeb3b; margin-bottom: 10px; }
+        #hold-progress { width: 300px; height: 20px; background: #333; border-radius: 10px; overflow: hidden; margin-top: 20px; border: 2px solid #555; }
+        #hold-bar { height: 100%; width: 0%; background: #00ffcc; }
+        
+        /* Trade UI */
+        .trade-box { display: flex; gap: 40px; margin-top: 20px; }
+        .trade-col { background: #222; padding: 20px; border-radius: 8px; width: 200px; border: 2px solid #444;}
+        .trade-item { display: flex; justify-content: space-between; margin: 10px 0; font-size: 1.2rem; }
+        .active-trade-col { border-color: #00ffcc; }
+        
+        #action-prompt { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; font-size: 1.2rem; pointer-events: none; z-index: 10;}
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div class="player-card active-player" id="p1-card">
+            <h3 style="margin:0; color:#ff4444;">Player 1</h3>
+            <div class="resources" id="p1-res"></div>
+        </div>
+        <div id="center-display">
+            <div>Last Roll</div>
+            <div id="dice-result">-</div>
+            <div id="game-phase" style="color:#00ffcc; margin-top:5px;">Phase: ROLLING</div>
+        </div>
+        <div class="player-card" id="p2-card">
+            <h3 style="margin:0; color:#4444ff;">Player 2</h3>
+            <div class="resources" id="p2-res"></div>
+        </div>
+    </div>
+
+    <div id="action-prompt">Hold A/Space to Roll Dice</div>
+
+    <!-- Pass Controller Modal -->
+    <div id="pass-overlay" class="modal">
+        <h1 id="pass-title">Pass Controller</h1>
+        <p id="pass-desc">Hold 'A' (or Spacebar) to confirm you have the controller.</p>
+        <div id="hold-progress"><div id="hold-bar"></div></div>
+    </div>
+
+    <!-- Trade Menu Modal -->
+    <div id="trade-overlay" class="modal">
+        <h1>Propose Trade</h1>
+        <p>Use Up/Down to change amounts, Left/Right to switch Give/Want.</p>
+        <div class="trade-box">
+            <div class="trade-col active-trade-col" id="trade-give">
+                <h3>You Give</h3>
+                <div class="trade-item">Wood: <span id="tg-wood">0</span></div>
+                <div class="trade-item">Brick: <span id="tg-brick">0</span></div>
+                <div class="trade-item">Wheat: <span id="tg-wheat">0</span></div>
+            </div>
+            <div class="trade-col" id="trade-want">
+                <h3>You Want</h3>
+                <div class="trade-item">Wood: <span id="tw-wood">0</span></div>
+                <div class="trade-item">Brick: <span id="tw-brick">0</span></div>
+                <div class="trade-item">Wheat: <span id="tw-wheat">0</span></div>
+            </div>
+        </div>
+        <p style="margin-top: 20px; color: #888;">Press A/Space to Send Offer, B/Shift to Cancel</p>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+/**
+ * HEX & HEARTH - Version 0.2 (Intersections, Dice, Trade)
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const state = {
+    mode: 'ROLLING', // ROLLING, PLAYING, TRADING, TRADE_REVIEW, PASSING
+    currentPlayer: 1,
+    holdTimer: 0, holdRequired: 60,
+    players: [
+        { id: 1, color: '#ff4444', res: { wood: 2, brick: 2, wheat: 0 } },
+        { id: 2, color: '#4444ff', res: { wood: 0, brick: 1, wheat: 3 } }
+    ],
+    tradeState: { activeColumn: 'give', give: {wood:0, brick:0, wheat:0}, want: {wood:0, brick:0, wheat:0} }
+};
+
+// Grid Config
+const hexSize = 50;
+const gridRadius = 2;
+const grid = [];
+const vertices = []; // Intersections
+
+let cursorIndex = 0; // Index of the currently selected vertex
+let inputCooldown = 0;
+
+// Resize
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+// --- 1. HEX & INTERSECTION MATH ---
+const resources = ['Wood', 'Brick', 'Wheat'];
+const numbers = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12];
+
+function createGrid() {
+    let numIdx = 0;
+    // Generate Hexes
+    for (let q = -gridRadius; q <= gridRadius; q++) {
+        let r1 = Math.max(-gridRadius, -q - gridRadius);
+        let r2 = Math.min(gridRadius, -q + gridRadius);
+        for (let r = r1; r <= r2; r++) {
+            grid.push({ 
+                q, r, 
+                res: resources[Math.floor(Math.random() * resources.length)],
+                num: numbers[numIdx % numbers.length]
+            });
+            numIdx++;
+        }
+    }
+    
+    // Generate Unique Vertices (Intersections)
+    grid.forEach(hex => {
+        const center = axialToPixel(hex.q, hex.r);
+        for (let i = 0; i < 6; i++) {
+            const angle_rad = Math.PI / 180 * (60 * i - 30);
+            const vx = center.x + hexSize * Math.cos(angle_rad);
+            const vy = center.y + hexSize * Math.sin(angle_rad);
+            
+            // Check if vertex already exists (within a 5px margin of error)
+            const exists = vertices.find(v => Math.hypot(v.x - vx, v.y - vy) < 5);
+            if (!exists) {
+                vertices.push({ x: vx, y: vy, owner: null, adjHexes: [] });
+            }
+            
+            // Link hex to vertex for resource generation
+            const vRef = vertices.find(v => Math.hypot(v.x - vx, v.y - vy) < 5);
+            if(!vRef.adjHexes.includes(hex)) vRef.adjHexes.push(hex);
+        }
+    });
+}
+createGrid();
+
+function axialToPixel(q, r) {
+    const x = hexSize * Math.sqrt(3) * (q + r/2);
+    const y = hexSize * 3/2 * r;
+    return { x: x + canvas.width/2, y: y + canvas.height/2 };
+}
+
+// --- 2. RESOURCE GENERATION ---
+function rollDice() {
+    const d1 = Math.floor(Math.random() * 6) + 1;
+    const d2 = Math.floor(Math.random() * 6) + 1;
+    const total = d1 + d2;
+    document.getElementById('dice-result').innerText = total;
+    
+    // Distribute
+    vertices.forEach(v => {
+        if (v.owner !== null) {
+            v.adjHexes.forEach(hex => {
+                if (hex.num === total) {
+                    state.players[v.owner - 1].res[hex.res.toLowerCase()]++;
+                }
+            });
+        }
+    });
+    updateUI();
+}
+
+function updateUI() {
+    ['p1', 'p2'].forEach((p, idx) => {
+        const res = state.players[idx].res;
+        document.getElementById(`${p}-res`).innerHTML = `
+            <span class="res-badge">Wood: ${res.wood}</span>
+            <span class="res-badge">Brick: ${res.brick}</span>
+            <span class="res-badge">Wheat: ${res.wheat}</span>
+        `;
+        document.getElementById(`${p}-card`).className = `player-card ${state.currentPlayer === idx+1 ? 'active-player' : ''}`;
+    });
+    document.getElementById('game-phase').innerText = `Phase: ${state.mode}`;
+    
+    let prompt = "";
+    if(state.mode === 'ROLLING') prompt = "Hold A / Space to Roll Dice";
+    if(state.mode === 'PLAYING') prompt = "Move: D-Pad | Build Settlement: A | Trade: X | End Turn: Y";
+    document.getElementById('action-prompt').innerText = prompt;
+}
+updateUI();
+
+// --- 3. INPUT & STATE MACHINE ---
+const keys = { up: false, down: false, left: false, right: false, a: false, b: false, x: false, y: false };
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp') keys.up = true; if (e.key === 'ArrowDown') keys.down = true;
+    if (e.key === 'ArrowLeft') keys.left = true; if (e.key === 'ArrowRight') keys.right = true;
+    if (e.key === ' ') keys.a = true; if (e.key === 'Shift') keys.b = true;
+    if (e.key === 't') keys.x = true; if (e.key === 'Enter') keys.y = true;
+});
+window.addEventListener('keyup', (e) => {
+    if (e.key === 'ArrowUp') keys.up = false; if (e.key === 'ArrowDown') keys.down = false;
+    if (e.key === 'ArrowLeft') keys.left = false; if (e.key === 'ArrowRight') keys.right = false;
+    if (e.key === ' ') keys.a = false; if (e.key === 'Shift') keys.b = false;
+    if (e.key === 't') keys.x = false; if (e.key === 'Enter') keys.y = false;
+});
+
+function pollInput() {
+    const pad = navigator.getGamepads ? navigator.getGamepads()[0] : null;
+    let up=keys.up, down=keys.down, left=keys.left, right=keys.right, a=keys.a, b=keys.b, x=keys.x, y=keys.y;
+
+    if (pad) {
+        if (pad.buttons[12]?.pressed || pad.axes[1] < -0.5) up = true;
+        if (pad.buttons[13]?.pressed || pad.axes[1] > 0.5) down = true;
+        if (pad.buttons[14]?.pressed || pad.axes[0] < -0.5) left = true;
+        if (pad.buttons[15]?.pressed || pad.axes[0] > 0.5) right = true;
+        if (pad.buttons[0]?.pressed) a = true; // A 
+        if (pad.buttons[1]?.pressed) b = true; // B 
+        if (pad.buttons[2]?.pressed) x = true; // X (Trade)
+        if (pad.buttons[3]?.pressed) y = true; // Y (End Turn)
+    }
+
+    if (inputCooldown > 0) { inputCooldown--; return; }
+
+    // STATE: PASSING / ROLLING (Hold Action)
+    if (state.mode === 'PASSING' || state.mode === 'ROLLING') {
+        if (a) {
+            state.holdTimer++;
+            document.getElementById('hold-bar').style.width = (state.holdTimer / state.holdRequired * 100) + '%';
+            if (state.holdTimer >= state.holdRequired) {
+                state.holdTimer = 0; document.getElementById('hold-bar').style.width = '0%';
+                if (state.mode === 'PASSING') {
+                    state.mode = 'ROLLING';
+                    document.getElementById('pass-overlay').style.display = 'none';
+                    updateUI();
+                } else if (state.mode === 'ROLLING') {
+                    rollDice();
+                    state.mode = 'PLAYING';
+                    updateUI();
+                }
+                inputCooldown = 30;
+            }
+        } else { state.holdTimer = 0; document.getElementById('hold-bar').style.width = '0%'; }
+        return;
+    }
+
+    // STATE: PLAYING (Grid Navigation on Vertices)
+    if (state.mode === 'PLAYING') {
+        if (up || down || left || right) {
+            // Find nearest vertex in direction pressed
+            const cur = vertices[cursorIndex];
+            let bestDist = Infinity;
+            let bestIdx = cursorIndex;
+            
+            vertices.forEach((v, idx) => {
+                if(idx === cursorIndex) return;
+                const dx = v.x - cur.x; const dy = v.y - cur.y;
+                let valid = false;
+                if (up && dy < -10) valid = true;
+                if (down && dy > 10) valid = true;
+                if (left && dx < -10) valid = true;
+                if (right && dx > 10) valid = true;
+                
+                if (valid) {
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < bestDist) { bestDist = dist; bestIdx = idx; }
+                }
+            });
+            cursorIndex = bestIdx;
+            inputCooldown = 12;
+        }
+
+        // Build Settlement on Vertex
+        if (a) {
+            const v = vertices[cursorIndex];
+            if (!v.owner) {
+                v.owner = state.currentPlayer;
+                inputCooldown = 20;
+            }
+        }
+
+        // Open Trade Menu
+        if (x) {
+            state.mode = 'TRADING';
+            document.getElementById('trade-overlay').style.display = 'flex';
+            inputCooldown = 20; updateUI();
+        }
+
+        // End Turn
+        if (y) {
+            state.currentPlayer = state.currentPlayer === 1 ? 2 : 1;
+            state.mode = 'PASSING';
+            document.getElementById('pass-title').innerText = `Player ${state.currentPlayer}'s Turn`;
+            document.getElementById('pass-desc').innerText = `Pass controller. Hold 'A' to begin.`;
+            document.getElementById('pass-overlay').style.display = 'flex';
+            inputCooldown = 30; updateUI();
+        }
+    }
+
+    // STATE: TRADING
+    if (state.mode === 'TRADING') {
+        if (left || right) {
+            state.tradeState.activeColumn = state.tradeState.activeColumn === 'give' ? 'want' : 'give';
+            document.getElementById('trade-give').className = `trade-col ${state.tradeState.activeColumn === 'give' ? 'active-trade-col' : ''}`;
+            document.getElementById('trade-want').className = `trade-col ${state.tradeState.activeColumn === 'want' ? 'active-trade-col' : ''}`;
+            inputCooldown = 15;
+        }
+        
+        // In a full implementation, up/down would cycle through resources to adjust amounts. 
+        // For MVP, we will cancel trade with B.
+        if (b) {
+            state.mode = 'PLAYING';
+            document.getElementById('trade-overlay').style.display = 'none';
+            inputCooldown = 20; updateUI();
+        }
+    }
+}
+
+// --- 4. RENDER LOOP ---
+function update() {
+    pollInput();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Hexes
+    grid.forEach(hex => {
+        const { x, y } = axialToPixel(hex.q, hex.r);
+        
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle_rad = Math.PI / 180 * (60 * i - 30);
+            const hx = x + (hexSize - 2) * Math.cos(angle_rad);
+            const hy = y + (hexSize - 2) * Math.sin(angle_rad);
+            if (i === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+        ctx.fillStyle = '#3a3a3a'; ctx.fill();
+        ctx.lineWidth = 1; ctx.strokeStyle = '#222'; ctx.stroke();
+        
+        // Draw Hex Number & Resource
+        ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'center';
+        ctx.font = '14px sans-serif'; ctx.fillText(hex.num, x, y - 2);
+        ctx.font = '10px sans-serif'; ctx.fillText(hex.res, x, y + 12);
+    });
+
+    // Draw Intersections (Settlements & Cursor)
+    vertices.forEach((v, idx) => {
+        if (v.owner) {
+            ctx.beginPath();
+            ctx.arc(v.x, v.y, 10, 0, Math.PI * 2);
+            ctx.fillStyle = state.players[v.owner - 1].color;
+            ctx.fill();
+            ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+        }
+        // Cursor
+        if (idx === cursorIndex && state.mode === 'PLAYING') {
+            ctx.beginPath();
+            ctx.arc(v.x, v.y, 14, 0, Math.PI * 2);
+            ctx.strokeStyle = '#00ffcc';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+    });
+
+    requestAnimationFrame(update);
+}
+
+requestAnimationFrame(update);
+</script>
+</body>
+</html>
