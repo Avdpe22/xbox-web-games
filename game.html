@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tadpole Swarm: Versus Mode (Trigger Update)</title>
+    <title>Tadpole Swarm: Versus Mode (Ultimate Swarm Swap)</title>
     <style>
         body, html { margin: 0; padding: 0; overflow: hidden; background: #0a0a0f; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         canvas { display: block; }
@@ -40,7 +40,7 @@
         const projectiles = [];
         const particles = [];
 
-        // Player Tracking for Versus (Updated Button Tracking)
+        // Player Tracking for Versus
         const players = [
             { 
                 id: 0, // Defender (Human)
@@ -53,13 +53,6 @@
                 buttons: { A: false, LB: false, LT: false, RB: false, RT: false } 
             }
         ];
-
-        // Standard Gamepad Button Indices:
-        // 0: A (Used for Start/Rematch)
-        // 4: LB (Left Bumper)
-        // 5: RB (Right Bumper)
-        // 6: LT (Left Trigger)
-        // 7: RT (Right Trigger)
 
         // --- WEB AUDIO API (SYNTHESIZER) ---
         let audioCtx;
@@ -179,39 +172,43 @@
         // --- P1: HUMAN UNIT FACTORIES ---
         function spawnSoldier(x, y) {
             units.push({ 
-                type: 'soldier', x: x, y: y, hp: 12, maxHp: 12, speed: 0.8, 
+                type: 'soldier', x: x, y: y, hp: 10, maxHp: 10, speed: 0.8, 
                 range: 250, prefDist: 200 + Math.random() * 80,
-                damage: 6, fireRate: 20, fireCooldown: 0, color: '#4CAF50', size: 5, animTimer: 0 
+                damage: 4, fireRate: 15, fireCooldown: 0, color: '#4CAF50', size: 5, animTimer: 0 
             });
         }
 
         function spawnTank(x, y) {
             units.push({ 
-                type: 'tank', x: x, y: y, hp: 80, maxHp: 80, speed: 0.4, 
+                type: 'tank', x: x, y: y, hp: 100, maxHp: 100, speed: 0.4, 
                 range: 350, prefDist: 300 + Math.random() * 50,
-                damage: 30, fireRate: 50, fireCooldown: 0, color: '#2E7D32', size: 12, animTimer: 0
+                damage: 18, fireRate: 45, fireCooldown: 0, color: '#2E7D32', size: 12, animTimer: 0
             });
         }
 
         function spawnBunker(x, y) {
             units.push({ 
-                type: 'bunker', x: x, y: y, hp: 250, maxHp: 250, speed: 0, 
-                range: 300, prefDist: 0, damage: 10, fireRate: 8, fireCooldown: 0, color: '#757575', size: 16 
+                type: 'bunker', x: x, y: y, hp: 300, maxHp: 300, speed: 0, 
+                range: 300, prefDist: 0, damage: 8, fireRate: 6, fireCooldown: 0, color: '#757575', size: 16 
             });
         }
 
-        // --- P2: MUTANT SPAWNER ---
+        // --- P2: MUTANT SPAWNER (REBALANCED) ---
         function spawnSpecificEnemy(type, y) {
             let enemy = { x: tadpoleNest.x - 10, y: y, wobble: Math.random() * Math.PI * 2, attackCooldown: 0, jumpTimer: 0 };
             
             if (type === 'frog') {
+                // Nerfed from 400 to 200 HP (6.6 HP/Energy)
                 enemy.type = 'frog'; enemy.hp = 200; enemy.radius = 18; enemy.speed = 0; enemy.maxSpeed = 4.5;
             } else if (type === 'froglet') {
-                enemy.type = 'froglet'; enemy.hp = 18; enemy.radius = 7; enemy.speed = 2.5; 
+                // Nerfed from 50 to 20 HP 
+                enemy.type = 'froglet'; enemy.hp = 20; enemy.radius = 7; enemy.speed = 3.5; 
             } else if (type === 'shielded') {
-                enemy.type = 'shielded'; enemy.hp = 40; enemy.radius = 6; enemy.speed = 1.0;
+                // Nerfed from 100 to 60 HP (6.0 HP/Energy)
+                enemy.type = 'shielded'; enemy.hp = 60; enemy.radius = 6; enemy.speed = 1.0;
             } else {
-                enemy.type = 'basic'; enemy.hp = 10; enemy.radius = 6; enemy.speed = 0.8 + Math.random();
+                // Nerfed from 45 to 12 HP (6.0 HP/Energy)
+                enemy.type = 'basic'; enemy.hp = 12; enemy.radius = 6; enemy.speed = 0.8 + Math.random();
             }
             enemies.push(enemy);
         }
@@ -255,7 +252,6 @@
                     if (Math.abs(lx) > deadzone) player.crosshair.x += lx * player.crosshair.speed;
                     if (Math.abs(ly) > deadzone) player.crosshair.y += ly * player.crosshair.speed;
 
-                    // Keep crosshair on screen vertically
                     player.crosshair.y = Math.max(10, Math.min(canvas.height - 10, player.crosshair.y));
 
                     // --- PLAYER 1 (COMMAND) LOGIC ---
@@ -300,27 +296,43 @@
                     else if (index === 1) {
                         player.crosshair.x = Math.max(tadpoleNest.x - 100, Math.min(canvas.width - 10, player.crosshair.x));
 
-                        // [LB] Basic Tadpole (Cost 10)
+                        // [LB] Basic Tadpole x5 (Cost 10)
                         if (pad.buttons[4].pressed && !player.buttons.LB) {
-                            if (p2Energy >= 10) { p2Energy -= 10; spawnSpecificEnemy('basic', player.crosshair.y); playDeploySound(true); }
+                            if (p2Energy >= 10) { 
+                                p2Energy -= 10; 
+                                for(let i=0; i<5; i++) spawnSpecificEnemy('basic', player.crosshair.y + (Math.random()*60-30));
+                                playDeploySound(true); 
+                            }
                             player.buttons.LB = true;
                         } else if (!pad.buttons[4].pressed) player.buttons.LB = false;
 
-                        // [LT] Shielded Mutant (Cost 20)
+                        // [LT] Shielded Mutant x2 (Cost 20)
                         if (pad.buttons[6].pressed && !player.buttons.LT) {
-                            if (p2Energy >= 20) { p2Energy -= 20; spawnSpecificEnemy('shielded', player.crosshair.y); playDeploySound(true); }
+                            if (p2Energy >= 20) { 
+                                p2Energy -= 20; 
+                                for(let i=0; i<2; i++) spawnSpecificEnemy('shielded', player.crosshair.y + (Math.random()*60-30));
+                                playDeploySound(true); 
+                            }
                             player.buttons.LT = true;
                         } else if (!pad.buttons[6].pressed) player.buttons.LT = false;
 
-                        // [RB] Speed Froglet (Cost 30)
+                        // [RB] Giant Boss Frog x1 (Cost 30)
                         if (pad.buttons[5].pressed && !player.buttons.RB) {
-                            if (p2Energy >= 30) { p2Energy -= 30; spawnSpecificEnemy('froglet', player.crosshair.y); playDeploySound(true); }
+                            if (p2Energy >= 30) { 
+                                p2Energy -= 30; 
+                                spawnSpecificEnemy('frog', player.crosshair.y + (Math.random()*40-20));
+                                playDeploySound(true); 
+                            }
                             player.buttons.RB = true;
                         } else if (!pad.buttons[5].pressed) player.buttons.RB = false;
 
-                        // [RT] Giant Boss Frog (Cost 70)
+                        // [RT] Speed Froglet x5 (Cost Buffed from 90 to 40)
                         if (pad.buttons[7].pressed && !player.buttons.RT) {
-                            if (p2Energy >= 70) { p2Energy -= 70; spawnSpecificEnemy('frog', player.crosshair.y); playDeploySound(true); }
+                            if (p2Energy >= 40) { 
+                                p2Energy -= 40; 
+                                for(let i=0; i<5; i++) spawnSpecificEnemy('froglet', player.crosshair.y + (Math.random()*60-30));
+                                playDeploySound(true); 
+                            }
                             player.buttons.RT = true;
                         } else if (!pad.buttons[7].pressed) player.buttons.RT = false;
                     }
@@ -329,8 +341,7 @@
 
             // --- UPDATE LOGIC ---
             if (gameState === 'PLAYING') {
-                // NERF P1 Energy Gen, BUFF/Maintain P2 Energy Gen
-                p1Energy = Math.min(100, p1Energy + 0.18); 
+                p1Energy = Math.min(100, p1Energy + 0.22); 
                 p2Energy = Math.min(100, p2Energy + 0.22); 
 
                 // 1. Update Units (P1)
@@ -543,7 +554,7 @@
                 // Draw Enemies
                 for (let e of enemies) {
                     if (e.type === 'shielded') {
-                        ctx.fillStyle = `rgba(0, 255, 255, ${0.1 + (e.hp/40)*0.2})`;
+                        ctx.fillStyle = `rgba(0, 255, 255, ${0.1 + (e.hp/60)*0.2})`;
                         ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 4, 0, Math.PI*2); ctx.fill();
                         ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 1; ctx.stroke();
                     }
@@ -625,10 +636,10 @@
 
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(p2Offset, 100, 240, 105);
                 ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Arial'; ctx.fillText("Spawn Mutants:", p2Offset + 10, 115);
-                ctx.fillStyle = p2Energy >= 10 ? '#ff88aa' : '#555'; ctx.fillText(`[LB] Basic Tadpole (-10)`, p2Offset + 10, 135);
-                ctx.fillStyle = p2Energy >= 20 ? '#00ffff' : '#555'; ctx.fillText(`[LT] Shielded Mutant (-20)`, p2Offset + 10, 155);
-                ctx.fillStyle = p2Energy >= 30 ? '#44ff44' : '#555'; ctx.fillText(`[RB] Speed Froglet (-30)`, p2Offset + 10, 175);
-                ctx.fillStyle = p2Energy >= 70 ? '#ff4444' : '#555'; ctx.fillText(`[RT] Giant Boss Frog (-70)`, p2Offset + 10, 195);
+                ctx.fillStyle = p2Energy >= 10 ? '#ff88aa' : '#555'; ctx.fillText(`[LB] 5x Basic Tadpole (-10)`, p2Offset + 10, 135);
+                ctx.fillStyle = p2Energy >= 20 ? '#00ffff' : '#555'; ctx.fillText(`[LT] 2x Shielded Mutant (-20)`, p2Offset + 10, 155);
+                ctx.fillStyle = p2Energy >= 30 ? '#44ff44' : '#555'; ctx.fillText(`[RB] Giant Boss Frog (-30)`, p2Offset + 10, 175);
+                ctx.fillStyle = p2Energy >= 40 ? '#ff4444' : '#555'; ctx.fillText(`[RT] 5x Speed Froglet (-40)`, p2Offset + 10, 195);
             }
 
             if (pads.length < 2 && gameState !== 'START') {

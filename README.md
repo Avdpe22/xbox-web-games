@@ -14,15 +14,12 @@ A small static web project that mimics an Xbox-style game hub. It hosts a dashbo
 | --- | --- | --- |
 | [game.html](game.html) | Test Template | Canvas + Gamepad API movement demo |
 | [game2.html](game2.html) | Space Shooter | Fly & shoot |
-| [game3.html](game3.html) | Base Assault | Destroy tadpoles |
+| [game3.html](game3.html) | Tadpole Command | Mode-select hub: Continuous (endless), Arcade (single base), and Vs (2-player) |
 | [game4.html](game4.html) | Toy Soldiers | Protect the base |
 | [game5.html](game5.html) | Toy Soldiers Classic | Protect the base |
-| [game6.html](game6.html) | Tadpole Attack v2A | Spawn army troops |
-| [game7.html](game7.html) | Tadpole Swarm | Spawn army troops |
 | [game8.html](game8.html) | Honey Rush | Extract the honey |
 | [game9.html](game9.html) | Blocky Builder | Build bots, fight skeletons |
 | [game10.html](game10.html) | The Claw | Win the prize |
-| [game11.html](game11.html) | Tadpole vs Army | Two player versus mode |
 | [game12.html](game12.html) | Hex & Hearth | Pass-and-play hex strategy |
 | [pictionary/game13.html](pictionary/game13.html) | Pictionary | Phone-controlled drawing game |
 
@@ -34,7 +31,7 @@ New games are registered as a `.game-card` block in [index.html](index.html); th
 - Responsive game card grid on the hub, keyboard-accessible (Enter/Space launches a card)
 - Fullscreen game overlay with an Exit button
 - Controller support via the browser Gamepad API (left stick movement, face buttons)
-- A dozen canvas-based games covering shooters, tower-defense/base-assault, builders, a claw machine, and a hex strategy game
+- Nine canvas-based games covering shooters, tower-defense/base-assault, builders, a claw machine, and a hex strategy game
 - A separate phone-as-controller drawing game (Pictionary) using PeerJS for peer-to-peer connections between a TV host and phone clients
 
 ## How to Run
