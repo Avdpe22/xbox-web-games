@@ -312,25 +312,25 @@
                             player.buttons.LT = true;
                         } else if (!pad.buttons[6].pressed) player.buttons.LT = false;
 
-                        // [RB] Speed Froglet x5 (Cost 90) - SWAPPED
-                        if (pad.buttons[5].pressed && !player.buttons.RT) {
-                            if (p2Energy >= 90) { 
-                                p2Energy -= 90; 
-                                for(let i=0; i<5; i++) spawnSpecificEnemy('froglet', player.crosshair.y + (Math.random()*60-30));
-                                playDeploySound(true); 
-                            }
-                            player.buttons.RT = true;
-                        } else if (!pad.buttons[5].pressed) player.buttons.RT = false;
-
-                        // [RT] Giant Boss Frog x1 (Cost 30) - SWAPPED
-                        if (pad.buttons[7].pressed && !player.buttons.RB) {
+                        // [RB] Giant Boss Frog x1 (Cost 30)
+                        if (pad.buttons[5].pressed && !player.buttons.RB) {
                             if (p2Energy >= 30) { 
                                 p2Energy -= 30; 
                                 spawnSpecificEnemy('frog', player.crosshair.y + (Math.random()*40-20));
                                 playDeploySound(true); 
                             }
                             player.buttons.RB = true;
-                        } else if (!pad.buttons[7].pressed) player.buttons.RB = false;
+                        } else if (!pad.buttons[5].pressed) player.buttons.RB = false;
+
+                        // [RT] Speed Froglet x5 (Cost 90)
+                        if (pad.buttons[7].pressed && !player.buttons.RT) {
+                            if (p2Energy >= 90) { 
+                                p2Energy -= 90; 
+                                for(let i=0; i<5; i++) spawnSpecificEnemy('froglet', player.crosshair.y + (Math.random()*60-30));
+                                playDeploySound(true); 
+                            }
+                            player.buttons.RT = true;
+                        } else if (!pad.buttons[7].pressed) player.buttons.RT = false;
                     }
                 }
             });
@@ -634,8 +634,8 @@
                 ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Arial'; ctx.fillText("Spawn Mutants:", p2Offset + 10, 115);
                 ctx.fillStyle = p2Energy >= 10 ? '#ff88aa' : '#555'; ctx.fillText(`[LB] 5x Basic Tadpole (-10)`, p2Offset + 10, 135);
                 ctx.fillStyle = p2Energy >= 20 ? '#00ffff' : '#555'; ctx.fillText(`[LT] 2x Shielded Mutant (-20)`, p2Offset + 10, 155);
-                ctx.fillStyle = p2Energy >= 90 ? '#44ff44' : '#555'; ctx.fillText(`[RB] Giant Boss Frog (-30)`, p2Offset + 10, 175);
-                ctx.fillStyle = p2Energy >= 30 ? '#ff4444' : '#555'; ctx.fillText(`[RT] 1x 5x Speed Froglet (-90)`, p2Offset + 10, 195);
+                ctx.fillStyle = p2Energy >= 30 ? '#44ff44' : '#555'; ctx.fillText(`[RB] Giant Boss Frog (-30)`, p2Offset + 10, 175);
+                ctx.fillStyle = p2Energy >= 90 ? '#ff4444' : '#555'; ctx.fillText(`[RT] 5x Speed Froglet (-90)`, p2Offset + 10, 195);
             }
 
             if (pads.length < 2 && gameState !== 'START') {
