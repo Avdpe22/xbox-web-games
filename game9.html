@@ -87,14 +87,17 @@ function initGame() {
         {x: 800, y: 500, w: 200, h: 20, type: 'platform'},
         {x: 1200, y: 650, w: 150, h: 20, type: 'platform'},
         
-        // Ice Zone
-        {x: 1800, y: 400, w: 300, h: 20, type: 'platform'},
-        {x: 2200, y: 250, w: 200, h: 20, type: 'platform'},
-        
-        // Earth Zone
-        {x: 3000, y: 600, w: 400, h: 20, type: 'platform'},
-        {x: 3500, y: 450, w: 200, h: 20, type: 'platform'},
-        {x: 3800, y: 300, w: 150, h: 20, type: 'platform'},
+        // Ice Zone (each step is a ~150px rise, matching max jump height)
+        {x: 1820, y: 650, w: 150, h: 20, type: 'platform'},
+        {x: 2150, y: 500, w: 150, h: 20, type: 'platform'},
+        {x: 2470, y: 350, w: 300, h: 20, type: 'platform'},
+        {x: 2950, y: 200, w: 200, h: 20, type: 'platform'},
+
+        // Earth Zone (each step is a ~150px rise, matching max jump height)
+        {x: 3020, y: 650, w: 150, h: 20, type: 'platform'},
+        {x: 3350, y: 500, w: 400, h: 20, type: 'platform'},
+        {x: 3920, y: 350, w: 200, h: 20, type: 'platform'},
+        {x: 4300, y: 200, w: 150, h: 20, type: 'platform'},
         
         // Gates (Require powers to pass)
         {x: 1600, y: groundY - 200, w: 40, h: 200, type: 'gate', weakness: 1, hp: 100, color: '#0055ff'}, // Ice gate needs Fire
@@ -123,7 +126,7 @@ function initGame() {
             unlock: 1, talked: false
         },
         { 
-            x: 2300, y: 190, w: 30, h: 60, name: "Deep Miner", color: '#885522',
+            x: 3020, y: 140, w: 30, h: 60, name: "Deep Miner", color: '#885522',
             messages: [
                 "Brrr... thanks for clearing out those ice monsters.",
                 "I dug up something interesting in the caves.",
