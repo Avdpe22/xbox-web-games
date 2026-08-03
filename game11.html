@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tadpole Swarm: Versus Mode (TTK & Economy Update)</title>
+    <title>Tadpole Swarm: Versus Mode (Speed & Damage Rebalance)</title>
     <style>
         body, html { margin: 0; padding: 0; overflow: hidden; background: #0a0a0f; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         canvas { display: block; }
@@ -172,9 +172,10 @@
         // --- P1: HUMAN UNIT FACTORIES ---
         function spawnSoldier(x, y) {
             units.push({ 
-                type: 'soldier', x: x, y: y, hp: 15, maxHp: 15, speed: 0.8, 
+                // NERF: HP reduced to 10, Damage reduced to 4
+                type: 'soldier', x: x, y: y, hp: 10, maxHp: 10, speed: 0.8, 
                 range: 250, prefDist: 200 + Math.random() * 80,
-                damage: 5, fireRate: 15, fireCooldown: 0, color: '#4CAF50', size: 5, animTimer: 0 
+                damage: 4, fireRate: 15, fireCooldown: 0, color: '#4CAF50', size: 5, animTimer: 0 
             });
         }
 
@@ -200,7 +201,8 @@
             if (type === 'frog') {
                 enemy.type = 'frog'; enemy.hp = 400; enemy.radius = 18; enemy.speed = 0; enemy.maxSpeed = 4.5;
             } else if (type === 'froglet') {
-                enemy.type = 'froglet'; enemy.hp = 50; enemy.radius = 7; enemy.speed = 2.5; 
+                // BUFF: Speed increased to 3.5 to cross the gap before taking lethal fire
+                enemy.type = 'froglet'; enemy.hp = 50; enemy.radius = 7; enemy.speed = 3.5; 
             } else if (type === 'shielded') {
                 enemy.type = 'shielded'; enemy.hp = 100; enemy.radius = 6; enemy.speed = 1.0;
             } else {
@@ -337,7 +339,6 @@
 
             // --- UPDATE LOGIC ---
             if (gameState === 'PLAYING') {
-                // Equality: Both sides regenerate energy at the exact same pace.
                 p1Energy = Math.min(100, p1Energy + 0.22); 
                 p2Energy = Math.min(100, p2Energy + 0.22); 
 
