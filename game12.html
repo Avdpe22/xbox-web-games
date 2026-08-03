@@ -164,6 +164,94 @@ function shuffle(arr) {
     return arr;
 }
 
+// --- TILE TEXTURES ---
+// Each resource gets a small procedurally-drawn swatch resembling its material
+// (grain, brick courses, wheat sheaves, wool clumps, rock cracks, sand ripples),
+// tiled into a repeating canvas pattern so hexes read as material, not flat color.
+function buildTileTexture(res) {
+    const size = 64;
+    const t = document.createElement('canvas');
+    t.width = size; t.height = size;
+    const tctx = t.getContext('2d');
+    tctx.fillStyle = HEX_COLORS[res];
+    tctx.fillRect(0, 0, size, size);
+
+    if (res === 'wood') {
+        for (let i = 0; i < 16; i++) {
+            const x = Math.random() * size;
+            tctx.strokeStyle = `rgba(15,45,15,${0.15 + Math.random() * 0.25})`;
+            tctx.lineWidth = 1 + Math.random() * 2;
+            tctx.beginPath();
+            tctx.moveTo(x, 0);
+            tctx.bezierCurveTo(x + (Math.random() * 8 - 4), size * 0.33, x + (Math.random() * 8 - 4), size * 0.66, x + (Math.random() * 8 - 4), size);
+            tctx.stroke();
+        }
+    } else if (res === 'brick') {
+        tctx.strokeStyle = 'rgba(50,25,8,0.55)';
+        tctx.lineWidth = 2;
+        const rowH = size / 4;
+        for (let row = 0; row < 4; row++) {
+            const y = row * rowH;
+            tctx.beginPath(); tctx.moveTo(0, y); tctx.lineTo(size, y); tctx.stroke();
+            const offset = (row % 2 === 0) ? 0 : size / 4;
+            for (let x = offset; x <= size; x += size / 2) {
+                tctx.beginPath(); tctx.moveTo(x, y); tctx.lineTo(x, y + rowH); tctx.stroke();
+            }
+        }
+    } else if (res === 'wheat') {
+        tctx.strokeStyle = 'rgba(110,75,10,0.55)';
+        tctx.lineWidth = 1.5;
+        for (let i = 0; i < 12; i++) {
+            const x = Math.random() * size, y = Math.random() * size + 6;
+            tctx.beginPath();
+            tctx.moveTo(x, y); tctx.lineTo(x - 4, y - 9);
+            tctx.moveTo(x, y); tctx.lineTo(x, y - 11);
+            tctx.moveTo(x, y); tctx.lineTo(x + 4, y - 9);
+            tctx.stroke();
+        }
+    } else if (res === 'sheep') {
+        for (let i = 0; i < 20; i++) {
+            const x = Math.random() * size, y = Math.random() * size, r = 3 + Math.random() * 4;
+            tctx.fillStyle = `rgba(255,255,255,${0.15 + Math.random() * 0.2})`;
+            tctx.beginPath(); tctx.arc(x, y, r, 0, Math.PI * 2); tctx.fill();
+        }
+    } else if (res === 'ore') {
+        tctx.strokeStyle = 'rgba(25,25,25,0.5)';
+        for (let i = 0; i < 9; i++) {
+            let x = Math.random() * size, y = Math.random() * size;
+            tctx.lineWidth = 1 + Math.random();
+            tctx.beginPath(); tctx.moveTo(x, y);
+            for (let j = 0; j < 3; j++) { x += Math.random() * 14 - 7; y += Math.random() * 14 - 7; tctx.lineTo(x, y); }
+            tctx.stroke();
+        }
+        for (let i = 0; i < 12; i++) {
+            tctx.fillStyle = 'rgba(220,220,220,0.18)';
+            tctx.beginPath(); tctx.arc(Math.random() * size, Math.random() * size, 1 + Math.random() * 1.5, 0, Math.PI * 2); tctx.fill();
+        }
+    } else if (res === 'desert') {
+        tctx.strokeStyle = 'rgba(150,120,65,0.45)';
+        for (let i = 0; i < 6; i++) {
+            const y = Math.random() * size;
+            tctx.lineWidth = 1 + Math.random() * 2;
+            tctx.beginPath(); tctx.moveTo(0, y);
+            tctx.quadraticCurveTo(size / 2, y + 8, size, y - 4);
+            tctx.stroke();
+        }
+        for (let i = 0; i < 24; i++) {
+            tctx.fillStyle = 'rgba(110,85,35,0.3)';
+            tctx.beginPath(); tctx.arc(Math.random() * size, Math.random() * size, 0.8, 0, Math.PI * 2); tctx.fill();
+        }
+    }
+    return t;
+}
+
+let HEX_PATTERNS = null;
+function buildHexPatterns() {
+    HEX_PATTERNS = {};
+    Object.keys(HEX_COLORS).forEach(res => { HEX_PATTERNS[res] = ctx.createPattern(buildTileTexture(res), 'repeat'); });
+}
+buildHexPatterns();
+
 // --- 1. BOARD GENERATION (board-space coords; screen offset applied only at render time) ---
 function axialToBoard(q, r) {
     const x = hexSize * Math.sqrt(3) * (q + r / 2);
@@ -293,6 +381,22 @@ function checkWin() {
 
 function getCurrentPlayer() { return state.players.find(p => p.id === state.currentPlayer); }
 
+// Snap the vertex cursor onto a legal spot for the given player. The cursor position carries
+// over between turns, and after a pass it often sits on (or right next to) the previous
+// player's just-placed settlement, which is illegal under the distance rule - without this,
+// that first A press for the new player does nothing and looks like the game has frozen.
+function snapVertexCursorToValid(playerId, isSetup) {
+    if (canPlaceSettlement(vertexCursorIndex, playerId, isSetup)) return;
+    const cur = vertices[vertexCursorIndex];
+    let bestIdx = -1, bestDist = Infinity;
+    vertices.forEach((v, idx) => {
+        if (!canPlaceSettlement(idx, playerId, isSetup)) return;
+        const dist = Math.hypot(v.x - cur.x, v.y - cur.y);
+        if (dist < bestDist) { bestDist = dist; bestIdx = idx; }
+    });
+    if (bestIdx !== -1) vertexCursorIndex = bestIdx;
+}
+
 function cycleBuildMode(mode, dir) {
     const order = ['road', 'settlement', 'city'];
     return order[(order.indexOf(mode) + dir + 3) % 3];
@@ -362,15 +466,18 @@ function advanceSetupTurn() {
         showPassOverlay();
     } else {
         state.mode = 'SETUP_PLACE_SETTLEMENT';
+        snapVertexCursorToValid(state.currentPlayer, true);
     }
     updateUI();
 }
 
 // --- 5. UI RENDERING (DOM) ---
+let messageActive = false;
 function showMessage(text, ms) {
     document.getElementById('action-prompt').innerText = text;
+    messageActive = true;
     if (messageTimeout) clearTimeout(messageTimeout);
-    messageTimeout = setTimeout(() => updateUI(), ms);
+    messageTimeout = setTimeout(() => { messageActive = false; updateUI(); }, ms);
 }
 
 function showPassOverlay() {
@@ -474,7 +581,7 @@ function updateUI() {
     document.getElementById('game-phase').innerText = `Phase: ${phaseLabel(state.mode)}`;
     document.getElementById('build-mode-line').innerText =
         (state.mode === 'PLAYING') ? `Build Mode: ${state.buildMode.toUpperCase()}` : '';
-    document.getElementById('action-prompt').innerText = promptForMode();
+    if (!messageActive) document.getElementById('action-prompt').innerText = promptForMode();
 }
 
 // --- 6. INPUT ---
@@ -614,6 +721,7 @@ function pollInput() {
                     state.mode = state.postPassMode;
                     document.getElementById('pass-overlay').style.display = 'none';
                     if (state.mode === 'ROLLING') showRollOverlay();
+                    if (state.mode === 'SETUP_PLACE_SETTLEMENT') snapVertexCursorToValid(state.currentPlayer, true);
                     updateUI();
                 } else {
                     document.getElementById('pass-overlay').style.display = 'none';
@@ -643,6 +751,9 @@ function pollInput() {
                 edgeCursorIndex = vertices[vertexCursorIndex].edges[0];
                 state.mode = 'SETUP_PLACE_ROAD';
                 inputCooldown = 20; updateUI();
+            } else {
+                showMessage("Can't place there - too close to another settlement", 1200);
+                inputCooldown = 15;
             }
         }
         return;
@@ -663,6 +774,9 @@ function pollInput() {
                 edges[edgeCursorIndex].owner = pid;
                 advanceSetupTurn();
                 inputCooldown = 20;
+            } else {
+                showMessage('That road is already taken - try D-Pad to cycle', 1200);
+                inputCooldown = 15;
             }
         }
         return;
@@ -709,12 +823,13 @@ function pollInput() {
             const pid = state.currentPlayer;
             const player = getCurrentPlayer();
             if (state.buildMode === 'road') {
-                if (canPlaceRoad(edgeCursorIndex, pid, null) && canAfford(player.res, COSTS.road)) {
-                    payCost(player.res, COSTS.road);
-                    edges[edgeCursorIndex].owner = pid;
-                }
+                if (!canPlaceRoad(edgeCursorIndex, pid, null)) showMessage("Can't build a road there - must connect to your network", 1200);
+                else if (!canAfford(player.res, COSTS.road)) showMessage('Not enough resources for a Road (1 Wood + 1 Brick)', 1200);
+                else { payCost(player.res, COSTS.road); edges[edgeCursorIndex].owner = pid; }
             } else if (state.buildMode === 'settlement') {
-                if (canPlaceSettlement(vertexCursorIndex, pid, false) && canAfford(player.res, COSTS.settlement)) {
+                if (!canPlaceSettlement(vertexCursorIndex, pid, false)) showMessage("Can't build there - too close to another settlement or not connected by road", 1200);
+                else if (!canAfford(player.res, COSTS.settlement)) showMessage('Not enough resources for a Settlement', 1200);
+                else {
                     payCost(player.res, COSTS.settlement);
                     vertices[vertexCursorIndex].owner = pid;
                     vertices[vertexCursorIndex].type = 'settlement';
@@ -722,7 +837,9 @@ function pollInput() {
                 }
             } else if (state.buildMode === 'city') {
                 const v = vertices[vertexCursorIndex];
-                if (v.owner === pid && v.type === 'settlement' && canAfford(player.res, COSTS.city)) {
+                if (v.owner !== pid || v.type !== 'settlement') showMessage('Select one of your own Settlements to upgrade', 1200);
+                else if (!canAfford(player.res, COSTS.city)) showMessage('Not enough resources for a City (2 Wheat + 3 Ore)', 1200);
+                else {
                     payCost(player.res, COSTS.city);
                     v.type = 'city';
                     recalcVP(); checkWin();
@@ -808,7 +925,7 @@ function update() {
                 if (i === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
             }
             ctx.closePath();
-            ctx.fillStyle = HEX_COLORS[hex.res] || '#3a3a3a'; ctx.fill();
+            ctx.fillStyle = HEX_PATTERNS[hex.res] || HEX_COLORS[hex.res] || '#3a3a3a'; ctx.fill();
             ctx.lineWidth = 1; ctx.strokeStyle = '#111'; ctx.stroke();
 
             if (hex.num != null) {
