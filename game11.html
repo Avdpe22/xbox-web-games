@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tadpole Swarm: Versus Mode (Economy Rebalance)</title>
+    <title>Tadpole Swarm: Versus Mode (TTK & Economy Update)</title>
     <style>
         body, html { margin: 0; padding: 0; overflow: hidden; background: #0a0a0f; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         canvas { display: block; }
@@ -174,7 +174,7 @@
             units.push({ 
                 type: 'soldier', x: x, y: y, hp: 15, maxHp: 15, speed: 0.8, 
                 range: 250, prefDist: 200 + Math.random() * 80,
-                damage: 6, fireRate: 15, fireCooldown: 0, color: '#4CAF50', size: 5, animTimer: 0 
+                damage: 5, fireRate: 15, fireCooldown: 0, color: '#4CAF50', size: 5, animTimer: 0 
             });
         }
 
@@ -182,14 +182,14 @@
             units.push({ 
                 type: 'tank', x: x, y: y, hp: 100, maxHp: 100, speed: 0.4, 
                 range: 350, prefDist: 300 + Math.random() * 50,
-                damage: 25, fireRate: 45, fireCooldown: 0, color: '#2E7D32', size: 12, animTimer: 0
+                damage: 18, fireRate: 45, fireCooldown: 0, color: '#2E7D32', size: 12, animTimer: 0
             });
         }
 
         function spawnBunker(x, y) {
             units.push({ 
                 type: 'bunker', x: x, y: y, hp: 300, maxHp: 300, speed: 0, 
-                range: 300, prefDist: 0, damage: 12, fireRate: 6, fireCooldown: 0, color: '#757575', size: 16 
+                range: 300, prefDist: 0, damage: 8, fireRate: 6, fireCooldown: 0, color: '#757575', size: 16 
             });
         }
 
@@ -198,13 +198,13 @@
             let enemy = { x: tadpoleNest.x - 10, y: y, wobble: Math.random() * Math.PI * 2, attackCooldown: 0, jumpTimer: 0 };
             
             if (type === 'frog') {
-                enemy.type = 'frog'; enemy.hp = 350; enemy.radius = 18; enemy.speed = 0; enemy.maxSpeed = 4.5;
+                enemy.type = 'frog'; enemy.hp = 400; enemy.radius = 18; enemy.speed = 0; enemy.maxSpeed = 4.5;
             } else if (type === 'froglet') {
-                enemy.type = 'froglet'; enemy.hp = 40; enemy.radius = 7; enemy.speed = 2.5; 
+                enemy.type = 'froglet'; enemy.hp = 50; enemy.radius = 7; enemy.speed = 2.5; 
             } else if (type === 'shielded') {
-                enemy.type = 'shielded'; enemy.hp = 80; enemy.radius = 6; enemy.speed = 1.0;
+                enemy.type = 'shielded'; enemy.hp = 100; enemy.radius = 6; enemy.speed = 1.0;
             } else {
-                enemy.type = 'basic'; enemy.hp = 35; enemy.radius = 6; enemy.speed = 0.8 + Math.random();
+                enemy.type = 'basic'; enemy.hp = 45; enemy.radius = 6; enemy.speed = 0.8 + Math.random();
             }
             enemies.push(enemy);
         }
@@ -292,31 +292,31 @@
                     else if (index === 1) {
                         player.crosshair.x = Math.max(tadpoleNest.x - 100, Math.min(canvas.width - 10, player.crosshair.x));
 
-                        // [LB] Basic Tadpole x3 (Cost 10)
+                        // [LB] Basic Tadpole x5 (Cost 10)
                         if (pad.buttons[4].pressed && !player.buttons.LB) {
                             if (p2Energy >= 10) { 
                                 p2Energy -= 10; 
-                                for(let i=0; i<3; i++) spawnSpecificEnemy('basic', player.crosshair.y + (Math.random()*60-30));
+                                for(let i=0; i<5; i++) spawnSpecificEnemy('basic', player.crosshair.y + (Math.random()*60-30));
                                 playDeploySound(true); 
                             }
                             player.buttons.LB = true;
                         } else if (!pad.buttons[4].pressed) player.buttons.LB = false;
 
-                        // [LT] Shielded Mutant x1 (Cost 20)
+                        // [LT] Shielded Mutant x2 (Cost 20)
                         if (pad.buttons[6].pressed && !player.buttons.LT) {
                             if (p2Energy >= 20) { 
                                 p2Energy -= 20; 
-                                spawnSpecificEnemy('shielded', player.crosshair.y);
+                                for(let i=0; i<2; i++) spawnSpecificEnemy('shielded', player.crosshair.y + (Math.random()*60-30));
                                 playDeploySound(true); 
                             }
                             player.buttons.LT = true;
                         } else if (!pad.buttons[6].pressed) player.buttons.LT = false;
 
-                        // [RB] Speed Froglet x3 (Cost 30)
+                        // [RB] Speed Froglet x5 (Cost 30)
                         if (pad.buttons[5].pressed && !player.buttons.RB) {
                             if (p2Energy >= 30) { 
                                 p2Energy -= 30; 
-                                for(let i=0; i<3; i++) spawnSpecificEnemy('froglet', player.crosshair.y + (Math.random()*60-30));
+                                for(let i=0; i<5; i++) spawnSpecificEnemy('froglet', player.crosshair.y + (Math.random()*60-30));
                                 playDeploySound(true); 
                             }
                             player.buttons.RB = true;
@@ -337,9 +337,9 @@
 
             // --- UPDATE LOGIC ---
             if (gameState === 'PLAYING') {
-                // COMMAND now earns 40% more energy per second to offset the Swarm's numbers
-                p1Energy = Math.min(100, p1Energy + 0.28); 
-                p2Energy = Math.min(100, p2Energy + 0.20); 
+                // Equality: Both sides regenerate energy at the exact same pace.
+                p1Energy = Math.min(100, p1Energy + 0.22); 
+                p2Energy = Math.min(100, p2Energy + 0.22); 
 
                 // 1. Update Units (P1)
                 for (let i = units.length - 1; i >= 0; i--) {
@@ -551,7 +551,7 @@
                 // Draw Enemies
                 for (let e of enemies) {
                     if (e.type === 'shielded') {
-                        ctx.fillStyle = `rgba(0, 255, 255, ${0.1 + (e.hp/80)*0.2})`;
+                        ctx.fillStyle = `rgba(0, 255, 255, ${0.1 + (e.hp/100)*0.2})`;
                         ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 4, 0, Math.PI*2); ctx.fill();
                         ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 1; ctx.stroke();
                     }
@@ -576,7 +576,7 @@
                     
                     if(e.type === 'frog') {
                         ctx.fillStyle = 'red'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, e.radius*2, 3);
-                        ctx.fillStyle = 'green'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, (e.radius*2) * (e.hp/350), 3); 
+                        ctx.fillStyle = 'green'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, (e.radius*2) * (e.hp/400), 3); 
                     }
                 }
 
@@ -633,9 +633,9 @@
 
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(p2Offset, 100, 240, 105);
                 ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Arial'; ctx.fillText("Spawn Mutants:", p2Offset + 10, 115);
-                ctx.fillStyle = p2Energy >= 10 ? '#ff88aa' : '#555'; ctx.fillText(`[LB] 3x Basic Tadpole (-10)`, p2Offset + 10, 135);
-                ctx.fillStyle = p2Energy >= 20 ? '#00ffff' : '#555'; ctx.fillText(`[LT] 1x Shielded Mutant (-20)`, p2Offset + 10, 155);
-                ctx.fillStyle = p2Energy >= 30 ? '#44ff44' : '#555'; ctx.fillText(`[RB] 3x Speed Froglet (-30)`, p2Offset + 10, 175);
+                ctx.fillStyle = p2Energy >= 10 ? '#ff88aa' : '#555'; ctx.fillText(`[LB] 5x Basic Tadpole (-10)`, p2Offset + 10, 135);
+                ctx.fillStyle = p2Energy >= 20 ? '#00ffff' : '#555'; ctx.fillText(`[LT] 2x Shielded Mutant (-20)`, p2Offset + 10, 155);
+                ctx.fillStyle = p2Energy >= 30 ? '#44ff44' : '#555'; ctx.fillText(`[RB] 5x Speed Froglet (-30)`, p2Offset + 10, 175);
                 ctx.fillStyle = p2Energy >= 70 ? '#ff4444' : '#555'; ctx.fillText(`[RT] 1x Giant Boss Frog (-70)`, p2Offset + 10, 195);
             }
 
