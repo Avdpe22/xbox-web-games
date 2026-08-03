@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tadpole Swarm: Versus Mode (Speed & Damage Rebalance)</title>
+    <title>Tadpole Swarm: Versus Mode (Ultimate Swarm Swap)</title>
     <style>
         body, html { margin: 0; padding: 0; overflow: hidden; background: #0a0a0f; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         canvas { display: block; }
@@ -172,7 +172,6 @@
         // --- P1: HUMAN UNIT FACTORIES ---
         function spawnSoldier(x, y) {
             units.push({ 
-                // NERF: HP reduced to 10, Damage reduced to 4
                 type: 'soldier', x: x, y: y, hp: 10, maxHp: 10, speed: 0.8, 
                 range: 250, prefDist: 200 + Math.random() * 80,
                 damage: 4, fireRate: 15, fireCooldown: 0, color: '#4CAF50', size: 5, animTimer: 0 
@@ -201,7 +200,6 @@
             if (type === 'frog') {
                 enemy.type = 'frog'; enemy.hp = 400; enemy.radius = 18; enemy.speed = 0; enemy.maxSpeed = 4.5;
             } else if (type === 'froglet') {
-                // BUFF: Speed increased to 3.5 to cross the gap before taking lethal fire
                 enemy.type = 'froglet'; enemy.hp = 50; enemy.radius = 7; enemy.speed = 3.5; 
             } else if (type === 'shielded') {
                 enemy.type = 'shielded'; enemy.hp = 100; enemy.radius = 6; enemy.speed = 1.0;
@@ -314,20 +312,20 @@
                             player.buttons.LT = true;
                         } else if (!pad.buttons[6].pressed) player.buttons.LT = false;
 
-                        // [RB] Speed Froglet x5 (Cost 30)
+                        // [RB] Speed Froglet x5 (Cost 70) - SWAPPED
                         if (pad.buttons[5].pressed && !player.buttons.RB) {
-                            if (p2Energy >= 30) { 
-                                p2Energy -= 30; 
+                            if (p2Energy >= 70) { 
+                                p2Energy -= 70; 
                                 for(let i=0; i<5; i++) spawnSpecificEnemy('froglet', player.crosshair.y + (Math.random()*60-30));
                                 playDeploySound(true); 
                             }
                             player.buttons.RB = true;
                         } else if (!pad.buttons[5].pressed) player.buttons.RB = false;
 
-                        // [RT] Giant Boss Frog x1 (Cost 70)
+                        // [RT] Giant Boss Frog x1 (Cost 30) - SWAPPED
                         if (pad.buttons[7].pressed && !player.buttons.RT) {
-                            if (p2Energy >= 70) { 
-                                p2Energy -= 70; 
+                            if (p2Energy >= 30) { 
+                                p2Energy -= 30; 
                                 spawnSpecificEnemy('frog', player.crosshair.y + (Math.random()*40-20));
                                 playDeploySound(true); 
                             }
@@ -636,8 +634,8 @@
                 ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Arial'; ctx.fillText("Spawn Mutants:", p2Offset + 10, 115);
                 ctx.fillStyle = p2Energy >= 10 ? '#ff88aa' : '#555'; ctx.fillText(`[LB] 5x Basic Tadpole (-10)`, p2Offset + 10, 135);
                 ctx.fillStyle = p2Energy >= 20 ? '#00ffff' : '#555'; ctx.fillText(`[LT] 2x Shielded Mutant (-20)`, p2Offset + 10, 155);
-                ctx.fillStyle = p2Energy >= 30 ? '#44ff44' : '#555'; ctx.fillText(`[RB] 5x Speed Froglet (-30)`, p2Offset + 10, 175);
-                ctx.fillStyle = p2Energy >= 70 ? '#ff4444' : '#555'; ctx.fillText(`[RT] 1x Giant Boss Frog (-70)`, p2Offset + 10, 195);
+                ctx.fillStyle = p2Energy >= 70 ? '#44ff44' : '#555'; ctx.fillText(`[RB] 5x Speed Froglet (-70)`, p2Offset + 10, 175);
+                ctx.fillStyle = p2Energy >= 30 ? '#ff4444' : '#555'; ctx.fillText(`[RT] 1x Giant Boss Frog (-30)`, p2Offset + 10, 195);
             }
 
             if (pads.length < 2 && gameState !== 'START') {
