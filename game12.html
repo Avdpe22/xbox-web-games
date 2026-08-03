@@ -7,53 +7,61 @@
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         canvas { display: block; }
-        
+
         /* UI Overlays */
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; padding: 20px; box-sizing: border-box; display: flex; justify-content: space-between; z-index: 10; }
-        .player-card { background: rgba(0, 0, 0, 0.8); border: 2px solid #444; padding: 15px; border-radius: 8px; width: 220px; transition: border-color 0.3s; }
-        .active-player { border-color: #00ffcc; box-shadow: 0 0 15px rgba(0, 255, 204, 0.3); }
-        .resources { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-        .res-badge { background: #333; padding: 4px 8px; border-radius: 4px; font-size: 14px; min-width: 60px; }
-        
-        #center-display { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(0,0,0,0.8); padding: 10px 30px; border-radius: 8px; border: 1px solid #555; z-index: 10;}
+        #players-row { position: absolute; top: 130px; left: 0; width: 100%; display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; padding: 0 20px; box-sizing: border-box; pointer-events: none; z-index: 10; }
+        .player-card { background: rgba(0, 0, 0, 0.8); border: 2px solid #444; padding: 12px 15px; border-radius: 8px; width: 210px; transition: border-color 0.3s; }
+        .active-player { border-color: #00ffcc !important; box-shadow: 0 0 15px rgba(0, 255, 204, 0.3); }
+        .resources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .res-badge { background: #333; padding: 3px 6px; border-radius: 4px; font-size: 12px; min-width: 50px; }
+
+        #center-display { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(0,0,0,0.8); padding: 10px 30px; border-radius: 8px; border: 1px solid #555; z-index: 10; min-width: 260px; }
         #dice-result { font-size: 2rem; font-weight: bold; color: #ffeb3b; }
-        
+        #build-mode-line { margin-top: 5px; font-size: 0.85rem; color: #ffcc00; min-height: 1.1em; }
+
+        #help-panel { position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.7); border: 1px solid #444; border-radius: 6px; padding: 8px 12px; font-size: 0.75rem; color: #aaa; z-index: 10; line-height: 1.5; }
+
         /* Modals */
         .modal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center;}
         .modal h1 { font-size: 2.5rem; color: #ffeb3b; margin-bottom: 10px; }
         #hold-progress { width: 300px; height: 20px; background: #333; border-radius: 10px; overflow: hidden; margin-top: 20px; border: 2px solid #555; }
         #hold-bar { height: 100%; width: 0%; background: #00ffcc; }
-        
+
         /* Trade UI */
         .trade-box { display: flex; gap: 40px; margin-top: 20px; }
         .trade-col { background: #222; padding: 20px; border-radius: 8px; width: 200px; border: 2px solid #444;}
-        .trade-item { display: flex; justify-content: space-between; margin: 10px 0; font-size: 1.2rem; }
+        .trade-item { font-size: 1.4rem; margin-top: 10px; }
         .active-trade-col { border-color: #00ffcc; }
-        
-        #action-prompt { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; font-size: 1.2rem; pointer-events: none; z-index: 10;}
+
+        #action-prompt { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; font-size: 1.1rem; pointer-events: none; z-index: 10; white-space: nowrap; }
     </style>
 </head>
 <body>
 
-    <div id="ui-layer">
-        <div class="player-card active-player" id="p1-card">
-            <h3 style="margin:0; color:#ff4444;">Player 1</h3>
-            <div class="resources" id="p1-res"></div>
-        </div>
-        <div id="center-display">
-            <div>Last Roll</div>
-            <div id="dice-result">-</div>
-            <div id="game-phase" style="color:#00ffcc; margin-top:5px;">Phase: ROLLING</div>
-        </div>
-        <div class="player-card" id="p2-card">
-            <h3 style="margin:0; color:#4444ff;">Player 2</h3>
-            <div class="resources" id="p2-res"></div>
-        </div>
+    <div id="players-row"></div>
+
+    <div id="center-display">
+        <div>Last Roll</div>
+        <div id="dice-result">-</div>
+        <div id="game-phase" style="color:#00ffcc; margin-top:5px;">Phase: -</div>
+        <div id="build-mode-line"></div>
     </div>
 
-    <div id="action-prompt">Hold A/Space to Roll Dice</div>
+    <div id="action-prompt"></div>
 
-    <!-- Pass Controller Modal -->
+    <div id="help-panel">
+        Road: 1 Wood + 1 Brick<br>
+        Settlement: 1 Wood + 1 Brick + 1 Wheat + 1 Sheep<br>
+        City (upgrade): 2 Wheat + 3 Ore
+    </div>
+
+    <!-- Player / Color Selection Modal -->
+    <div id="setup-overlay" class="modal" style="display:flex;">
+        <h1 id="setup-title">Hex & Hearth</h1>
+        <div id="setup-body"></div>
+    </div>
+
+    <!-- Pass Controller / Roll Modal -->
     <div id="pass-overlay" class="modal">
         <h1 id="pass-title">Pass Controller</h1>
         <p id="pass-desc">Hold 'A' (or Spacebar) to confirm you have the controller.</p>
@@ -62,189 +70,540 @@
 
     <!-- Trade Menu Modal -->
     <div id="trade-overlay" class="modal">
-        <h1>Propose Trade</h1>
-        <p>Use Up/Down to change amounts, Left/Right to switch Give/Want.</p>
+        <h1>Trade with Bank (4:1)</h1>
+        <p>Left/Right: switch column &middot; Up/Down: change resource</p>
         <div class="trade-box">
             <div class="trade-col active-trade-col" id="trade-give">
-                <h3>You Give</h3>
-                <div class="trade-item">Wood: <span id="tg-wood">0</span></div>
-                <div class="trade-item">Brick: <span id="tg-brick">0</span></div>
-                <div class="trade-item">Wheat: <span id="tg-wheat">0</span></div>
+                <h3>You Give (4x)</h3>
+                <div class="trade-item" id="tg-display">Wood</div>
             </div>
             <div class="trade-col" id="trade-want">
-                <h3>You Want</h3>
-                <div class="trade-item">Wood: <span id="tw-wood">0</span></div>
-                <div class="trade-item">Brick: <span id="tw-brick">0</span></div>
-                <div class="trade-item">Wheat: <span id="tw-wheat">0</span></div>
+                <h3>You Get (1x)</h3>
+                <div class="trade-item" id="tw-display">Brick</div>
             </div>
         </div>
-        <p style="margin-top: 20px; color: #888;">Press A/Space to Send Offer, B/Shift to Cancel</p>
+        <p id="trade-status" style="margin-top: 15px; color: #ff8888; min-height: 1.2em;"></p>
+        <p style="margin-top: 10px; color: #888;">Press A/Space to Confirm, B/Shift to Cancel</p>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="gameover-overlay" class="modal">
+        <h1 id="gameover-title">We Have a Winner!</h1>
+        <p id="gameover-desc"></p>
+        <p style="color:#888; margin-top:20px;">Press A / Space to Play Again</p>
     </div>
 
     <canvas id="gameCanvas"></canvas>
 
 <script>
 /**
- * HEX & HEARTH - Version 0.2 (Intersections, Dice, Trade)
+ * HEX & HEARTH - Full pass-and-play Catan-style implementation.
+ * 2-4 players, single controller, Xbox Series S / Edge oriented.
  */
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-const state = {
-    mode: 'ROLLING', // ROLLING, PLAYING, TRADING, TRADE_REVIEW, PASSING
-    currentPlayer: 1,
-    holdTimer: 0, holdRequired: 60,
-    players: [
-        { id: 1, color: '#ff4444', res: { wood: 2, brick: 2, wheat: 0 } },
-        { id: 2, color: '#4444ff', res: { wood: 0, brick: 1, wheat: 3 } }
-    ],
-    tradeState: { activeColumn: 'give', give: {wood:0, brick:0, wheat:0}, want: {wood:0, brick:0, wheat:0} }
+// --- CONSTANTS ---
+const RESOURCE_TYPES = ['wood', 'brick', 'wheat', 'sheep', 'ore'];
+const RESOURCE_LABELS = { wood: 'Wood', brick: 'Brick', wheat: 'Wheat', sheep: 'Sheep', ore: 'Ore' };
+const HEX_COLORS = { wood: '#2d5a27', brick: '#b5651d', wheat: '#e6c229', sheep: '#8fce7a', ore: '#7a7a7a', desert: '#d9c08c' };
+const HEX_RESOURCE_COUNTS = { wood: 4, wheat: 4, sheep: 4, brick: 3, ore: 3, desert: 1 }; // 19 hexes total
+const NUMBER_TOKENS = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12]; // 18 tokens (no 7)
+
+const COSTS = {
+    road: { wood: 1, brick: 1 },
+    settlement: { wood: 1, brick: 1, wheat: 1, sheep: 1 },
+    city: { wheat: 2, ore: 3 }
 };
 
-// Grid Config
+const PLAYER_COLORS = [
+    { name: 'Red', hex: '#ff4444' },
+    { name: 'Blue', hex: '#4477ff' },
+    { name: 'Orange', hex: '#ff9800' },
+    { name: 'White', hex: '#f0f0f0' }
+];
+
+const DIRS = [{ q: 1, r: 0 }, { q: 1, r: -1 }, { q: 0, r: -1 }, { q: -1, r: 0 }, { q: -1, r: 1 }, { q: 0, r: 1 }];
+
+const state = {
+    mode: 'PLAYER_SETUP_COUNT',
+    postPassMode: 'ROLLING',
+    currentPlayer: 1,
+    holdTimer: 0, holdRequired: 60,
+    players: [],
+    buildMode: 'settlement',
+    setupUI: { count: 2, chosen: [], colorIndex: 0, colorPick: 0 },
+    setupOrder: [],
+    setupIndex: 0,
+    tradeState: { activeColumn: 'give', giveIdx: 0, wantIdx: 1 },
+    winner: null
+};
+
 const hexSize = 50;
 const gridRadius = 2;
 const grid = [];
-const vertices = []; // Intersections
+const vertices = [];
+const edges = [];
 
-let cursorIndex = 0; // Index of the currently selected vertex
+let vertexCursorIndex = 0;
+let edgeCursorIndex = 0;
+let hexCursorIndex = 0;
+let lastSetupVertex = null;
+let robberHexIndex = 0;
 let inputCooldown = 0;
+let messageTimeout = null;
 
-// Resize
 function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 window.addEventListener('resize', resize); resize();
 
-// --- 1. HEX & INTERSECTION MATH ---
-const resources = ['Wood', 'Brick', 'Wheat'];
-const numbers = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12];
+function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
 
-function createGrid() {
-    let numIdx = 0;
-    // Generate Hexes
-    for (let q = -gridRadius; q <= gridRadius; q++) {
-        let r1 = Math.max(-gridRadius, -q - gridRadius);
-        let r2 = Math.min(gridRadius, -q + gridRadius);
-        for (let r = r1; r <= r2; r++) {
-            grid.push({ 
-                q, r, 
-                res: resources[Math.floor(Math.random() * resources.length)],
-                num: numbers[numIdx % numbers.length]
-            });
-            numIdx++;
+// --- 1. BOARD GENERATION (board-space coords; screen offset applied only at render time) ---
+function axialToBoard(q, r) {
+    const x = hexSize * Math.sqrt(3) * (q + r / 2);
+    const y = hexSize * 3 / 2 * r;
+    return { x, y };
+}
+function toScreen(pt) { return { x: pt.x + canvas.width / 2, y: pt.y + canvas.height / 2 }; }
+
+function getNeighborHexes(hex) {
+    return DIRS.map(d => grid.find(h => h.q === hex.q + d.q && h.r === hex.r + d.r)).filter(Boolean);
+}
+
+function validNumberPlacement() {
+    for (const hex of grid) {
+        if (hex.num == null) continue;
+        for (const n of getNeighborHexes(hex)) {
+            if (n.num == null) continue;
+            if (n.num === hex.num) return false;
+            if ((hex.num === 6 || hex.num === 8) && (n.num === 6 || n.num === 8)) return false;
         }
     }
-    
-    // Generate Unique Vertices (Intersections)
+    return true;
+}
+
+function generateBoard() {
+    grid.length = 0; vertices.length = 0; edges.length = 0;
+
+    const coords = [];
+    for (let q = -gridRadius; q <= gridRadius; q++) {
+        const r1 = Math.max(-gridRadius, -q - gridRadius);
+        const r2 = Math.min(gridRadius, -q + gridRadius);
+        for (let r = r1; r <= r2; r++) coords.push({ q, r });
+    }
+
+    let resPool = [];
+    for (const [res, count] of Object.entries(HEX_RESOURCE_COUNTS)) for (let i = 0; i < count; i++) resPool.push(res);
+    shuffle(resPool);
+    coords.forEach((c, i) => grid.push({ q: c.q, r: c.r, res: resPool[i], num: null, idx: i }));
+
+    const nonDesert = grid.filter(h => h.res !== 'desert');
+    let attempt = 0, ok = false;
+    while (!ok && attempt < 300) {
+        attempt++;
+        const nums = shuffle([...NUMBER_TOKENS]);
+        nonDesert.forEach((h, i) => h.num = nums[i]);
+        ok = validNumberPlacement();
+    }
+
+    const desertHex = grid.find(h => h.res === 'desert');
+    robberHexIndex = desertHex.idx;
+
+    grid.forEach(hex => { const p = axialToBoard(hex.q, hex.r); hex.x = p.x; hex.y = p.y; hex.cornerIdx = []; });
+
+    // Vertices (dedup by proximity) + track which hex corners map to which vertex
     grid.forEach(hex => {
-        const center = axialToPixel(hex.q, hex.r);
         for (let i = 0; i < 6; i++) {
-            const angle_rad = Math.PI / 180 * (60 * i - 30);
-            const vx = center.x + hexSize * Math.cos(angle_rad);
-            const vy = center.y + hexSize * Math.sin(angle_rad);
-            
-            // Check if vertex already exists (within a 5px margin of error)
-            const exists = vertices.find(v => Math.hypot(v.x - vx, v.y - vy) < 5);
-            if (!exists) {
-                vertices.push({ x: vx, y: vy, owner: null, adjHexes: [] });
+            const angle = Math.PI / 180 * (60 * i - 30);
+            const vx = hex.x + hexSize * Math.cos(angle);
+            const vy = hex.y + hexSize * Math.sin(angle);
+            let idx = vertices.findIndex(v => Math.hypot(v.x - vx, v.y - vy) < 5);
+            if (idx === -1) {
+                vertices.push({ x: vx, y: vy, owner: null, type: null, adjHexes: [], neighbors: [], edges: [] });
+                idx = vertices.length - 1;
             }
-            
-            // Link hex to vertex for resource generation
-            const vRef = vertices.find(v => Math.hypot(v.x - vx, v.y - vy) < 5);
-            if(!vRef.adjHexes.includes(hex)) vRef.adjHexes.push(hex);
+            if (!vertices[idx].adjHexes.includes(hex)) vertices[idx].adjHexes.push(hex);
+            hex.cornerIdx.push(idx);
+        }
+    });
+
+    // Edges between consecutive corners of each hex, deduped
+    const edgeMap = new Map();
+    grid.forEach(hex => {
+        for (let i = 0; i < 6; i++) {
+            const a = hex.cornerIdx[i], b = hex.cornerIdx[(i + 1) % 6];
+            const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+            if (!edgeMap.has(key)) {
+                const va = vertices[a], vb = vertices[b];
+                edges.push({ v1: a, v2: b, owner: null, x: (va.x + vb.x) / 2, y: (va.y + vb.y) / 2 });
+                const eIdx = edges.length - 1;
+                edgeMap.set(key, eIdx);
+                va.edges.push(eIdx); vb.edges.push(eIdx);
+                if (!va.neighbors.includes(b)) va.neighbors.push(b);
+                if (!vb.neighbors.includes(a)) vb.neighbors.push(a);
+            }
         }
     });
 }
-createGrid();
 
-function axialToPixel(q, r) {
-    const x = hexSize * Math.sqrt(3) * (q + r/2);
-    const y = hexSize * 3/2 * r;
-    return { x: x + canvas.width/2, y: y + canvas.height/2 };
+// --- 2. RULES HELPERS ---
+function canAfford(res, cost) { return Object.entries(cost).every(([k, v]) => res[k] >= v); }
+function payCost(res, cost) { Object.entries(cost).forEach(([k, v]) => res[k] -= v); }
+
+function canPlaceSettlement(vertexIdx, playerId, isSetup) {
+    const v = vertices[vertexIdx];
+    if (v.owner !== null) return false;
+    for (const nIdx of v.neighbors) if (vertices[nIdx].owner !== null) return false; // distance rule
+    if (isSetup) return true;
+    return v.edges.some(eIdx => edges[eIdx].owner === playerId); // must connect to own road
 }
 
-// --- 2. RESOURCE GENERATION ---
-function rollDice() {
-    const d1 = Math.floor(Math.random() * 6) + 1;
-    const d2 = Math.floor(Math.random() * 6) + 1;
-    const total = d1 + d2;
-    document.getElementById('dice-result').innerText = total;
-    
-    // Distribute
+function canPlaceRoad(edgeIdx, playerId, restrictVertex) {
+    const edge = edges[edgeIdx];
+    if (edge.owner !== null) return false;
+    if (restrictVertex != null) return edge.v1 === restrictVertex || edge.v2 === restrictVertex;
+    for (const vIdx of [edge.v1, edge.v2]) {
+        const v = vertices[vIdx];
+        if (v.owner === playerId) return true;
+        for (const eIdx of v.edges) if (eIdx !== edgeIdx && edges[eIdx].owner === playerId) return true;
+    }
+    return false;
+}
+
+function recalcVP() {
+    state.players.forEach(p => p.vp = 0);
     vertices.forEach(v => {
-        if (v.owner !== null) {
+        if (v.owner) {
+            const p = state.players.find(pl => pl.id === v.owner);
+            p.vp += v.type === 'city' ? 2 : 1;
+        }
+    });
+}
+
+function checkWin() {
+    const winner = state.players.find(p => p.vp >= 10);
+    if (winner) { state.winner = winner; state.mode = 'GAME_OVER'; showGameOver(); }
+}
+
+function getCurrentPlayer() { return state.players.find(p => p.id === state.currentPlayer); }
+
+function cycleBuildMode(mode, dir) {
+    const order = ['road', 'settlement', 'city'];
+    return order[(order.indexOf(mode) + dir + 3) % 3];
+}
+
+// --- 3. DICE / ROBBER ---
+function forceDiscards() {
+    const messages = [];
+    state.players.forEach(p => {
+        const total = RESOURCE_TYPES.reduce((s, r) => s + p.res[r], 0);
+        if (total > 7) {
+            const target = Math.floor(total / 2);
+            let toDiscard = total - target;
+            while (toDiscard > 0) {
+                const avail = RESOURCE_TYPES.filter(r => p.res[r] > 0);
+                if (avail.length === 0) break;
+                const r = avail[Math.floor(Math.random() * avail.length)];
+                p.res[r]--; toDiscard--;
+            }
+            messages.push(`${p.name} discarded to ${target}`);
+        }
+    });
+    return messages.length ? `Rolled 7! ${messages.join(', ')}.` : null;
+}
+
+function rollDice() {
+    const d1 = 1 + Math.floor(Math.random() * 6);
+    const d2 = 1 + Math.floor(Math.random() * 6);
+    const total = d1 + d2;
+    document.getElementById('dice-result').innerText = `${total} (${d1}+${d2})`;
+
+    if (total === 7) {
+        const msg = forceDiscards();
+        state.mode = 'ROBBER_MOVE';
+        hexCursorIndex = robberHexIndex;
+        updateUI();
+        if (msg) showMessage(msg, 3000);
+    } else {
+        vertices.forEach(v => {
+            if (!v.owner) return;
             v.adjHexes.forEach(hex => {
-                if (hex.num === total) {
-                    state.players[v.owner - 1].res[hex.res.toLowerCase()]++;
+                if (hex.num === total && hex.idx !== robberHexIndex) {
+                    const p = state.players.find(pl => pl.id === v.owner);
+                    p.res[hex.res] += (v.type === 'city' ? 2 : 1);
                 }
             });
-        }
-    });
+        });
+        state.mode = 'PLAYING';
+        updateUI();
+    }
+}
+
+// --- 4. SETUP TURN FLOW ---
+function advanceSetupTurn() {
+    state.setupIndex++;
+    if (state.setupIndex >= state.setupOrder.length) {
+        state.mode = 'ROLLING';
+        showRollOverlay();
+        showMessage('Setup complete! First turn begins.', 2000);
+        return;
+    }
+    const nextId = state.setupOrder[state.setupIndex];
+    if (nextId !== state.currentPlayer) {
+        state.currentPlayer = nextId;
+        state.postPassMode = 'SETUP_PLACE_SETTLEMENT';
+        state.mode = 'PASSING';
+        showPassOverlay();
+    } else {
+        state.mode = 'SETUP_PLACE_SETTLEMENT';
+    }
     updateUI();
 }
 
-function updateUI() {
-    ['p1', 'p2'].forEach((p, idx) => {
-        const res = state.players[idx].res;
-        document.getElementById(`${p}-res`).innerHTML = `
-            <span class="res-badge">Wood: ${res.wood}</span>
-            <span class="res-badge">Brick: ${res.brick}</span>
-            <span class="res-badge">Wheat: ${res.wheat}</span>
-        `;
-        document.getElementById(`${p}-card`).className = `player-card ${state.currentPlayer === idx+1 ? 'active-player' : ''}`;
-    });
-    document.getElementById('game-phase').innerText = `Phase: ${state.mode}`;
-    
-    let prompt = "";
-    if(state.mode === 'ROLLING') prompt = "Hold A / Space to Roll Dice";
-    if(state.mode === 'PLAYING') prompt = "Move: D-Pad | Build Settlement: A | Trade: X | End Turn: Y";
-    document.getElementById('action-prompt').innerText = prompt;
+// --- 5. UI RENDERING (DOM) ---
+function showMessage(text, ms) {
+    document.getElementById('action-prompt').innerText = text;
+    if (messageTimeout) clearTimeout(messageTimeout);
+    messageTimeout = setTimeout(() => updateUI(), ms);
 }
-updateUI();
 
-// --- 3. INPUT & STATE MACHINE ---
-const keys = { up: false, down: false, left: false, right: false, a: false, b: false, x: false, y: false };
+function showPassOverlay() {
+    const p = getCurrentPlayer();
+    document.getElementById('pass-title').innerHTML = `Pass the Controller`;
+    document.getElementById('pass-desc').innerHTML = `Give it to <span style="color:${p.color}">${p.name}</span>. Hold 'A' (or Space) to confirm.`;
+    document.getElementById('hold-bar').style.width = '0%';
+    document.getElementById('pass-overlay').style.display = 'flex';
+}
+
+function showRollOverlay() {
+    const p = getCurrentPlayer();
+    document.getElementById('pass-title').innerHTML = `<span style="color:${p.color}">${p.name}</span>'s Turn`;
+    document.getElementById('pass-desc').innerText = `Hold 'A' (or Space) to Roll the Dice`;
+    document.getElementById('hold-bar').style.width = '0%';
+    document.getElementById('pass-overlay').style.display = 'flex';
+}
+
+function showGameOver() {
+    const w = state.winner;
+    document.getElementById('gameover-title').innerHTML = `<span style="color:${w.color}">${w.name}</span> Wins!`;
+    document.getElementById('gameover-desc').innerText = `Reached ${w.vp} Victory Points`;
+    document.getElementById('gameover-overlay').style.display = 'flex';
+}
+
+function renderPlayerSetup() {
+    const title = document.getElementById('setup-title');
+    const body = document.getElementById('setup-body');
+    if (state.mode === 'PLAYER_SETUP_COUNT') {
+        title.innerText = 'How Many Players?';
+        body.innerHTML = `
+            <p>Left / Right to choose &middot; A to confirm</p>
+            <div style="font-size:4rem;color:#00ffcc;margin:20px;">${state.setupUI.count}</div>
+            <p style="color:#888;">Everyone passes one controller around to take turns.</p>`;
+    } else if (state.mode === 'PLAYER_SETUP_COLOR') {
+        title.innerText = `Player ${state.setupUI.colorIndex + 1}: Choose Color`;
+        const available = PLAYER_COLORS.filter(c => !state.setupUI.chosen.includes(c.name));
+        const pick = state.setupUI.colorPick || 0;
+        body.innerHTML = `
+            <p>Left / Right to choose &middot; A to confirm &middot; B to go back</p>
+            <div style="display:flex;gap:20px;margin:20px;justify-content:center;">
+                ${available.map((c, i) => `<div style="width:60px;height:60px;border-radius:50%;background:${c.hex};border:4px solid ${i === pick ? '#00ffcc' : '#333'};box-shadow:${i === pick ? '0 0 15px #00ffcc' : 'none'};"></div>`).join('')}
+            </div>
+            <div style="color:#aaa;">${available[pick] ? available[pick].name : ''}</div>`;
+    } else if (state.mode === 'PLAYER_SETUP_READY') {
+        title.innerText = 'Ready to Play?';
+        body.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:8px;margin:20px;">
+                ${state.setupUI.chosen.map((name, i) => { const c = PLAYER_COLORS.find(x => x.name === name); return `<div style="color:${c.hex};font-size:1.3rem;">Player ${i + 1}: ${c.name}</div>`; }).join('')}
+            </div>
+            <p>Press A to Start &middot; B to go back</p>`;
+    }
+}
+
+function renderTradeUI() {
+    const give = RESOURCE_TYPES[state.tradeState.giveIdx];
+    const want = RESOURCE_TYPES[state.tradeState.wantIdx];
+    document.getElementById('tg-display').innerText = RESOURCE_LABELS[give];
+    document.getElementById('tw-display').innerText = RESOURCE_LABELS[want];
+    document.getElementById('trade-give').className = `trade-col ${state.tradeState.activeColumn === 'give' ? 'active-trade-col' : ''}`;
+    document.getElementById('trade-want').className = `trade-col ${state.tradeState.activeColumn === 'want' ? 'active-trade-col' : ''}`;
+    document.getElementById('trade-status').innerText = '';
+}
+function flashTradeStatus(msg) { document.getElementById('trade-status').innerText = msg; }
+
+function phaseLabel(mode) {
+    return {
+        SETUP_PLACE_SETTLEMENT: 'SETUP - PLACE SETTLEMENT',
+        SETUP_PLACE_ROAD: 'SETUP - PLACE ROAD',
+        ROLLING: 'ROLLING', PLAYING: 'PLAYING', TRADING: 'TRADING',
+        ROBBER_MOVE: 'MOVE ROBBER', PASSING: 'PASSING', GAME_OVER: 'GAME OVER'
+    }[mode] || mode;
+}
+
+function promptForMode() {
+    switch (state.mode) {
+        case 'SETUP_PLACE_SETTLEMENT': {
+            const round = state.setupIndex < state.players.length ? 1 : 2;
+            return `Place Settlement #${round}: D-Pad to move, A to confirm`;
+        }
+        case 'SETUP_PLACE_ROAD': return `Place a connecting Road: D-Pad to cycle, A to confirm`;
+        case 'ROBBER_MOVE': return `Move the Robber: D-Pad to select a tile, A to confirm`;
+        case 'PLAYING': return `D-Pad: Move | A: Build/Upgrade | LB/RB: Build Mode | X: Trade | Y: End Turn`;
+        default: return '';
+    }
+}
+
+function updateUI() {
+    const row = document.getElementById('players-row');
+    row.innerHTML = state.players.map(p => {
+        const active = state.currentPlayer === p.id;
+        return `<div class="player-card ${active ? 'active-player' : ''}">
+            <h3 style="margin:0;color:${p.color}">${p.name}</h3>
+            <div style="font-size:0.85rem;color:#aaa;">Victory Points: ${p.vp}</div>
+            <div class="resources">
+                ${RESOURCE_TYPES.map(r => `<span class="res-badge">${RESOURCE_LABELS[r]}: ${p.res[r]}</span>`).join('')}
+            </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('game-phase').innerText = `Phase: ${phaseLabel(state.mode)}`;
+    document.getElementById('build-mode-line').innerText =
+        (state.mode === 'PLAYING') ? `Build Mode: ${state.buildMode.toUpperCase()}` : '';
+    document.getElementById('action-prompt').innerText = promptForMode();
+}
+
+// --- 6. INPUT ---
+const keys = { up: false, down: false, left: false, right: false, a: false, b: false, x: false, y: false, lb: false, rb: false };
 
 window.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowUp') keys.up = true; if (e.key === 'ArrowDown') keys.down = true;
     if (e.key === 'ArrowLeft') keys.left = true; if (e.key === 'ArrowRight') keys.right = true;
     if (e.key === ' ') keys.a = true; if (e.key === 'Shift') keys.b = true;
     if (e.key === 't') keys.x = true; if (e.key === 'Enter') keys.y = true;
+    if (e.key === 'q') keys.lb = true; if (e.key === 'e') keys.rb = true;
 });
 window.addEventListener('keyup', (e) => {
     if (e.key === 'ArrowUp') keys.up = false; if (e.key === 'ArrowDown') keys.down = false;
     if (e.key === 'ArrowLeft') keys.left = false; if (e.key === 'ArrowRight') keys.right = false;
     if (e.key === ' ') keys.a = false; if (e.key === 'Shift') keys.b = false;
     if (e.key === 't') keys.x = false; if (e.key === 'Enter') keys.y = false;
+    if (e.key === 'q') keys.lb = false; if (e.key === 'e') keys.rb = false;
 });
 
 const GAMEPAD_DEADZONE = 0.5;
-
 function getGamepad() {
     const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-    for (let i = 0; i < gamepads.length; i++) {
-        if (gamepads[i] && gamepads[i].mapping === 'standard') return gamepads[i];
-    }
+    for (let i = 0; i < gamepads.length; i++) if (gamepads[i] && gamepads[i].mapping === 'standard') return gamepads[i];
     return null;
+}
+
+function findNearestInDirection(list, curIdx, dir) {
+    const cur = list[curIdx];
+    let bestDist = Infinity, bestIdx = curIdx;
+    list.forEach((item, idx) => {
+        if (idx === curIdx) return;
+        const dx = item.x - cur.x, dy = item.y - cur.y;
+        let valid = false;
+        if (dir === 'up' && dy < -10) valid = true;
+        if (dir === 'down' && dy > 10) valid = true;
+        if (dir === 'left' && dx < -10) valid = true;
+        if (dir === 'right' && dx > 10) valid = true;
+        if (valid) { const dist = Math.hypot(dx, dy); if (dist < bestDist) { bestDist = dist; bestIdx = idx; } }
+    });
+    return bestIdx;
+}
+
+function startGame() {
+    const colors = state.setupUI.chosen.map(name => PLAYER_COLORS.find(c => c.name === name));
+    state.players = colors.map((c, i) => ({
+        id: i + 1, name: `${c.name} Player`, color: c.hex,
+        res: { wood: 0, brick: 0, wheat: 0, sheep: 0, ore: 0 }, vp: 0
+    }));
+
+    generateBoard();
+
+    const n = state.players.length;
+    const asc = [...Array(n).keys()].map(i => i + 1);
+    state.setupOrder = [...asc, ...[...asc].reverse()];
+    state.setupIndex = 0;
+    state.currentPlayer = state.setupOrder[0];
+
+    vertexCursorIndex = 0; edgeCursorIndex = 0; hexCursorIndex = 0;
+    state.buildMode = 'settlement';
+
+    document.getElementById('setup-overlay').style.display = 'none';
+    state.mode = 'SETUP_PLACE_SETTLEMENT';
+    updateUI();
 }
 
 function pollInput() {
     const pad = getGamepad();
-    let up=keys.up, down=keys.down, left=keys.left, right=keys.right, a=keys.a, b=keys.b, x=keys.x, y=keys.y;
+    let up = keys.up, down = keys.down, left = keys.left, right = keys.right,
+        a = keys.a, b = keys.b, x = keys.x, y = keys.y, lb = keys.lb, rb = keys.rb;
 
     if (pad) {
         if (pad.buttons[12]?.pressed || pad.axes[1] < -GAMEPAD_DEADZONE) up = true;
         if (pad.buttons[13]?.pressed || pad.axes[1] > GAMEPAD_DEADZONE) down = true;
         if (pad.buttons[14]?.pressed || pad.axes[0] < -GAMEPAD_DEADZONE) left = true;
         if (pad.buttons[15]?.pressed || pad.axes[0] > GAMEPAD_DEADZONE) right = true;
-        if (pad.buttons[0]?.pressed) a = true; // A 
-        if (pad.buttons[1]?.pressed) b = true; // B 
-        if (pad.buttons[2]?.pressed) x = true; // X (Trade)
-        if (pad.buttons[3]?.pressed) y = true; // Y (End Turn)
+        if (pad.buttons[0]?.pressed) a = true;
+        if (pad.buttons[1]?.pressed) b = true;
+        if (pad.buttons[2]?.pressed) x = true;
+        if (pad.buttons[3]?.pressed) y = true;
+        if (pad.buttons[4]?.pressed) lb = true;
+        if (pad.buttons[5]?.pressed) rb = true;
     }
 
     if (inputCooldown > 0) { inputCooldown--; return; }
+    const dir = up ? 'up' : down ? 'down' : left ? 'left' : right ? 'right' : null;
 
-    // STATE: PASSING / ROLLING (Hold Action)
+    // --- PLAYER / COLOR SETUP ---
+    if (state.mode === 'PLAYER_SETUP_COUNT') {
+        if (left) { state.setupUI.count = Math.max(2, state.setupUI.count - 1); inputCooldown = 15; renderPlayerSetup(); }
+        if (right) { state.setupUI.count = Math.min(4, state.setupUI.count + 1); inputCooldown = 15; renderPlayerSetup(); }
+        if (a) { state.setupUI.colorIndex = 0; state.setupUI.chosen = []; state.setupUI.colorPick = 0; state.mode = 'PLAYER_SETUP_COLOR'; inputCooldown = 20; renderPlayerSetup(); }
+        return;
+    }
+    if (state.mode === 'PLAYER_SETUP_COLOR') {
+        const available = PLAYER_COLORS.filter(c => !state.setupUI.chosen.includes(c.name));
+        if (left || right) {
+            const d = left ? -1 : 1;
+            state.setupUI.colorPick = ((state.setupUI.colorPick || 0) + d + available.length) % available.length;
+            inputCooldown = 15; renderPlayerSetup();
+        }
+        if (a) {
+            const chosen = available[state.setupUI.colorPick || 0];
+            state.setupUI.chosen.push(chosen.name);
+            state.setupUI.colorIndex++;
+            state.setupUI.colorPick = 0;
+            if (state.setupUI.colorIndex >= state.setupUI.count) state.mode = 'PLAYER_SETUP_READY';
+            inputCooldown = 20; renderPlayerSetup();
+        }
+        if (b) {
+            if (state.setupUI.colorIndex > 0) { state.setupUI.colorIndex--; state.setupUI.chosen.pop(); }
+            else state.mode = 'PLAYER_SETUP_COUNT';
+            inputCooldown = 20; renderPlayerSetup();
+        }
+        return;
+    }
+    if (state.mode === 'PLAYER_SETUP_READY') {
+        if (a) { startGame(); inputCooldown = 30; }
+        if (b) { state.setupUI.chosen.pop(); state.setupUI.colorIndex = Math.max(0, state.setupUI.count - 1); state.mode = 'PLAYER_SETUP_COLOR'; renderPlayerSetup(); inputCooldown = 20; }
+        return;
+    }
+
+    // --- GAME OVER ---
+    if (state.mode === 'GAME_OVER') {
+        if (a) location.reload();
+        return;
+    }
+
+    // --- PASSING / ROLLING (hold-to-confirm) ---
     if (state.mode === 'PASSING' || state.mode === 'ROLLING') {
         if (a) {
             state.holdTimer++;
@@ -252,13 +611,13 @@ function pollInput() {
             if (state.holdTimer >= state.holdRequired) {
                 state.holdTimer = 0; document.getElementById('hold-bar').style.width = '0%';
                 if (state.mode === 'PASSING') {
-                    state.mode = 'ROLLING';
+                    state.mode = state.postPassMode;
                     document.getElementById('pass-overlay').style.display = 'none';
+                    if (state.mode === 'ROLLING') showRollOverlay();
                     updateUI();
-                } else if (state.mode === 'ROLLING') {
+                } else {
+                    document.getElementById('pass-overlay').style.display = 'none';
                     rollDice();
-                    state.mode = 'PLAYING';
-                    updateUI();
                 }
                 inputCooldown = 30;
             }
@@ -266,127 +625,253 @@ function pollInput() {
         return;
     }
 
-    // STATE: PLAYING (Grid Navigation on Vertices)
-    if (state.mode === 'PLAYING') {
-        if (up || down || left || right) {
-            // Find nearest vertex in direction pressed
-            const cur = vertices[cursorIndex];
-            let bestDist = Infinity;
-            let bestIdx = cursorIndex;
-            
-            vertices.forEach((v, idx) => {
-                if(idx === cursorIndex) return;
-                const dx = v.x - cur.x; const dy = v.y - cur.y;
-                let valid = false;
-                if (up && dy < -10) valid = true;
-                if (down && dy > 10) valid = true;
-                if (left && dx < -10) valid = true;
-                if (right && dx > 10) valid = true;
-                
-                if (valid) {
-                    const dist = Math.hypot(dx, dy);
-                    if (dist < bestDist) { bestDist = dist; bestIdx = idx; }
-                }
-            });
-            cursorIndex = bestIdx;
-            inputCooldown = 12;
-        }
-
-        // Build Settlement on Vertex
+    // --- SETUP: PLACE SETTLEMENT ---
+    if (state.mode === 'SETUP_PLACE_SETTLEMENT') {
+        if (dir) { vertexCursorIndex = findNearestInDirection(vertices, vertexCursorIndex, dir); inputCooldown = 12; }
         if (a) {
-            const v = vertices[cursorIndex];
-            if (!v.owner) {
-                v.owner = state.currentPlayer;
+            const pid = state.currentPlayer;
+            if (canPlaceSettlement(vertexCursorIndex, pid, true)) {
+                vertices[vertexCursorIndex].owner = pid;
+                vertices[vertexCursorIndex].type = 'settlement';
+                const round = state.setupIndex < state.players.length ? 1 : 2;
+                if (round === 2) {
+                    const player = getCurrentPlayer();
+                    vertices[vertexCursorIndex].adjHexes.forEach(hex => { if (hex.res !== 'desert') player.res[hex.res]++; });
+                }
+                recalcVP();
+                lastSetupVertex = vertexCursorIndex;
+                edgeCursorIndex = vertices[vertexCursorIndex].edges[0];
+                state.mode = 'SETUP_PLACE_ROAD';
+                inputCooldown = 20; updateUI();
+            }
+        }
+        return;
+    }
+
+    // --- SETUP: PLACE ROAD ---
+    if (state.mode === 'SETUP_PLACE_ROAD') {
+        const candidates = vertices[lastSetupVertex].edges;
+        if (dir) {
+            let i = candidates.indexOf(edgeCursorIndex);
+            i = (dir === 'up' || dir === 'right') ? (i + 1) % candidates.length : (i - 1 + candidates.length) % candidates.length;
+            edgeCursorIndex = candidates[i];
+            inputCooldown = 15;
+        }
+        if (a) {
+            const pid = state.currentPlayer;
+            if (canPlaceRoad(edgeCursorIndex, pid, lastSetupVertex)) {
+                edges[edgeCursorIndex].owner = pid;
+                advanceSetupTurn();
                 inputCooldown = 20;
             }
         }
-
-        // Open Trade Menu
-        if (x) {
-            state.mode = 'TRADING';
-            document.getElementById('trade-overlay').style.display = 'flex';
-            inputCooldown = 20; updateUI();
-        }
-
-        // End Turn
-        if (y) {
-            state.currentPlayer = state.currentPlayer === 1 ? 2 : 1;
-            state.mode = 'PASSING';
-            document.getElementById('pass-title').innerText = `Player ${state.currentPlayer}'s Turn`;
-            document.getElementById('pass-desc').innerText = `Pass controller. Hold 'A' to begin.`;
-            document.getElementById('pass-overlay').style.display = 'flex';
-            inputCooldown = 30; updateUI();
-        }
+        return;
     }
 
-    // STATE: TRADING
+    // --- ROBBER MOVE ---
+    if (state.mode === 'ROBBER_MOVE') {
+        if (dir) { hexCursorIndex = findNearestInDirection(grid, hexCursorIndex, dir); inputCooldown = 12; }
+        if (a && hexCursorIndex !== robberHexIndex) {
+            robberHexIndex = hexCursorIndex;
+            const hex = grid[hexCursorIndex];
+            const victims = state.players.filter(p =>
+                p.id !== state.currentPlayer &&
+                hex.cornerIdx.some(vIdx => vertices[vIdx].owner === p.id) &&
+                RESOURCE_TYPES.some(r => p.res[r] > 0));
+            let msg = 'Robber moved.';
+            if (victims.length) {
+                const victim = victims[Math.floor(Math.random() * victims.length)];
+                const avail = RESOURCE_TYPES.filter(r => victim.res[r] > 0);
+                const r = avail[Math.floor(Math.random() * avail.length)];
+                victim.res[r]--;
+                getCurrentPlayer().res[r]++;
+                msg = `Stole 1 ${RESOURCE_LABELS[r]} from ${victim.name}!`;
+            }
+            state.mode = 'PLAYING';
+            inputCooldown = 20; updateUI();
+            showMessage(msg, 2500);
+        }
+        return;
+    }
+
+    // --- MAIN PLAY ---
+    if (state.mode === 'PLAYING') {
+        if (lb) { state.buildMode = cycleBuildMode(state.buildMode, -1); inputCooldown = 15; updateUI(); }
+        if (rb) { state.buildMode = cycleBuildMode(state.buildMode, 1); inputCooldown = 15; updateUI(); }
+
+        if (dir) {
+            if (state.buildMode === 'road') edgeCursorIndex = findNearestInDirection(edges, edgeCursorIndex, dir);
+            else vertexCursorIndex = findNearestInDirection(vertices, vertexCursorIndex, dir);
+            inputCooldown = 10;
+        }
+
+        if (a) {
+            const pid = state.currentPlayer;
+            const player = getCurrentPlayer();
+            if (state.buildMode === 'road') {
+                if (canPlaceRoad(edgeCursorIndex, pid, null) && canAfford(player.res, COSTS.road)) {
+                    payCost(player.res, COSTS.road);
+                    edges[edgeCursorIndex].owner = pid;
+                }
+            } else if (state.buildMode === 'settlement') {
+                if (canPlaceSettlement(vertexCursorIndex, pid, false) && canAfford(player.res, COSTS.settlement)) {
+                    payCost(player.res, COSTS.settlement);
+                    vertices[vertexCursorIndex].owner = pid;
+                    vertices[vertexCursorIndex].type = 'settlement';
+                    recalcVP(); checkWin();
+                }
+            } else if (state.buildMode === 'city') {
+                const v = vertices[vertexCursorIndex];
+                if (v.owner === pid && v.type === 'settlement' && canAfford(player.res, COSTS.city)) {
+                    payCost(player.res, COSTS.city);
+                    v.type = 'city';
+                    recalcVP(); checkWin();
+                }
+            }
+            inputCooldown = 20; updateUI();
+            if (state.mode === 'GAME_OVER') return;
+        }
+
+        if (x) {
+            state.tradeState = { activeColumn: 'give', giveIdx: 0, wantIdx: 1 };
+            renderTradeUI();
+            document.getElementById('trade-overlay').style.display = 'flex';
+            state.mode = 'TRADING';
+            inputCooldown = 20; updateUI();
+            return;
+        }
+
+        if (y) {
+            const curIdx = state.players.findIndex(p => p.id === state.currentPlayer);
+            const nextIdx = (curIdx + 1) % state.players.length;
+            state.currentPlayer = state.players[nextIdx].id;
+            state.postPassMode = 'ROLLING';
+            state.mode = 'PASSING';
+            document.getElementById('dice-result').innerText = '-';
+            showPassOverlay();
+            inputCooldown = 30; updateUI();
+            return;
+        }
+        return;
+    }
+
+    // --- TRADING ---
     if (state.mode === 'TRADING') {
         if (left || right) {
             state.tradeState.activeColumn = state.tradeState.activeColumn === 'give' ? 'want' : 'give';
-            document.getElementById('trade-give').className = `trade-col ${state.tradeState.activeColumn === 'give' ? 'active-trade-col' : ''}`;
-            document.getElementById('trade-want').className = `trade-col ${state.tradeState.activeColumn === 'want' ? 'active-trade-col' : ''}`;
-            inputCooldown = 15;
+            inputCooldown = 15; renderTradeUI();
         }
-        
-        // In a full implementation, up/down would cycle through resources to adjust amounts. 
-        // For MVP, we will cancel trade with B.
+        if (up || down) {
+            const d = up ? -1 : 1;
+            if (state.tradeState.activeColumn === 'give') state.tradeState.giveIdx = (state.tradeState.giveIdx + d + 5) % 5;
+            else state.tradeState.wantIdx = (state.tradeState.wantIdx + d + 5) % 5;
+            inputCooldown = 12; renderTradeUI();
+        }
+        if (a) {
+            const player = getCurrentPlayer();
+            const giveRes = RESOURCE_TYPES[state.tradeState.giveIdx];
+            const wantRes = RESOURCE_TYPES[state.tradeState.wantIdx];
+            if (giveRes === wantRes) flashTradeStatus('Give and Want must differ');
+            else if (player.res[giveRes] < 4) flashTradeStatus(`Not enough ${RESOURCE_LABELS[giveRes]} (${player.res[giveRes]}/4)`);
+            else {
+                player.res[giveRes] -= 4; player.res[wantRes] += 1;
+                state.mode = 'PLAYING';
+                document.getElementById('trade-overlay').style.display = 'none';
+                updateUI();
+            }
+            inputCooldown = 20;
+        }
         if (b) {
             state.mode = 'PLAYING';
             document.getElementById('trade-overlay').style.display = 'none';
             inputCooldown = 20; updateUI();
         }
+        return;
     }
 }
 
-// --- 4. RENDER LOOP ---
+// --- 7. RENDER LOOP ---
 function update() {
     pollInput();
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Hexes
-    grid.forEach(hex => {
-        const { x, y } = axialToPixel(hex.q, hex.r);
-        
-        ctx.beginPath();
-        for (let i = 0; i < 6; i++) {
-            const angle_rad = Math.PI / 180 * (60 * i - 30);
-            const hx = x + (hexSize - 2) * Math.cos(angle_rad);
-            const hy = y + (hexSize - 2) * Math.sin(angle_rad);
-            if (i === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
-        }
-        ctx.closePath();
-        ctx.fillStyle = '#3a3a3a'; ctx.fill();
-        ctx.lineWidth = 1; ctx.strokeStyle = '#222'; ctx.stroke();
-        
-        // Draw Hex Number & Resource
-        ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'center';
-        ctx.font = '14px sans-serif'; ctx.fillText(hex.num, x, y - 2);
-        ctx.font = '10px sans-serif'; ctx.fillText(hex.res, x, y + 12);
-    });
+    if (grid.length) {
+        // Hexes
+        grid.forEach(hex => {
+            const { x, y } = toScreen({ x: hex.x, y: hex.y });
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = Math.PI / 180 * (60 * i - 30);
+                const hx = x + (hexSize - 2) * Math.cos(angle);
+                const hy = y + (hexSize - 2) * Math.sin(angle);
+                if (i === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+            }
+            ctx.closePath();
+            ctx.fillStyle = HEX_COLORS[hex.res] || '#3a3a3a'; ctx.fill();
+            ctx.lineWidth = 1; ctx.strokeStyle = '#111'; ctx.stroke();
 
-    // Draw Intersections (Settlements & Cursor)
-    vertices.forEach((v, idx) => {
-        if (v.owner) {
-            ctx.beginPath();
-            ctx.arc(v.x, v.y, 10, 0, Math.PI * 2);
-            ctx.fillStyle = state.players[v.owner - 1].color;
-            ctx.fill();
-            ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
-        }
-        // Cursor
-        if (idx === cursorIndex && state.mode === 'PLAYING') {
-            ctx.beginPath();
-            ctx.arc(v.x, v.y, 14, 0, Math.PI * 2);
-            ctx.strokeStyle = '#00ffcc';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-        }
-    });
+            if (hex.num != null) {
+                ctx.fillStyle = (hex.num === 6 || hex.num === 8) ? '#ff5555' : 'rgba(0,0,0,0.75)';
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 16px sans-serif'; ctx.fillText(hex.num, x, y - 2);
+            }
+            ctx.font = '10px sans-serif'; ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.fillText(hex.res === 'desert' ? 'Desert' : RESOURCE_LABELS[hex.res], x, y + 14);
+
+            if (hex.idx === robberHexIndex) {
+                ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fill();
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif'; ctx.fillText('R', x, y + 4);
+            }
+            if (state.mode === 'ROBBER_MOVE' && hex.idx === hexCursorIndex) {
+                ctx.beginPath(); ctx.arc(x, y, hexSize - 4, 0, Math.PI * 2);
+                ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.stroke();
+            }
+        });
+
+        // Edges (roads)
+        edges.forEach((e, idx) => {
+            const p1 = toScreen(vertices[e.v1]), p2 = toScreen(vertices[e.v2]);
+            if (e.owner) {
+                ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+                ctx.strokeStyle = state.players.find(pl => pl.id === e.owner).color;
+                ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke();
+            }
+            const isEdgeCursor = idx === edgeCursorIndex &&
+                ((state.mode === 'PLAYING' && state.buildMode === 'road') || state.mode === 'SETUP_PLACE_ROAD');
+            if (isEdgeCursor) {
+                ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+                ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+                ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
+            }
+        });
+
+        // Vertices (settlements/cities)
+        vertices.forEach((v, idx) => {
+            const p = toScreen(v);
+            if (v.owner) {
+                const color = state.players.find(pl => pl.id === v.owner).color;
+                ctx.beginPath();
+                if (v.type === 'city') ctx.rect(p.x - 9, p.y - 9, 18, 18);
+                else ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+                ctx.fillStyle = color; ctx.fill();
+                ctx.lineWidth = 2; ctx.strokeStyle = '#000'; ctx.stroke();
+            }
+            const showCursor = idx === vertexCursorIndex &&
+                ((state.mode === 'PLAYING' && state.buildMode !== 'road') || state.mode === 'SETUP_PLACE_SETTLEMENT');
+            if (showCursor) {
+                ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+                ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.stroke();
+            }
+        });
+    }
 
     requestAnimationFrame(update);
 }
 
+renderPlayerSetup();
 requestAnimationFrame(update);
 </script>
 </body>
