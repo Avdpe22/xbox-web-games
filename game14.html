@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dragon Keep Command</title>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #1a1a1d; color: #e0e0e0; font-family: 'Georgia', serif; user-select: none; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let dpr = window.devicePixelRatio || 1;
+        let logicalWidth = window.innerWidth;
+        let logicalHeight = window.innerHeight;
+
+        function applyCanvasSize() {
+            dpr = window.devicePixelRatio || 1;
+            logicalWidth = window.innerWidth;
+            logicalHeight = window.innerHeight;
+            canvas.width = Math.round(logicalWidth * dpr);
+            canvas.height = Math.round(logicalHeight * dpr);
+            canvas.style.width = logicalWidth + 'px';
+            canvas.style.height = logicalHeight + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        applyCanvasSize();
+
+        let gameState = 'MENU';
+        let mode = null;
+        let menuIndex = 0;
+        let menuAxisReady = true;
+        const menuButtons = {};
+
+        const MENU_OPTIONS = [
+            { id: 'continuous', title: 'ENDLESS SIEGE', color: '#ffaa00', subtitle: 'Endless waves of dragons that keep getting tougher. Defend the realm!', hint: '1 controller' },
+            { id: 'arcade', title: 'CRUSADE', color: '#00aaff', subtitle: 'A heavily-fortified dragon lair. Wipe it out to win.', hint: '1 controller' },
+            { id: 'vs', title: 'DUEL', color: '#ff0055', subtitle: 'One player commands the knights, the other spawns the dragons.', hint: '2 controllers' }
+        ];
+
+        const ENERGY_REGEN_RATE = 0.22;
+        const PROJECTILE_SPEED = 20;
+        const PARTICLE_LIFETIME = 12;
+        const EXPLOSION_PARTICLE_COUNT = 6;
+        const SHAKE_DURATION = 10;
+        const SHAKE_MAGNITUDE = 8;
+
+        const FOOTMAN_COST = 15;
+        const CAVALRY_COST = 45;
+        const TOWER_COST = 70;
+        const DEPLOY_ZONE_MARGIN = 300;
+        const CONTINUOUS_START_LAIR = 10000;
+        const CONTINUOUS_LAIR_GROWTH = 3000;
+        const ARCADE_LEVEL = 4; 
+        const ARCADE_LAIR_HEALTH = 15000;
+
+        const VS_LAIR_HEALTH = 6000;
+        const VS_PLAYER_BASE_HEALTH = 500;
+        const P1_COST_FOOTMAN = 25, P1_COST_CAVALRY = 60, P1_COST_TOWER = 90;
+        const P2_COST_WHELP = 10, P2_COST_ARMORED = 20, P2_COST_DRAGON = 30, P2_COST_DRAKE = 90;
+
+        const PVE_UNIT_STATS = {
+            footman: { hp: 12, speed: 0.8, range: 250, prefDist: { base: 200, rand: 80 }, damage: 6, fireRate: 20, color: '#b0bec5', size: 5 },
+            cavalry: { hp: 80, speed: 0.4, range: 350, prefDist: { base: 300, rand: 50 }, damage: 30, fireRate: 50, color: '#78909c', size: 12 },
+            tower:   { hp: 250, speed: 0, range: 300, prefDist: { base: 0, rand: 0 }, damage: 10, fireRate: 8, color: '#546e7a', size: 16 }
+        };
+        const VS_UNIT_STATS = {
+            footman: { hp: 10, speed: 0.8, range: 250, prefDist: { base: 200, rand: 80 }, damage: 4, fireRate: 15, color: '#b0bec5', size: 5 },
+            cavalry: { hp: 100, speed: 0.4, range: 350, prefDist: { base: 300, rand: 50 }, damage: 18, fireRate: 45, color: '#78909c', size: 12 },
+            tower:   { hp: 300, speed: 0, range: 300, prefDist: { base: 0, rand: 0 }, damage: 8, fireRate: 6, color: '#546e7a', size: 16 }
+        };
+
+        const PVE_ENEMY_STATS = {
+            whelp:   { hp: 15, radius: 6, speed: () => 1.0 + Math.random() },
+            armored: { hp: 45, radius: 6, speed: () => 1.2 },
+            drake:   { hp: 25, radius: 7, speed: () => 2.8 },
+            dragon:  { hp: 250, radius: 18, speed: () => 0, maxSpeed: 6 }
+        };
+        const VS_ENEMY_STATS = {
+            whelp:   { hp: 45, radius: 6, speed: () => 0.8 + Math.random() },
+            armored: { hp: 100, radius: 6, speed: () => 1.0 },
+            drake:   { hp: 50, radius: 7, speed: () => 3.5 },
+            dragon:  { hp: 400, radius: 18, speed: () => 0, maxSpeed: 4.5 }
+        };
+
+        let level = 1;
+        let lairMaxHealth = CONTINUOUS_START_LAIR;
+        let lairHealth = lairMaxHealth;
+        let playerHealth = 100;
+        let playerHealthMax = 100;
+        let commandEnergy = 100;
+        let score = 0;
+        let shakeTime = 0;
+
+        let p1Energy = 100;
+        let p2Energy = 100;
+        let winner = '';
+
+        const dragonLair = { x: logicalWidth - 200, y: 0, width: 200, height: logicalHeight };
+        const playerBase = { x: 0, y: 0, width: 80, height: logicalHeight };
+
+        const enemies = [];
+        const units = [];
+        const projectiles = [];
+        const particles = [];
+
+        const crosshair = { x: logicalWidth / 4, y: logicalHeight / 2, radius: 10, speed: 10 };
+        const pveButtons = {};
+
+        const players = [
+            { id: 0, crosshair: { x: 0, y: 0, radius: 10, speed: 10 }, color: '#00aaff', buttons: {} },
+            { id: 1, crosshair: { x: 0, y: 0, radius: 10, speed: 10 }, color: '#ff0055', buttons: {} }
+        ];
+
+        let audioCtx;
+        let lastHitSoundTime = 0;
+
+        function initAudio() {
+            if (audioCtx) return;
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+            startMedievalTrack();
+        }
+
+        function playDeploySound(isHorde = false) {
+            if (!audioCtx) return;
+            let now = audioCtx.currentTime;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+
+            osc.type = isHorde ? 'sawtooth' : 'square';
+            osc.frequency.setValueAtTime(isHorde ? 100 : 400, now);
+            osc.frequency.exponentialRampToValueAtTime(isHorde ? 40 : 800, now + 0.15);
+
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.linearRampToValueAtTime(0, now + 0.15);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.15);
+        }
+
+        function playHitSound() {
+            if (!audioCtx) return;
+            let now = audioCtx.currentTime;
+            if (now - lastHitSoundTime < 0.08) return;
+            lastHitSoundTime = now;
+
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(600, now);
+            osc.frequency.exponentialRampToValueAtTime(80, now + 0.1);
+
+            gain.gain.setValueAtTime(0.03, now);
+            gain.gain.linearRampToValueAtTime(0, now + 0.1);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        }
+
+        function startMedievalTrack() {
+            const drumNotes = [55, 55, 110, 82.41, 55, 130.81, 110, 82.41];
+            let step = 0;
+
+            setInterval(() => {
+                if (gameState !== 'PLAYING') return;
+                let now = audioCtx.currentTime;
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                let filter = audioCtx.createBiquadFilter();
+
+                osc.type = 'square';
+                osc.frequency.value = drumNotes[step % drumNotes.length];
+
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(400, now);
+                filter.frequency.exponentialRampToValueAtTime(60, now + 0.15);
+
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.15);
+                step++;
+            }, 250);
+        }
+
+        function getGamepad() {
+            const gamepads = navigator.getGamepads();
+            for (let i = 0; i < gamepads.length; i++) {
+                if (gamepads[i] && gamepads[i].mapping === 'standard') return gamepads[i];
+            }
+            return null;
+        }
+
+        function getActiveGamepads() {
+            const gamepads = navigator.getGamepads();
+            let activePads = [];
+            for (let i = 0; i < gamepads.length; i++) {
+                if (gamepads[i] && gamepads[i].mapping === 'standard') {
+                    activePads.push(gamepads[i]);
+                    if (activePads.length === 2) break;
+                }
+            }
+            return activePads;
+        }
+
+        function wasJustPressed(pad, buttonIndex, stateObj, key) {
+            const btn = pad.buttons[buttonIndex];
+            const isPressed = !!btn && btn.pressed;
+            const justPressed = isPressed && !stateObj[key];
+            stateObj[key] = isPressed;
+            return justPressed;
+        }
+
+        function spawnUnit(type, x, y, stats) {
+            const s = stats[type];
+            units.push({
+                type, x, y, hp: s.hp, maxHp: s.hp, speed: s.speed, range: s.range,
+                prefDist: s.prefDist.base + Math.random() * s.prefDist.rand,
+                damage: s.damage, fireRate: s.fireRate, fireCooldown: 0, color: s.color, size: s.size, animTimer: 0
+            });
+        }
+
+        function deployFootmen(x, y, stats) {
+            spawnUnit('footman', x, y - 15, stats);
+            spawnUnit('footman', x - 12, y + 12, stats);
+            spawnUnit('footman', x + 12, y + 12, stats);
+        }
+
+        function deployCavalry(x, y, stats) {
+            spawnUnit('cavalry', x, y, stats);
+            for (let i = 0; i < 4; i++) spawnUnit('footman', x - 25 - (Math.random() * 15), y - 25 + (i * 18), stats);
+        }
+
+        function deployTower(x, y, stats) {
+            spawnUnit('tower', x, y, stats);
+        }
+
+        function makeEnemy(type, x, y, stats) {
+            const s = stats[type];
+            const enemy = { type, x, y, hp: s.hp, maxHp: s.hp, radius: s.radius, speed: s.speed(), wobble: Math.random() * Math.PI * 2, attackCooldown: 0, jumpTimer: 0 };
+            if (type === 'dragon') enemy.maxSpeed = s.maxSpeed;
+            return enemy;
+        }
+
+        function autoSpawnEnemy() {
+            const healthPercent = lairHealth / lairMaxHealth;
+            const spawnChance = (0.04 + (level * 0.015)) + ((1 - healthPercent) * 0.12);
+            if (Math.random() >= spawnChance) return;
+
+            const y = 20 + Math.random() * (logicalHeight - 40);
+            const typeRand = Math.random();
+            let type;
+            if (level >= 4 && typeRand < 0.10) type = 'dragon';
+            else if (level >= 3 && typeRand < 0.35) type = 'drake';
+            else if (level >= 2 && typeRand < 0.60) type = 'armored';
+            else type = 'whelp';
+
+            enemies.push(makeEnemy(type, dragonLair.x, y, PVE_ENEMY_STATS));
+        }
+
+        function createExplosion(x, y, color, sizeMultiplier = 1) {
+            for (let i = 0; i < EXPLOSION_PARTICLE_COUNT; i++) {
+                particles.push({
+                    x, y, vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5,
+                    life: PARTICLE_LIFETIME, color, size: (Math.random() * 3 + 1) * sizeMultiplier
+                });
+            }
+        }
+
+        function updateUnitsStep() {
+            for (let i = units.length - 1; i >= 0; i--) {
+                let u = units[i];
+                if (u.fireCooldown > 0) u.fireCooldown--;
+
+                let target = null;
+                let closestDist = u.range;
+                for (let e of enemies) {
+                    let dist = Math.hypot(u.x - e.x, u.y - e.y);
+                    if (dist < closestDist) { closestDist = dist; target = e; }
+                }
+                if (!target && (dragonLair.x - u.x) < u.range) target = dragonLair;
+
+                let isMoving = false;
+                if (target) {
+                    if (u.fireCooldown <= 0) {
+                        let targetY = target === dragonLair ? u.y + (Math.random() * 20 - 10) : target.y;
+                        let angle = Math.atan2(targetY - u.y, (target === dragonLair ? dragonLair.x : target.x) - u.x);
+                        projectiles.push({
+                            x: u.x + (u.type === 'cavalry' ? u.size : 5), y: u.y,
+                            vx: Math.cos(angle) * PROJECTILE_SPEED, vy: Math.sin(angle) * PROJECTILE_SPEED,
+                            damage: u.damage, isExplosive: u.type === 'cavalry'
+                        });
+                        u.fireCooldown = u.fireRate;
+                    }
+                } else if (u.speed > 0 && (dragonLair.x - u.x) > u.prefDist) {
+                    u.x += u.speed; isMoving = true;
+                }
+
+                u.animTimer = isMoving ? u.animTimer + (u.type === 'footman' ? 0.4 : 0.2) : 0;
+
+                if (u.hp <= 0) {
+                    createExplosion(u.x, u.y, '#aa3333', 1.5);
+                    units.splice(i, 1);
+                }
+            }
+        }
+
+        function updateProjectilesStep() {
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                let p = projectiles[i];
+                p.x += p.vx; p.y += p.vy;
+
+                let hit = false;
+                if (p.x > dragonLair.x) {
+                    lairHealth -= p.damage;
+                    createExplosion(p.x, p.y, '#ff4400', 1.0);
+                    playHitSound();
+                    hit = true;
+                } else {
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        let e = enemies[j];
+                        if (Math.hypot(p.x - e.x, p.y - e.y) < e.radius + 3) {
+                            e.hp -= p.damage;
+                            hit = true;
+                            if (p.isExplosive) createExplosion(p.x, p.y, '#ffaa00', 1.5);
+                            else createExplosion(p.x, p.y, e.type === 'armored' && e.hp > 0 ? '#aaaaaa' : '#ff4444', 0.5);
+
+                            playHitSound();
+                            if (e.hp <= 0) {
+                                score += (e.type === 'dragon' ? 5000 : (e.type === 'armored' ? 2000 : 1000));
+                                enemies.splice(j, 1);
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (hit || p.x > logicalWidth || p.x < 0 || p.y < 0 || p.y > logicalHeight) projectiles.splice(i, 1);
+            }
+        }
+
+        function updateEnemiesStep(baseDamageFor) {
+            let breached = false;
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                let e = enemies[i];
+                let aggroUnit = null;
+                let closestDist = e.type === 'drake' ? 350 : 250;
+                let eatingUnit = null;
+
+                for (let u of units) {
+                    let dist = Math.hypot(u.x - e.x, u.y - e.y);
+                    if (dist < e.radius + u.size + 2) { eatingUnit = u; break; }
+                    if (dist < closestDist) { closestDist = dist; aggroUnit = u; }
+                }
+
+                if (e.type === 'dragon') {
+                    e.jumpTimer++;
+                    if (e.jumpTimer > 90) {
+                        e.speed = e.maxSpeed;
+                        if (e.jumpTimer > 110) e.jumpTimer = 0;
+                    } else {
+                        e.speed *= 0.85;
+                    }
+                }
+
+                if (eatingUnit) {
+                    if (e.attackCooldown <= 0) {
+                        eatingUnit.hp -= (e.type === 'dragon' ? 25 : (e.type === 'drake' ? 4 : 2));
+                        e.attackCooldown = e.type === 'dragon' ? 30 : 8;
+                        createExplosion(e.x - 5, e.y, '#ff6600', 0.5);
+                    } else {
+                        e.attackCooldown--;
+                    }
+                } else if (aggroUnit) {
+                    let angle = Math.atan2(aggroUnit.y - e.y, aggroUnit.x - e.x);
+                    e.x += Math.cos(angle) * e.speed;
+                    e.y += Math.sin(angle) * e.speed;
+                    if (e.type !== 'dragon') {
+                        e.x += Math.cos(e.wobble) * 0.5;
+                        e.y += Math.sin(e.wobble) * 0.5;
+                        e.wobble += 0.3;
+                    }
+                } else {
+                    e.x -= e.speed;
+                    if (e.type !== 'dragon') {
+                        e.y += Math.sin(e.wobble) * 1.5;
+                        e.wobble += 0.2;
+                    }
+                }
+
+                if (e.x < playerBase.width) {
+                    enemies.splice(i, 1);
+                    playerHealth -= baseDamageFor(e.type);
+                    shakeTime = e.type === 'dragon' ? SHAKE_DURATION * 1.5 : SHAKE_DURATION;
+                    if (playerHealth <= 0) { playerHealth = 0; breached = true; }
+                }
+            }
+            return breached;
+        }
+
+        function updateParticlesStep() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].x += particles[i].vx;
+                particles[i].y += particles[i].vy;
+                particles[i].life--;
+                if (particles[i].life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        const pveDamageFor = (type) => type === 'dragon' ? 25 : 5;
+        const vsDamageFor = (type) => type === 'dragon' ? 50 : (type === 'armored' ? 10 : 5);
+
+        function resetPve(m, fullReset) {
+            if (fullReset) {
+                score = 0;
+                if (m === 'continuous') {
+                    level = 1;
+                    lairMaxHealth = CONTINUOUS_START_LAIR;
+                } else {
+                    level = ARCADE_LEVEL;
+                    lairMaxHealth = ARCADE_LAIR_HEALTH;
+                }
+            } else {
+                level++;
+                lairMaxHealth += CONTINUOUS_LAIR_GROWTH;
+            }
+            lairHealth = lairMaxHealth;
+            playerHealth = 100; playerHealthMax = 100;
+            commandEnergy = 100;
+            shakeTime = 0;
+            enemies.length = 0; units.length = 0; projectiles.length = 0; particles.length = 0;
+            dragonLair.width = 200; dragonLair.x = logicalWidth - 200; dragonLair.height = logicalHeight;
+            playerBase.width = 80; playerBase.height = logicalHeight;
+            crosshair.x = logicalWidth / 4; crosshair.y = logicalHeight / 2; crosshair.radius = 10; crosshair.speed = 10;
+        }
+
+        function resetVs() {
+            lairMaxHealth = VS_LAIR_HEALTH; lairHealth = lairMaxHealth;
+            playerHealthMax = VS_PLAYER_BASE_HEALTH; playerHealth = VS_PLAYER_BASE_HEALTH;
+            p1Energy = 100; p2Energy = 100;
+            winner = '';
+            enemies.length = 0; units.length = 0; projectiles.length = 0; particles.length = 0;
+            dragonLair.width = 150; dragonLair.x = logicalWidth - 150; dragonLair.height = logicalHeight;
+            playerBase.width = 80; playerBase.height = logicalHeight;
+            players[0].crosshair.x = logicalWidth / 4; players[0].crosshair.y = logicalHeight / 2;
+            players[1].crosshair.x = logicalWidth - 200; players[1].crosshair.y = logicalHeight / 2;
+        }
+
+        function startMode(id) {
+            mode = id;
+            initAudio();
+            if (id === 'vs') resetVs(); else resetPve(id, true);
+            gameState = 'PLAYING';
+        }
+
+        function returnToMenu() {
+            gameState = 'MENU';
+            mode = null;
+        }
+
+        function selectMenuOption(idx) {
+            const opt = MENU_OPTIONS[idx];
+            if (!opt) return;
+            menuIndex = idx;
+            startMode(opt.id);
+        }
+
+        function handleContinuePress() {
+            if (mode === 'vs') {
+                if (gameState === 'VS_OVER') { resetVs(); gameState = 'PLAYING'; }
+            } else {
+                if (gameState === 'GAME_OVER' || gameState === 'VICTORY') { resetPve(mode, true); gameState = 'PLAYING'; }
+                else if (gameState === 'LEVEL_CLEAR') { resetPve(mode, false); gameState = 'PLAYING'; }
+            }
+        }
+
+        function updatePve() {
+            commandEnergy = Math.min(100, commandEnergy + ENERGY_REGEN_RATE);
+            autoSpawnEnemy();
+
+            updateUnitsStep();
+            updateProjectilesStep();
+            const breached = updateEnemiesStep(pveDamageFor);
+            updateParticlesStep();
+
+            if (breached) gameState = 'GAME_OVER';
+            else if (lairHealth <= 0) gameState = (mode === 'continuous') ? 'LEVEL_CLEAR' : 'VICTORY';
+        }
+
+        function updateVs() {
+            p1Energy = Math.min(100, p1Energy + ENERGY_REGEN_RATE);
+            p2Energy = Math.min(100, p2Energy + ENERGY_REGEN_RATE);
+
+            updateUnitsStep();
+            updateProjectilesStep();
+            const breached = updateEnemiesStep(vsDamageFor);
+            updateParticlesStep();
+
+            if (breached) { winner = 'PLAYER 2 (DRAGONS)'; gameState = 'VS_OVER'; }
+            else if (lairHealth <= 0) { winner = 'PLAYER 1 (KNIGHTS)'; gameState = 'VS_OVER'; }
+        }
+
+        function tryDeploy(cost, deployFn) {
+            if (commandEnergy < cost) return false;
+            commandEnergy -= cost;
+            deployFn();
+            playDeploySound();
+            return true;
+        }
+
+        function handleMenuInput(pad) {
+            if (!pad) return;
+            const ly = pad.axes[1];
+            const dpadUp = pad.buttons[12] && pad.buttons[12].pressed;
+            const dpadDown = pad.buttons[13] && pad.buttons[13].pressed;
+            const movingUp = ly < -0.5 || dpadUp;
+            const movingDown = ly > 0.5 || dpadDown;
+
+            if (!movingUp && !movingDown) menuAxisReady = true;
+            else if (menuAxisReady) {
+                menuIndex = (menuIndex + (movingDown ? 1 : -1) + MENU_OPTIONS.length) % MENU_OPTIONS.length;
+                menuAxisReady = false;
+            }
+
+            if (wasJustPressed(pad, 0, menuButtons, 'A')) selectMenuOption(menuIndex);
+        }
+
+        function handlePveInput(pad) {
+            if (!pad) return;
+            if (wasJustPressed(pad, 1, pveButtons, 'B')) { returnToMenu(); return; }
+
+            if (wasJustPressed(pad, 0, pveButtons, 'A')) {
+                initAudio();
+                if (gameState === 'GAME_OVER' || gameState === 'VICTORY') { resetPve(mode, true); gameState = 'PLAYING'; }
+                else if (gameState === 'LEVEL_CLEAR') { resetPve(mode, false); gameState = 'PLAYING'; }
+                else if (gameState === 'PLAYING') tryDeploy(FOOTMAN_COST, () => deployFootmen(crosshair.x, crosshair.y, PVE_UNIT_STATS));
+            }
+
+            if (gameState !== 'PLAYING') {
+                wasJustPressed(pad, 2, pveButtons, 'X');
+                wasJustPressed(pad, 3, pveButtons, 'Y');
+                return;
+            }
+
+            const lx = pad.axes[0]; const ly = pad.axes[1]; const deadzone = 0.2;
+            if (Math.abs(lx) > deadzone) crosshair.x += lx * crosshair.speed;
+            if (Math.abs(ly) > deadzone) crosshair.y += ly * crosshair.speed;
+
+            const maxDeployX = logicalWidth - DEPLOY_ZONE_MARGIN;
+            crosshair.x = Math.max(playerBase.width + 10, Math.min(maxDeployX, crosshair.x));
+            crosshair.y = Math.max(10, Math.min(logicalHeight - 10, crosshair.y));
+
+            if (wasJustPressed(pad, 2, pveButtons, 'X')) tryDeploy(CAVALRY_COST, () => deployCavalry(crosshair.x, crosshair.y, PVE_UNIT_STATS));
+            if (wasJustPressed(pad, 3, pveButtons, 'Y')) tryDeploy(TOWER_COST, () => deployTower(crosshair.x, crosshair.y, PVE_UNIT_STATS));
+        }
+
+        function handleVsInput(pads) {
+            players.forEach((player, index) => {
+                const pad = pads[index];
+                if (!pad) return;
+
+                if (wasJustPressed(pad, 1, player.buttons, 'B')) { returnToMenu(); return; }
+
+                if (wasJustPressed(pad, 0, player.buttons, 'A')) {
+                    initAudio();
+                    if (gameState === 'VS_OVER') { resetVs(); gameState = 'PLAYING'; }
+                }
+
+                if (gameState !== 'PLAYING') return;
+
+                const lx = pad.axes[0]; const ly = pad.axes[1]; const deadzone = 0.2;
+                if (Math.abs(lx) > deadzone) player.crosshair.x += lx * player.crosshair.speed;
+                if (Math.abs(ly) > deadzone) player.crosshair.y += ly * player.crosshair.speed;
+                player.crosshair.y = Math.max(10, Math.min(logicalHeight - 10, player.crosshair.y));
+
+                if (index === 0) {
+                    player.crosshair.x = Math.max(playerBase.width + 10, Math.min(logicalWidth / 2 - 50, player.crosshair.x));
+
+                    if (wasJustPressed(pad, 4, player.buttons, 'LB') && p1Energy >= P1_COST_FOOTMAN) {
+                        p1Energy -= P1_COST_FOOTMAN; deployFootmen(player.crosshair.x, player.crosshair.y, VS_UNIT_STATS); playDeploySound();
+                    }
+                    if (wasJustPressed(pad, 6, player.buttons, 'LT') && p1Energy >= P1_COST_CAVALRY) {
+                        p1Energy -= P1_COST_CAVALRY; deployCavalry(player.crosshair.x, player.crosshair.y, VS_UNIT_STATS); playDeploySound();
+                    }
+                    if (wasJustPressed(pad, 5, player.buttons, 'RB') && p1Energy >= P1_COST_TOWER) {
+                        p1Energy -= P1_COST_TOWER; deployTower(player.crosshair.x, player.crosshair.y, VS_UNIT_STATS); playDeploySound();
+                    }
+                } else {
+                    player.crosshair.x = Math.max(dragonLair.x - 100, Math.min(logicalWidth - 10, player.crosshair.x));
+
+                    if (wasJustPressed(pad, 4, player.buttons, 'LB') && p2Energy >= P2_COST_WHELP) {
+                        p2Energy -= P2_COST_WHELP;
+                        for (let i = 0; i < 5; i++) enemies.push(makeEnemy('whelp', dragonLair.x - 10, player.crosshair.y + (Math.random() * 60 - 30), VS_ENEMY_STATS));
+                        playDeploySound(true);
+                    }
+                    if (wasJustPressed(pad, 6, player.buttons, 'LT') && p2Energy >= P2_COST_ARMORED) {
+                        p2Energy -= P2_COST_ARMORED;
+                        for (let i = 0; i < 2; i++) enemies.push(makeEnemy('armored', dragonLair.x - 10, player.crosshair.y + (Math.random() * 60 - 30), VS_ENEMY_STATS));
+                        playDeploySound(true);
+                    }
+                    if (wasJustPressed(pad, 5, player.buttons, 'RB') && p2Energy >= P2_COST_DRAGON) {
+                        p2Energy -= P2_COST_DRAGON;
+                        enemies.push(makeEnemy('dragon', dragonLair.x - 10, player.crosshair.y + (Math.random() * 40 - 20), VS_ENEMY_STATS));
+                        playDeploySound(true);
+                    }
+                    if (wasJustPressed(pad, 7, player.buttons, 'RT') && p2Energy >= P2_COST_DRAKE) {
+                        p2Energy -= P2_COST_DRAKE;
+                        for (let i = 0; i < 5; i++) enemies.push(makeEnemy('drake', dragonLair.x - 10, player.crosshair.y + (Math.random() * 60 - 30), VS_ENEMY_STATS));
+                        playDeploySound(true);
+                    }
+                }
+            });
+        }
+
+        function drawTextCentered(text, yOffset, size, color) {
+            ctx.fillStyle = color; ctx.font = `bold ${size}px Georgia`;
+            ctx.textAlign = 'center'; ctx.fillText(text, logicalWidth / 2, logicalHeight / 2 + yOffset);
+            ctx.textAlign = 'left';
+        }
+
+        function drawMuzzleFlash(u, cooldownWindow, offsetX, offsetY, radius, color) {
+            if (u.fireCooldown > u.fireRate - cooldownWindow) {
+                ctx.fillStyle = color;
+                ctx.beginPath(); ctx.arc(u.x + offsetX, u.y + offsetY, radius, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+
+        function drawUnit(u) {
+            if (u.type === 'footman') {
+                let legOffset = Math.sin(u.animTimer) * 4;
+                ctx.fillStyle = '#455a64'; 
+                ctx.beginPath(); ctx.ellipse(u.x - 1 + legOffset, u.y - 4, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(u.x - 1 - legOffset, u.y + 4, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = u.color; 
+                ctx.beginPath(); ctx.ellipse(u.x, u.y, 4, 6, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.fillRect(u.x, u.y - 1, 10, 2); 
+                ctx.fillStyle = '#cfd8dc'; ctx.beginPath(); ctx.arc(u.x, u.y, 4, 0, Math.PI * 2); ctx.fill(); 
+                drawMuzzleFlash(u, 3, 11, 0, 3, '#ffcc00');
+            } else if (u.type === 'cavalry') {
+                let trotOffset = Math.sin(u.animTimer * 2) * 2;
+                ctx.fillStyle = '#5d4037'; ctx.fillRect(u.x - u.size, u.y - u.size + trotOffset, u.size * 2, u.size * 2 - 4); 
+                ctx.fillStyle = u.color; ctx.fillRect(u.x - u.size + 4, u.y - u.size + 2 + trotOffset, u.size + 4, u.size - 2); 
+                ctx.fillStyle = '#b0bec5'; ctx.beginPath(); ctx.arc(u.x, u.y + trotOffset, u.size - 5, 0, Math.PI * 2); ctx.fill(); 
+                ctx.fillStyle = '#eceff1'; ctx.fillRect(u.x, u.y - 1 + trotOffset, u.size + 8, 2); 
+                drawMuzzleFlash(u, 4, u.size + 10, trotOffset, 4, '#ff6600');
+            } else if (u.type === 'tower') {
+                ctx.fillStyle = u.color;
+                ctx.fillRect(u.x - u.size, u.y - u.size, u.size * 2, u.size * 2);
+                ctx.fillStyle = '#37474f';
+                for(let i = -u.size; i <= u.size; i+=8) ctx.fillRect(u.x + i, u.y - u.size - 4, 4, 4); 
+                ctx.fillStyle = '#263238'; ctx.fillRect(u.x, u.y - 4, 12, 8); 
+                drawMuzzleFlash(u, 2, 16, 0, 5, '#ffaa00');
+            }
+            if (u.hp < u.maxHp) {
+                ctx.fillStyle = 'red'; ctx.fillRect(u.x - u.size, u.y - u.size - 6, u.size * 2, 2);
+                ctx.fillStyle = '#00ff88'; ctx.fillRect(u.x - u.size, u.y - u.size - 6, (u.size * 2) * (u.hp / u.maxHp), 2);
+            }
+        }
+
+        function drawEnemy(e) {
+            if (e.type === 'armored') {
+                ctx.fillStyle = `rgba(100, 100, 100, ${0.4 + (e.hp / e.maxHp) * 0.4})`;
+                ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 4, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = '#aaaaaa'; ctx.lineWidth = 2; ctx.stroke();
+            }
+            if (e.type === 'drake' || e.type === 'dragon') {
+                ctx.strokeStyle = '#8e0000'; ctx.lineWidth = e.type === 'dragon' ? 4 : 2;
+                let wingExt = e.type === 'dragon' && e.jumpTimer > 90 ? 25 : 10;
+                let flap = Math.sin(Date.now() * 0.01) * 10;
+                ctx.beginPath();
+                ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + wingExt, e.y - e.radius - flap);
+                ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + wingExt, e.y + e.radius + flap);
+                ctx.stroke();
+            } else {
+                ctx.strokeStyle = '#cc3300'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(e.x, e.y);
+                ctx.lineTo(e.x + e.radius + 4, e.y + Math.sin(e.wobble) * 4);
+                ctx.lineTo(e.x + e.radius + 8, e.y + Math.sin(e.wobble - 1) * 6); ctx.stroke();
+            }
+            ctx.fillStyle = e.type === 'dragon' ? '#660000' : '#d84315';
+            ctx.beginPath(); ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2); ctx.fill();
+            let eyeOffset = e.type === 'dragon' ? 4 : 2;
+            ctx.fillStyle = 'yellow'; ctx.beginPath(); ctx.arc(e.x - eyeOffset, e.y - eyeOffset, eyeOffset, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(e.x - (eyeOffset + 0.5), e.y - eyeOffset, eyeOffset / 2, 0, Math.PI * 2); ctx.fill();
+
+            if (e.type === 'dragon') {
+                ctx.fillStyle = 'red'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, e.radius * 2, 3);
+                ctx.fillStyle = '#ffaa00'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, (e.radius * 2) * (e.hp / e.maxHp), 3);
+            }
+        }
+
+        function drawProjectiles() {
+            for (let p of projectiles) {
+                ctx.strokeStyle = p.isExplosive ? '#ffaa00' : '#bbdefb'; ctx.lineWidth = p.isExplosive ? 3 : 1.5;
+                ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.7, p.y - p.vy * 0.7); ctx.stroke();
+            }
+        }
+
+        function drawParticles() {
+            for (let p of particles) {
+                ctx.fillStyle = p.color; ctx.globalAlpha = p.life / PARTICLE_LIFETIME;
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+        }
+
+        function drawCrosshair(cx, cy, radius, color) {
+            ctx.strokeStyle = color; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.moveTo(cx - radius - 4, cy); ctx.lineTo(cx + radius + 4, cy);
+            ctx.moveTo(cx, cy - radius - 4); ctx.lineTo(cx, cy + radius + 4);
+            ctx.stroke();
+        }
+
+        function drawNest() {
+            ctx.fillStyle = '#211010'; ctx.fillRect(dragonLair.x, dragonLair.y, dragonLair.width, dragonLair.height);
+            for (let i = 0; i < 15; i++) {
+                ctx.fillStyle = `rgba(180, 50, 0, ${0.1 + Math.sin(Date.now() * 0.001 + i) * 0.1})`;
+                ctx.beginPath(); ctx.arc(dragonLair.x + (i % 3) * 50, i * 80, 60, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#100505'; 
+                ctx.beginPath(); ctx.moveTo(dragonLair.x + 20, i * 80); ctx.lineTo(dragonLair.x + 80, (i * 80) - 30); ctx.lineTo(dragonLair.x + 100, i * 80); ctx.fill();
+            }
+        }
+
+        function drawNestHealthBar() {
+            ctx.fillStyle = '#ff4400';
+            let healthPercent = lairHealth / lairMaxHealth;
+            ctx.fillRect(dragonLair.x + 20, 80, 160 * healthPercent, 15);
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(dragonLair.x + 20, 80, 160, 15);
+            ctx.fillStyle = 'white'; ctx.font = 'bold 12px Georgia';
+            ctx.fillText(`Lair Integrity: ${Math.floor(healthPercent * 100)}%`, dragonLair.x + 30, 70);
+        }
+
+        function drawPlayerBase() {
+            ctx.fillStyle = '#37474f'; ctx.fillRect(playerBase.x, playerBase.y, playerBase.width, playerBase.height);
+            ctx.fillStyle = '#263238'; 
+            for (let i = 0; i < logicalHeight; i += 40) ctx.fillRect(playerBase.width - 15, i, 15, 20);
+            ctx.fillStyle = `rgba(255, 0, 0, ${1 - (playerHealth / playerHealthMax)})`;
+            ctx.fillRect(playerBase.width, 0, 10, logicalHeight);
+        }
+
+        function MENU_BUTTON_BOX() {
+            return { x: logicalWidth - 120, y: 10, w: 110, h: 28 };
+        }
+
+        function drawMenuButton() {
+            const b = MENU_BUTTON_BOX();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(b.x, b.y, b.w, b.h);
+            ctx.strokeStyle = '#555'; ctx.strokeRect(b.x, b.y, b.w, b.h);
+            ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Georgia'; ctx.textAlign = 'center';
+            ctx.fillText('☰ RETREAT [B]', b.x + b.w / 2, b.y + 18);
+            ctx.textAlign = 'left';
+        }
+
+        function hitTestMenuButton(x, y) {
+            const b = MENU_BUTTON_BOX();
+            return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+        }
+
+        function getMenuCardBoxes() {
+            const gap = Math.max(20, logicalWidth * 0.02);
+            const cardW = Math.min(300, (logicalWidth - gap * 4) / 3);
+            const cardH = Math.min(240, logicalHeight * 0.42);
+            const totalW = cardW * 3 + gap * 2;
+            const startX = (logicalWidth - totalW) / 2;
+            const y = logicalHeight / 2 - cardH / 2 + 30;
+            return MENU_OPTIONS.map((opt, i) => ({ opt, x: startX + i * (cardW + gap), y, w: cardW, h: cardH }));
+        }
+
+        function hitTestMenuCards(x, y) {
+            const boxes = getMenuCardBoxes();
+            for (let i = 0; i < boxes.length; i++) {
+                const b = boxes[i];
+                if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return i;
+            }
+            return -1;
+        }
+
+        function wrapText(text, cx, y, maxWidth, lineHeight) {
+            const words = text.split(' ');
+            let line = '';
+            let yy = y;
+            for (let n = 0; n < words.length; n++) {
+                const testLine = line + words[n] + ' ';
+                if (ctx.measureText(testLine).width > maxWidth && n > 0) {
+                    ctx.fillText(line, cx, yy);
+                    line = words[n] + ' ';
+                    yy += lineHeight;
+                } else {
+                    line = testLine;
+                }
+            }
+            ctx.fillText(line, cx, yy);
+        }
+
+        function drawMenu(pad) {
+            ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'white'; ctx.font = 'bold 48px Georgia';
+            ctx.fillText('DRAGON KEEP COMMAND', logicalWidth / 2, 120);
+            ctx.font = '20px Georgia'; ctx.fillStyle = '#aaaaaa';
+            ctx.fillText('Choose a mode', logicalWidth / 2, 160);
+
+            const boxes = getMenuCardBoxes();
+            boxes.forEach((b, i) => {
+                const selected = i === menuIndex;
+                ctx.fillStyle = selected ? 'rgba(255, 170, 0, 0.12)' : 'rgba(255, 255, 255, 0.05)';
+                ctx.fillRect(b.x, b.y, b.w, b.h);
+                ctx.strokeStyle = selected ? b.opt.color : '#333';
+                ctx.lineWidth = selected ? 3 : 2;
+                ctx.strokeRect(b.x, b.y, b.w, b.h);
+
+                ctx.textAlign = 'center';
+                ctx.fillStyle = b.opt.color; ctx.font = 'bold 26px Georgia';
+                ctx.fillText(b.opt.title, b.x + b.w / 2, b.y + 60);
+                ctx.fillStyle = '#dddddd'; ctx.font = '15px Georgia';
+                wrapText(b.opt.subtitle, b.x + b.w / 2, b.y + 100, b.w - 40, 20);
+                ctx.fillStyle = '#888888'; ctx.font = '13px Georgia';
+                ctx.fillText(b.opt.hint, b.x + b.w / 2, b.y + b.h - 24);
+            });
+
+            ctx.fillStyle = pad ? '#00aaff' : 'yellow';
+            ctx.font = '18px Georgia';
+            ctx.fillText(pad ? 'Move: Left Stick / D-Pad  •  Select: [A]' : 'Connect a controller, or click a mode / use arrow keys + Enter', logicalWidth / 2, logicalHeight - 60);
+            ctx.textAlign = 'left';
+        }
+
+        function drawPveFrame(pad) {
+            ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+
+            if (gameState === 'GAME_OVER') {
+                drawTextCentered('CASTLE WALLS BREACHED', -40, 60, '#ff4444');
+                drawTextCentered(mode === 'continuous' ? `Reached Level ${level} - Final Score: ${score.toLocaleString()}` : `Final Score: ${score.toLocaleString()}`, 20, 22, 'white');
+                drawTextCentered(pad ? 'Press [A] to Retry   •   [B] Menu' : 'Connect a controller, or press Enter to retry / Esc for Menu', 90, 18, '#00aaff');
+                drawMenuButton();
+                return;
+            }
+            if (gameState === 'VICTORY') {
+                drawTextCentered('LAIR DESTROYED!', -40, 60, '#44ff44');
+                drawTextCentered(`Final Score: ${score.toLocaleString()}`, 20, 22, 'white');
+                drawTextCentered(pad ? 'Press [A] to Play Again   •   [B] Menu' : 'Press Enter to play again / Esc for Menu', 90, 18, '#00aaff');
+                drawMenuButton();
+                return;
+            }
+            if (gameState === 'LEVEL_CLEAR') {
+                drawTextCentered(`WAVE ${level} DEFENDED!`, -40, 60, '#44ff44');
+                drawTextCentered('The dragons are enraging. They will return stronger.', 20, 20, '#aaaaaa');
+                drawTextCentered(pad ? 'Press [A] to Continue   •   [B] Menu' : 'Press Enter to continue / Esc for Menu', 90, 18, '#00aaff');
+                drawMenuButton();
+                return;
+            }
+
+            ctx.save();
+            if (shakeTime > 0) {
+                const shakeMag = SHAKE_MAGNITUDE * (shakeTime / SHAKE_DURATION);
+                ctx.translate((Math.random() - 0.5) * shakeMag, (Math.random() - 0.5) * shakeMag);
+                shakeTime--;
+            }
+
+            drawPlayerBase();
+
+            const deployLineX = logicalWidth - DEPLOY_ZONE_MARGIN;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.beginPath(); ctx.moveTo(deployLineX, 0); ctx.lineTo(deployLineX, logicalHeight); ctx.stroke();
+
+            drawNest();
+            drawNestHealthBar();
+
+            for (let u of units) drawUnit(u);
+            drawProjectiles();
+            for (let e of enemies) drawEnemy(e);
+            drawParticles();
+            drawCrosshair(crosshair.x, crosshair.y, crosshair.radius, 'white');
+
+            ctx.fillStyle = 'white'; ctx.font = 'bold 20px Georgia';
+            const modeLabel = mode === 'continuous' ? `Level ${level} | ` : '';
+            ctx.fillText(`${modeLabel}Score: ${score.toLocaleString()}`, 100, 30);
+            ctx.fillStyle = playerHealth > 30 ? '#44ff44' : '#ff4444'; ctx.fillText(`Castle HP: ${playerHealth}%`, 100, 55);
+
+            ctx.fillStyle = 'white'; ctx.font = '14px Georgia'; ctx.fillText('Gold:', 100, 85);
+            ctx.strokeStyle = 'white'; ctx.strokeRect(160, 72, 150, 15);
+            ctx.fillStyle = commandEnergy >= TOWER_COST ? '#00aaff' : (commandEnergy >= FOOTMAN_COST ? '#ffaa00' : '#ff4444');
+            ctx.fillRect(162, 74, 146 * (commandEnergy / 100), 11);
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; ctx.fillRect(90, 100, 260, 85);
+            ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Georgia';
+            ctx.fillText('Deploy Knights (Costs Gold):', 100, 115);
+            ctx.fillStyle = commandEnergy >= FOOTMAN_COST ? '#00aaff' : '#555'; ctx.fillText(`[A] 3x Footmen (-${FOOTMAN_COST})`, 100, 135);
+            ctx.fillStyle = commandEnergy >= CAVALRY_COST ? '#ffaa00' : '#555'; ctx.fillText(`[X] Cavalry Unit (-${CAVALRY_COST})`, 100, 155);
+            ctx.fillStyle = commandEnergy >= TOWER_COST ? '#ff4444' : '#555'; ctx.fillText(`[Y] Stone Tower (-${TOWER_COST})`, 100, 175);
+
+            ctx.restore();
+            drawMenuButton();
+
+            if (!pad) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(0, 0, logicalWidth, logicalHeight);
+                drawTextCentered('Controller Disconnected', 0, 40, 'yellow');
+            }
+        }
+
+        function drawVsFrame(pads) {
+            ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+
+            if (gameState === 'VS_OVER') {
+                drawTextCentered(`${winner} WINS!`, -40, 55, winner.includes('DRAGONS') ? '#ff4444' : '#44ff44');
+                drawTextCentered('Press [A] to Rematch   •   [B] Menu', 40, 18, '#00aaff');
+                drawMenuButton();
+                return;
+            }
+
+            ctx.save();
+            if (shakeTime > 0) {
+                const shakeMag = SHAKE_MAGNITUDE * (shakeTime / SHAKE_DURATION);
+                ctx.translate((Math.random() - 0.5) * shakeMag, (Math.random() - 0.5) * shakeMag);
+                shakeTime--;
+            }
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'; ctx.beginPath(); ctx.moveTo(logicalWidth / 2, 0); ctx.lineTo(logicalWidth / 2, logicalHeight); ctx.stroke();
+
+            drawPlayerBase();
+            drawNest();
+
+            for (let u of units) drawUnit(u);
+            drawProjectiles();
+            for (let e of enemies) drawEnemy(e);
+            drawParticles();
+
+            players.forEach((player, idx) => {
+                if (pads[idx]) drawCrosshair(player.crosshair.x, player.crosshair.y, player.crosshair.radius, player.color);
+            });
+
+            ctx.fillStyle = 'white'; ctx.font = 'bold 20px Georgia'; ctx.fillText('P1 (KNIGHTS)', 100, 30);
+            ctx.fillStyle = playerHealth > (playerHealthMax * 0.3) ? '#44ff44' : '#ff4444';
+            ctx.fillText(`Castle HP: ${Math.max(0, playerHealth)}/${playerHealthMax}`, 100, 55);
+            ctx.fillStyle = 'white'; ctx.font = '14px Georgia'; ctx.fillText('Gold:', 100, 85);
+            ctx.strokeStyle = 'white'; ctx.strokeRect(160, 72, 150, 15);
+            ctx.fillStyle = '#00aaff'; ctx.fillRect(162, 74, 146 * (p1Energy / 100), 11);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; ctx.fillRect(90, 100, 260, 85);
+            ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Georgia'; ctx.fillText('Deploy Knights:', 100, 115);
+            ctx.fillStyle = p1Energy >= P1_COST_FOOTMAN ? '#44ff44' : '#555'; ctx.fillText(`[LB] 3x Footmen (-${P1_COST_FOOTMAN})`, 100, 135);
+            ctx.fillStyle = p1Energy >= P1_COST_CAVALRY ? '#ffaa00' : '#555'; ctx.fillText(`[LT] Cavalry Unit (-${P1_COST_CAVALRY})`, 100, 155);
+            ctx.fillStyle = p1Energy >= P1_COST_TOWER ? '#ff4444' : '#555'; ctx.fillText(`[RB] Stone Tower (-${P1_COST_TOWER})`, 100, 175);
+
+            let p2Offset = logicalWidth - 320;
+            ctx.fillStyle = 'white'; ctx.font = 'bold 20px Georgia'; ctx.fillText('P2 (DRAGONS)', p2Offset, 30);
+            ctx.fillStyle = lairHealth > (lairMaxHealth * 0.3) ? '#ff4400' : '#ff4444';
+            ctx.fillText(`Lair HP: ${Math.max(0, lairHealth)}/${lairMaxHealth}`, p2Offset, 55);
+            ctx.fillStyle = 'white'; ctx.font = '14px Georgia'; ctx.fillText('Mana:', p2Offset, 85);
+            ctx.strokeStyle = 'white'; ctx.strokeRect(p2Offset + 80, 72, 150, 15);
+            ctx.fillStyle = '#ff0055'; ctx.fillRect(p2Offset + 82, 74, 146 * (p2Energy / 100), 11);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; ctx.fillRect(p2Offset, 100, 260, 105);
+            ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Georgia'; ctx.fillText('Spawn Dragons:', p2Offset + 10, 115);
+            ctx.fillStyle = p2Energy >= P2_COST_WHELP ? '#ff88aa' : '#555'; ctx.fillText(`[LB] 5x Whelps (-${P2_COST_WHELP})`, p2Offset + 10, 135);
+            ctx.fillStyle = p2Energy >= P2_COST_ARMORED ? '#aaaaaa' : '#555'; ctx.fillText(`[LT] 2x Armored Whelps (-${P2_COST_ARMORED})`, p2Offset + 10, 155);
+            ctx.fillStyle = p2Energy >= P2_COST_DRAGON ? '#ffaa00' : '#555'; ctx.fillText(`[RB] Giant Ancient Dragon (-${P2_COST_DRAGON})`, p2Offset + 10, 175);
+            ctx.fillStyle = p2Energy >= P2_COST_DRAKE ? '#ff4444' : '#555'; ctx.fillText(`[RT] 5x Speed Drakes (-${P2_COST_DRAKE})`, p2Offset + 10, 195);
+
+            ctx.restore();
+            drawMenuButton();
+
+            if (pads.length < 2) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(0, 0, logicalWidth, logicalHeight);
+                drawTextCentered('Waiting for 2 Controllers...', 0, 40, 'yellow');
+                drawTextCentered(`(${pads.length}/2 Connected)`, 40, 20, '#aaaaaa');
+            }
+        }
+
+        function getCanvasCoords(evt) {
+            const rect = canvas.getBoundingClientRect();
+            return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            const { x, y } = getCanvasCoords(e);
+            if (gameState === 'MENU') {
+                const idx = hitTestMenuCards(x, y);
+                if (idx !== -1) menuIndex = idx;
+                canvas.style.cursor = idx !== -1 ? 'pointer' : 'default';
+            } else {
+                canvas.style.cursor = hitTestMenuButton(x, y) ? 'pointer' : 'default';
+            }
+        });
+
+        canvas.addEventListener('click', (e) => {
+            const { x, y } = getCanvasCoords(e);
+            if (gameState === 'MENU') {
+                const idx = hitTestMenuCards(x, y);
+                if (idx !== -1) selectMenuOption(idx);
+                return;
+            }
+            if (hitTestMenuButton(x, y)) { returnToMenu(); return; }
+            if (gameState !== 'PLAYING') handleContinuePress();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (gameState === 'MENU') {
+                if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') menuIndex = (menuIndex + MENU_OPTIONS.length - 1) % MENU_OPTIONS.length;
+                else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') menuIndex = (menuIndex + 1) % MENU_OPTIONS.length;
+                else if (e.key === 'Enter' || e.key === ' ') selectMenuOption(menuIndex);
+                else if (e.key >= '1' && e.key <= '3') selectMenuOption(parseInt(e.key, 10) - 1);
+            } else {
+                if (e.key === 'Escape') returnToMenu();
+                else if ((e.key === 'Enter' || e.key === ' ') && gameState !== 'PLAYING') handleContinuePress();
+            }
+        });
+
+        function gameLoop() {
+            if (gameState === 'MENU') {
+                const pad = getGamepad();
+                handleMenuInput(pad);
+                drawMenu(pad);
+            } else if (mode === 'vs') {
+                const pads = getActiveGamepads();
+                handleVsInput(pads);
+                if (gameState === 'PLAYING') updateVs();
+                drawVsFrame(pads);
+            } else {
+                const pad = getGamepad();
+                handlePveInput(pad);
+                if (gameState === 'PLAYING') updatePve();
+                drawPveFrame(pad);
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+
+        window.addEventListener('resize', () => {
+            applyCanvasSize();
+            dragonLair.x = logicalWidth - dragonLair.width;
+            dragonLair.height = logicalHeight;
+            playerBase.height = logicalHeight;
+        });
+    </script>
+</body>
+</html>
