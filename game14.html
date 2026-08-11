@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dragon Gate Siege</title>
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; background: #121214; color: #e0e0e0; font-family: 'Georgia', serif; user-select: none; }
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #000; color: #e0e0e0; font-family: 'Georgia', serif; user-select: none; }
         canvas { display: block; }
     </style>
 </head>
@@ -19,6 +19,33 @@
         let dpr = window.devicePixelRatio || 1;
         let logicalWidth = window.innerWidth;
         let logicalHeight = window.innerHeight;
+        
+        let roadW = 0;
+        let roadL = 0;
+        let roadR = 0;
+        let sceneryTrees = [];
+
+        function generateScenery() {
+            sceneryTrees = [];
+            // Generate trees for the left side
+            for(let i=0; i<30; i++) {
+                sceneryTrees.push({
+                    x: Math.random() * (roadL - 20),
+                    y: Math.random() * logicalHeight,
+                    r: 15 + Math.random() * 20,
+                    color: `rgb(10, ${50 + Math.random()*50}, 20)`
+                });
+            }
+            // Generate trees for the right side
+            for(let i=0; i<30; i++) {
+                sceneryTrees.push({
+                    x: roadR + 20 + (Math.random() * (logicalWidth - roadR - 40)),
+                    y: Math.random() * logicalHeight,
+                    r: 15 + Math.random() * 20,
+                    color: `rgb(10, ${50 + Math.random()*50}, 20)`
+                });
+            }
+        }
 
         function applyCanvasSize() {
             dpr = window.devicePixelRatio || 1;
@@ -29,8 +56,97 @@
             canvas.style.width = logicalWidth + 'px';
             canvas.style.height = logicalHeight + 'px';
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            roadW = logicalWidth / 3;
+            roadL = roadW;
+            roadR = roadW * 2;
+            
+            generateScenery();
+            if (gameState === 'PLAYING') {
+                door.w = roadW - 40;
+                door.x = roadL + 20;
+            }
         }
-        applyCanvasSize();
+
+        // ============================================================
+        // AUDIO SYSTEM
+        // ============================================================
+        let audioCtx;
+        let bgmInterval;
+
+        function initAudio() {
+            if (audioCtx) return;
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+            startBGM();
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            let now = audioCtx.currentTime;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'sword') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'spear') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.15);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.15);
+                osc.start(now); osc.stop(now + 0.15);
+            } else if (type === 'crossbow') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.05);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.05);
+                osc.start(now); osc.stop(now + 0.05);
+            } else if (type === 'fire') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(100, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3);
+            } else if (type === 'hit') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            }
+        }
+
+        function startBGM() {
+            if (bgmInterval) clearInterval(bgmInterval);
+            let step = 0;
+            bgmInterval = setInterval(() => {
+                if (gameState !== 'PLAYING') return;
+                let now = audioCtx.currentTime;
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(step % 4 === 0 ? 65 : 80, now);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now); osc.stop(now + 0.2);
+                step++;
+            }, 300);
+        }
 
         // ============================================================
         // GAME STATE
@@ -41,7 +157,7 @@
         let menuAxisReady = true;
         let level = 1;
         let score = 0;
-        const menuButtons = {}; // <--- THIS WAS MISSING!
+        const menuButtons = {};
 
         const MENU_OPTIONS = [
             { id: '1p', title: 'SOLO CRUSADE', color: '#00aaff', subtitle: 'Storm the dragon gates alone.', hint: '1 Player' },
@@ -55,12 +171,10 @@
         const FIRE_SPEED = 6;
         const BOLT_SPEED = 15;
         
-        // Attack Cooldowns (Frames at 60FPS)
         const CD_SWORD = 40;   
         const CD_SPEAR = 50;   
         const CD_CROSSBOW = 75; 
 
-        // Attack Damages
         const DMG_SWORD = 40;
         const DMG_SPEAR = 25;
         const DMG_CROSSBOW = 15;
@@ -76,15 +190,16 @@
         let door = { x: 0, y: 0, w: 200, h: 80, hp: 1000, maxHp: 1000 };
 
         function initMode(selectedMode, isNextLevel = false) {
+            initAudio();
             mode = selectedMode;
             if (!isNextLevel) {
                 level = 1;
                 score = 0;
             }
 
-            door.w = 240;
+            door.w = roadW - 40;
+            door.x = roadL + 20;
             door.h = 80;
-            door.x = logicalWidth / 2 - door.w / 2;
             door.y = 20;
             door.maxHp = 800 + (level * 400);
             door.hp = door.maxHp;
@@ -93,33 +208,31 @@
             activeMeleeHitboxes = [];
             particles = [];
 
-            // Setup Players
             if (!isNextLevel) {
                 players = [];
-                players.push(createPlayer(1, '#00aaff', logicalWidth / 2 - 50, logicalHeight - 100));
+                players.push(createPlayer(1, '#00aaff', logicalWidth / 2 - 20, logicalHeight - 100));
                 if (mode === '2p') {
-                    players.push(createPlayer(2, '#ffaa00', logicalWidth / 2 + 50, logicalHeight - 100));
+                    players.push(createPlayer(2, '#ffaa00', logicalWidth / 2 + 20, logicalHeight - 100));
                 }
             } else {
                 players.forEach(p => {
-                    p.x = logicalWidth / 2 + (p.id === 1 ? -50 : 50);
+                    p.x = logicalWidth / 2 + (p.id === 1 ? -20 : 20);
                     p.y = logicalHeight - 100;
-                    p.hp = Math.min(p.maxHp, p.hp + 50); // heal between levels
+                    p.hp = Math.min(p.maxHp, p.hp + 50); 
                 });
             }
 
-            // Setup Dragon Slots (Spawns horizontally)
+            // Setup Dragon Slots - Bunched tightly in front of the door
             dragonSlots = [];
             dragons = [];
-            const slotCount = Math.max(3, Math.floor(logicalWidth / 180));
-            const slotWidth = logicalWidth / slotCount;
+            const slotCount = Math.max(3, Math.floor(door.w / 60));
+            const slotWidth = door.w / slotCount;
             
             for (let i = 0; i < slotCount; i++) {
-                // Don't place a dragon directly in front of the door's exact center if it overlaps too much
-                let cx = (i * slotWidth) + (slotWidth / 2);
+                let cx = door.x + (i * slotWidth) + (slotWidth / 2);
                 dragonSlots.push({
                     x: cx,
-                    y: 110,
+                    y: 130,
                     timer: Math.random() * 60, 
                     dragon: null
                 });
@@ -137,11 +250,26 @@
         }
 
         function createDragon(x, y) {
+            const types = ['whelp', 'drake', 'armored'];
+            // Increase chances of harder dragons as level goes up
+            let roll = Math.random();
+            let type = 'whelp';
+            if (level > 1 && roll > 0.5) type = 'drake';
+            if (level > 2 && roll > 0.8) type = 'armored';
+
+            let hp, radius, fireRate, color, secColor;
+            if (type === 'whelp') { 
+                hp = 100; radius = 22; fireRate = 80; color = '#8e0000'; secColor = '#ff4400';
+            } else if (type === 'drake') { 
+                hp = 70; radius = 18; fireRate = 50; color = '#005500'; secColor = '#00ff00';
+            } else { 
+                hp = 220; radius = 28; fireRate = 130; color = '#333'; secColor = '#ff8800';
+            }
+            
+            hp += (level * 20);
             return {
-                x: x, y: y, radius: 25, 
-                hp: 100 + (level * 20), 
-                maxHp: 100 + (level * 20),
-                fireTimer: Math.random() * 100
+                x, y, type, radius, hp, maxHp: hp, color, secColor,
+                fireTimer: Math.random() * fireRate, maxFireRate: fireRate
             };
         }
 
@@ -187,7 +315,6 @@
                 if (pad.axes[1] > 0.5 || (pad.buttons[13] && pad.buttons[13].pressed)) moveDown = true;
                 if (wasJustPressed(pad, 0, menuButtons, 'A')) select = true;
             } else {
-                // Keyboard debounce for menu
                 if (select && !menuButtons['A']) { select = true; menuButtons['A'] = true; }
                 else if (!select) { menuButtons['A'] = false; select = false; }
             }
@@ -213,7 +340,6 @@
                 let vx = 0, vy = 0;
                 let atkSword = false, atkSpear = false, atkCrossbow = false;
 
-                // Keyboard Fallback for Player 1
                 if (idx === 0 && !pad) {
                     if (keys['ArrowLeft'] || keys['KeyA']) vx = -1;
                     if (keys['ArrowRight'] || keys['KeyD']) vx = 1;
@@ -224,31 +350,28 @@
                     if (keys['KeyL'] || keys['Space']) atkCrossbow = true;
                 }
 
-                // Gamepad Input
                 if (pad) {
                     if (Math.abs(pad.axes[0]) > 0.2) vx = pad.axes[0];
                     if (Math.abs(pad.axes[1]) > 0.2) vy = pad.axes[1];
-                    if (pad.buttons[2].pressed) atkSword = true;    // X Button
-                    if (pad.buttons[3].pressed) atkSpear = true;    // Y Button
-                    if (pad.buttons[5].pressed) atkCrossbow = true; // RB Button
+                    if (pad.buttons[2].pressed) atkSword = true;
+                    if (pad.buttons[3].pressed) atkSpear = true;
+                    if (pad.buttons[5].pressed) atkCrossbow = true;
                 }
 
-                // Movement
                 p.x += vx * PLAYER_SPEED;
                 p.y += vy * PLAYER_SPEED;
 
-                // Bounds
-                p.x = Math.max(p.radius, Math.min(logicalWidth - p.radius, p.x));
-                p.y = Math.max(150, Math.min(logicalHeight - p.radius, p.y)); // Can't go past the door line
+                // Bounds constrained to the ROAD
+                p.x = Math.max(roadL + p.radius, Math.min(roadR - p.radius, p.x));
+                p.y = Math.max(170, Math.min(logicalHeight - p.radius, p.y)); 
 
-                // Cooldowns
                 if (p.cooldowns.sword > 0) p.cooldowns.sword--;
                 if (p.cooldowns.spear > 0) p.cooldowns.spear--;
                 if (p.cooldowns.crossbow > 0) p.cooldowns.crossbow--;
 
-                // Attacks (Always striking upwards)
                 if (atkSword && p.cooldowns.sword <= 0) {
                     p.cooldowns.sword = CD_SWORD;
+                    playSound('sword');
                     activeMeleeHitboxes.push({ 
                         x: p.x - 40, y: p.y - 50, w: 80, h: 40, 
                         damage: DMG_SWORD, life: 8, color: '#ffffff', owner: p 
@@ -256,6 +379,7 @@
                 }
                 if (atkSpear && p.cooldowns.spear <= 0) {
                     p.cooldowns.spear = CD_SPEAR;
+                    playSound('spear');
                     activeMeleeHitboxes.push({ 
                         x: p.x - 10, y: p.y - 100, w: 20, h: 90, 
                         damage: DMG_SPEAR, life: 10, color: '#cccccc', owner: p 
@@ -263,6 +387,7 @@
                 }
                 if (atkCrossbow && p.cooldowns.crossbow <= 0) {
                     p.cooldowns.crossbow = CD_CROSSBOW;
+                    playSound('crossbow');
                     projectiles.push({
                         x: p.x, y: p.y - 15, vx: 0, vy: -BOLT_SPEED,
                         damage: DMG_CROSSBOW, isFire: false, size: 4
@@ -274,16 +399,26 @@
         // ============================================================
         // GAME LOGIC UPDATES
         // ============================================================
+        function getNearestPlayer(dx, dy) {
+            let nearest = null;
+            let minDist = Infinity;
+            players.forEach(p => {
+                if (p.hp > 0) {
+                    let dist = Math.hypot(p.x - dx, p.y - dy);
+                    if (dist < minDist) { minDist = dist; nearest = p; }
+                }
+            });
+            return nearest;
+        }
+
         function updateLogic() {
             handlePlayerInput();
 
-            // Check if all players dead
             if (players.every(p => p.hp <= 0)) {
                 gameState = 'GAME_OVER';
                 return;
             }
 
-            // Dragon Slot Spawning
             let spawnThreshold = Math.max(40, 200 - (level * 20)); 
             dragonSlots.forEach(slot => {
                 if (!slot.dragon) {
@@ -297,13 +432,12 @@
                 }
             });
 
-            // Dragon Actions
             for (let i = dragons.length - 1; i >= 0; i--) {
                 let d = dragons[i];
                 if (d.hp <= 0) {
-                    createExplosion(d.x, d.y, '#ff4400', 2);
-                    score += 100;
-                    // Free up the slot
+                    createExplosion(d.x, d.y, d.color, 2);
+                    playSound('hit');
+                    score += (d.type === 'armored' ? 300 : (d.type === 'drake' ? 200 : 100));
                     let slot = dragonSlots.find(s => s.x === d.x);
                     if (slot) slot.dragon = null;
                     dragons.splice(i, 1);
@@ -312,49 +446,56 @@
 
                 d.fireTimer--;
                 if (d.fireTimer <= 0) {
-                    d.fireTimer = 80 + Math.random() * 60;
-                    // Shoot fire down
-                    projectiles.push({
-                        x: d.x, y: d.y + 15, vx: 0, vy: FIRE_SPEED,
-                        damage: 15 + (level * 2), isFire: true, size: 8
-                    });
+                    d.fireTimer = d.maxFireRate + Math.random() * 40;
+                    playSound('fire');
+                    
+                    if (d.type === 'whelp') {
+                        projectiles.push({ x: d.x, y: d.y + 15, vx: 0, vy: FIRE_SPEED, damage: 15 + level*2, isFire: true, size: 8 });
+                    } else if (d.type === 'drake') {
+                        let target = getNearestPlayer(d.x, d.y);
+                        let angle = target ? Math.atan2(target.y - d.y, target.x - d.x) : Math.PI/2;
+                        projectiles.push({ x: d.x, y: d.y + 15, vx: Math.cos(angle)*FIRE_SPEED*1.2, vy: Math.sin(angle)*FIRE_SPEED*1.2, damage: 10 + level, isFire: true, size: 6 });
+                    } else if (d.type === 'armored') {
+                        projectiles.push({ x: d.x, y: d.y + 15, vx: 0, vy: FIRE_SPEED*0.8, damage: 25 + level*3, isFire: true, size: 12 });
+                        projectiles.push({ x: d.x, y: d.y + 15, vx: -3, vy: FIRE_SPEED*0.8, damage: 25 + level*3, isFire: true, size: 12 });
+                        projectiles.push({ x: d.x, y: d.y + 15, vx: 3, vy: FIRE_SPEED*0.8, damage: 25 + level*3, isFire: true, size: 12 });
+                    }
                 }
             }
 
-            // Projectiles
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 let pr = projectiles[i];
                 pr.x += pr.vx;
                 pr.y += pr.vy;
                 let removed = false;
 
-                if (pr.y < 0 || pr.y > logicalHeight) {
+                if (pr.y < 0 || pr.y > logicalHeight || pr.x < roadL || pr.x > roadR) {
                     projectiles.splice(i, 1);
                     continue;
                 }
 
                 if (pr.isFire) {
-                    // Hit player?
                     players.forEach(p => {
                         if (p.hp > 0 && Math.hypot(p.x - pr.x, p.y - pr.y) < p.radius + pr.size) {
                             p.hp -= pr.damage;
+                            playSound('hit');
                             createExplosion(p.x, p.y, '#ff8800', 0.8);
                             removed = true;
                             shakeTime = 5;
                         }
                     });
                 } else {
-                    // Hit Door?
                     if (pr.x > door.x && pr.x < door.x + door.w && pr.y > door.y && pr.y < door.y + door.h) {
                         door.hp -= pr.damage;
+                        playSound('hit');
                         createExplosion(pr.x, pr.y, '#aaaaaa', 0.5);
                         removed = true;
                     }
-                    // Hit Dragon?
                     if (!removed) {
                         dragons.forEach(d => {
                             if (Math.hypot(d.x - pr.x, d.y - pr.y) < d.radius + pr.size) {
                                 d.hp -= pr.damage;
+                                playSound('hit');
                                 createExplosion(pr.x, pr.y, '#ffcc00', 0.5);
                                 removed = true;
                             }
@@ -365,39 +506,31 @@
                 if (removed) projectiles.splice(i, 1);
             }
 
-            // Melee Hitboxes
             for (let i = activeMeleeHitboxes.length - 1; i >= 0; i--) {
                 let hb = activeMeleeHitboxes[i];
                 hb.life--;
                 
-                // Keep attached to player moving
                 if (hb.owner) {
-                    if (hb.w > hb.h) { // Sword
-                        hb.x = hb.owner.x - 40; hb.y = hb.owner.y - 50;
-                    } else { // Spear
-                        hb.x = hb.owner.x - 10; hb.y = hb.owner.y - 100;
-                    }
+                    if (hb.w > hb.h) { hb.x = hb.owner.x - 40; hb.y = hb.owner.y - 50; } 
+                    else { hb.x = hb.owner.x - 10; hb.y = hb.owner.y - 100; }
                 }
 
-                // Check collisions against door
                 if (hb.y < door.y + door.h && hb.x + hb.w > door.x && hb.x < door.x + door.w) {
-                    door.hp -= hb.damage / 5; // Do damage over ticks, scale down
+                    door.hp -= hb.damage / 5; 
                     createExplosion(hb.x + hb.w/2, door.y + door.h, '#aaaaaa', 0.2);
                 }
 
-                // Check collisions against dragons
                 dragons.forEach(d => {
                     if (d.x + d.radius > hb.x && d.x - d.radius < hb.x + hb.w &&
                         d.y + d.radius > hb.y && d.y - d.radius < hb.y + hb.h) {
-                        d.hp -= hb.damage / 5; // Tick damage
-                        createExplosion(d.x, d.y, '#ff0000', 0.2);
+                        d.hp -= hb.damage / 5; 
+                        createExplosion(d.x, d.y, d.color, 0.2);
                     }
                 });
 
                 if (hb.life <= 0) activeMeleeHitboxes.splice(i, 1);
             }
 
-            // Particles
             for (let i = particles.length - 1; i >= 0; i--) {
                 particles[i].x += particles[i].vx;
                 particles[i].y += particles[i].vy;
@@ -405,7 +538,6 @@
                 if (particles[i].life <= 0) particles.splice(i, 1);
             }
 
-            // Win Condition
             if (door.hp <= 0) {
                 score += 5000 * level;
                 gameState = 'LEVEL_CLEAR';
@@ -424,9 +556,24 @@
         function drawGame() {
             ctx.clearRect(0, 0, logicalWidth, logicalHeight);
 
-            // Floor
-            ctx.fillStyle = '#222';
-            for (let i = 0; i < logicalWidth; i+=100) {
+            // Draw Grass Sides
+            ctx.fillStyle = '#1b3a1a';
+            ctx.fillRect(0, 0, roadL, logicalHeight);
+            ctx.fillRect(roadR, 0, logicalWidth - roadR, logicalHeight);
+
+            // Draw Scenery Trees
+            sceneryTrees.forEach(t => {
+                ctx.fillStyle = t.color;
+                ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, Math.PI, true); ctx.fill();
+            });
+
+            // Draw Road (Middle Third)
+            ctx.fillStyle = '#2c2c30';
+            ctx.fillRect(roadL, 0, roadW, logicalHeight);
+            ctx.fillStyle = '#1e1e22';
+            for (let i = roadL; i < roadR; i+=60) {
                 ctx.fillRect(i, 0, 2, logicalHeight);
             }
 
@@ -444,7 +591,6 @@
             for (let i = 0; i < door.w; i += 20) {
                 ctx.fillRect(door.x + i, door.y, 4, door.h);
             }
-            // Door HP
             let doorHpPct = Math.max(0, door.hp / door.maxHp);
             ctx.fillStyle = 'red'; ctx.fillRect(door.x, door.y - 10, door.w, 6);
             ctx.fillStyle = '#ffaa00'; ctx.fillRect(door.x, door.y - 10, door.w * doorHpPct, 6);
@@ -452,19 +598,21 @@
             // Draw Dragon Slots (Empty indicators)
             dragonSlots.forEach(s => {
                 if (!s.dragon) {
-                    ctx.beginPath(); ctx.arc(s.x, s.y, 25, 0, Math.PI * 2);
-                    ctx.strokeStyle = '#331111'; ctx.lineWidth = 2; ctx.stroke();
+                    ctx.beginPath(); ctx.ellipse(s.x, s.y, 25, 10, 0, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#1a1a20'; ctx.lineWidth = 4; ctx.stroke();
                 }
             });
 
             // Draw Dragons
             dragons.forEach(d => {
-                ctx.fillStyle = '#8e0000';
+                ctx.fillStyle = d.color;
                 ctx.beginPath(); ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = '#ff4400'; ctx.beginPath(); ctx.arc(d.x, d.y+10, d.radius/1.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = d.secColor; 
+                ctx.beginPath(); ctx.arc(d.x, d.y+(d.radius/2), d.radius/1.5, 0, Math.PI*2); ctx.fill();
                 ctx.fillStyle = 'yellow';
-                ctx.beginPath(); ctx.arc(d.x - 8, d.y - 5, 4, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(d.x + 8, d.y - 5, 4, 0, Math.PI * 2); ctx.fill();
+                let eyeOffset = d.radius / 3;
+                ctx.beginPath(); ctx.arc(d.x - eyeOffset, d.y - 5, 4, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(d.x + eyeOffset, d.y - 5, 4, 0, Math.PI * 2); ctx.fill();
 
                 let hpPct = Math.max(0, d.hp / d.maxHp);
                 ctx.fillStyle = 'red'; ctx.fillRect(d.x - 20, d.y - d.radius - 10, 40, 4);
@@ -474,43 +622,25 @@
             // Draw Players
             players.forEach(p => {
                 if (p.hp <= 0) return;
-                
-                // Shadow
                 ctx.fillStyle = 'rgba(0,0,0,0.5)';
                 ctx.beginPath(); ctx.ellipse(p.x, p.y + p.radius, p.radius, p.radius/2, 0, 0, Math.PI*2); ctx.fill();
-
-                // Body
                 ctx.fillStyle = '#b0bec5'; 
                 ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = p.color;
-                ctx.fillRect(p.x - 8, p.y - 8, 16, 16);
-                
-                // Helmet Visor
-                ctx.fillStyle = '#111';
-                ctx.fillRect(p.x - 10, p.y - 12, 20, 6);
+                ctx.fillStyle = p.color; ctx.fillRect(p.x - 8, p.y - 8, 16, 16);
+                ctx.fillStyle = '#111'; ctx.fillRect(p.x - 10, p.y - 12, 20, 6);
 
-                // Player HP
                 let hpPct = Math.max(0, p.hp / p.maxHp);
                 ctx.fillStyle = 'red'; ctx.fillRect(p.x - 15, p.y + p.radius + 5, 30, 4);
                 ctx.fillStyle = '#00ff88'; ctx.fillRect(p.x - 15, p.y + p.radius + 5, 30 * hpPct, 4);
             });
 
-            // Draw Hitboxes (Swords/Spears)
+            // Draw Hitboxes
             activeMeleeHitboxes.forEach(hb => {
-                ctx.fillStyle = hb.color;
-                ctx.globalAlpha = hb.life / 10;
+                ctx.fillStyle = hb.color; ctx.globalAlpha = hb.life / 10;
                 if (hb.w > hb.h) {
-                    // Sword arc style
-                    ctx.beginPath();
-                    ctx.ellipse(hb.x + hb.w/2, hb.y + hb.h/2, hb.w/2, hb.h/2, 0, Math.PI, 0);
-                    ctx.fill();
+                    ctx.beginPath(); ctx.ellipse(hb.x + hb.w/2, hb.y + hb.h/2, hb.w/2, hb.h/2, 0, Math.PI, 0); ctx.fill();
                 } else {
-                    // Spear thrust style
-                    ctx.beginPath();
-                    ctx.moveTo(hb.x + hb.w/2, hb.y);
-                    ctx.lineTo(hb.x + hb.w, hb.y + hb.h);
-                    ctx.lineTo(hb.x, hb.y + hb.h);
-                    ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(hb.x + hb.w/2, hb.y); ctx.lineTo(hb.x + hb.w, hb.y + hb.h); ctx.lineTo(hb.x, hb.y + hb.h); ctx.fill();
                 }
                 ctx.globalAlpha = 1.0;
             });
@@ -523,7 +653,6 @@
                     ctx.fillStyle = '#ffff00';
                     ctx.beginPath(); ctx.arc(pr.x, pr.y, pr.size/2, 0, Math.PI * 2); ctx.fill();
                 } else {
-                    // Crossbow bolt trail
                     ctx.strokeStyle = '#aaaaaa'; ctx.lineWidth = 2;
                     ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x, pr.y + 15); ctx.stroke();
                 }
@@ -539,15 +668,20 @@
             ctx.restore();
 
             // HUD
+            ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, logicalWidth, 40);
             ctx.fillStyle = 'white'; ctx.font = 'bold 20px Georgia';
-            ctx.fillText(`Level: ${level}   Score: ${score}`, 20, 30);
-            
+            ctx.fillText(`Level: ${level}   Score: ${score}`, 20, 26);
             ctx.font = '14px Georgia'; ctx.fillStyle = '#aaaaaa';
-            ctx.fillText(`P1: Move (WASD/L-Stick) | Sword (J/X) | Spear (K/Y) | Crossbow (L/RB)`, 20, logicalHeight - 20);
+            ctx.fillText(`P1: Move (WASD) | Sword (J) | Spear (K) | Crossbow (L)`, 20, logicalHeight - 20);
         }
 
         function drawMenu() {
             ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+            
+            // Background ambiance for menu
+            ctx.fillStyle = '#111'; ctx.fillRect(0,0,logicalWidth,logicalHeight);
+            ctx.fillStyle = '#2c2c30'; ctx.fillRect(roadL, 0, roadW, logicalHeight);
+            
             ctx.textAlign = 'center';
             ctx.fillStyle = 'white'; ctx.font = 'bold 54px Georgia';
             ctx.fillText('DRAGON GATE SIEGE', logicalWidth / 2, 140);
@@ -555,7 +689,7 @@
             MENU_OPTIONS.forEach((opt, i) => {
                 let y = 300 + (i * 100);
                 const selected = i === menuIndex;
-                ctx.fillStyle = selected ? 'rgba(255, 255, 255, 0.1)' : 'transparent';
+                ctx.fillStyle = selected ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0,0,0,0.8)';
                 ctx.fillRect(logicalWidth / 2 - 200, y - 40, 400, 80);
                 ctx.strokeStyle = selected ? opt.color : '#333';
                 ctx.lineWidth = 2; ctx.strokeRect(logicalWidth / 2 - 200, y - 40, 400, 80);
@@ -608,14 +742,10 @@
             requestAnimationFrame(gameLoop);
         }
 
+        applyCanvasSize();
         requestAnimationFrame(gameLoop);
 
-        window.addEventListener('resize', () => {
-            applyCanvasSize();
-            if (gameState === 'PLAYING') {
-                door.x = logicalWidth / 2 - door.w / 2;
-            }
-        });
+        window.addEventListener('resize', applyCanvasSize);
     </script>
 </body>
 </html>
