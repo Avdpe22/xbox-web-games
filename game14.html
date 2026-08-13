@@ -27,7 +27,6 @@
 
         function generateScenery() {
             sceneryTrees = [];
-            // Generate trees for the left side
             for(let i=0; i<30; i++) {
                 sceneryTrees.push({
                     x: Math.random() * (roadL - 20),
@@ -36,7 +35,6 @@
                     color: `rgb(10, ${50 + Math.random()*50}, 20)`
                 });
             }
-            // Generate trees for the right side
             for(let i=0; i<30; i++) {
                 sceneryTrees.push({
                     x: roadR + 20 + (Math.random() * (logicalWidth - roadR - 40)),
@@ -181,7 +179,7 @@
 
         let players = [];
         let dragons = [];
-        let dragonSlots = [];
+        let spawnTimer = 0;
         let projectiles = [];
         let activeMeleeHitboxes = [];
         let particles = [];
@@ -201,12 +199,14 @@
             door.x = roadL + 20;
             door.h = 80;
             door.y = 20;
-            door.maxHp = 800 + (level * 400);
+            door.maxHp = 800 + (level * 300); // Smoother door scaling
             door.hp = door.maxHp;
 
             projectiles = [];
             activeMeleeHitboxes = [];
             particles = [];
+            dragons = [];
+            spawnTimer = 30; // Brief delay before first spawn
 
             if (!isNextLevel) {
                 players = [];
@@ -222,22 +222,6 @@
                 });
             }
 
-            // Setup Dragon Slots - Bunched tightly in front of the door
-            dragonSlots = [];
-            dragons = [];
-            const slotCount = Math.max(3, Math.floor(door.w / 60));
-            const slotWidth = door.w / slotCount;
-            
-            for (let i = 0; i < slotCount; i++) {
-                let cx = door.x + (i * slotWidth) + (slotWidth / 2);
-                dragonSlots.push({
-                    x: cx,
-                    y: 130,
-                    timer: Math.random() * 60, 
-                    dragon: null
-                });
-            }
-
             gameState = 'PLAYING';
         }
 
@@ -250,23 +234,25 @@
         }
 
         function createDragon(x, y) {
-            const types = ['whelp', 'drake', 'armored'];
-            // Increase chances of harder dragons as level goes up
             let roll = Math.random();
             let type = 'whelp';
-            if (level > 1 && roll > 0.5) type = 'drake';
-            if (level > 2 && roll > 0.8) type = 'armored';
+            
+            // Gradual transition of enemy types
+            if (level >= 2 && roll > 0.85 - (level * 0.05)) type = 'drake';
+            if (level >= 3 && roll > 0.95 - (level * 0.05)) type = 'armored';
 
             let hp, radius, fireRate, color, secColor;
+            
+            // Significantly slowed down the fireRate (higher number = slower)
             if (type === 'whelp') { 
-                hp = 100; radius = 22; fireRate = 80; color = '#8e0000'; secColor = '#ff4400';
+                hp = 80; radius = 22; fireRate = 220; color = '#8e0000'; secColor = '#ff4400';
             } else if (type === 'drake') { 
-                hp = 70; radius = 18; fireRate = 50; color = '#005500'; secColor = '#00ff00';
+                hp = 60; radius = 18; fireRate = 180; color = '#005500'; secColor = '#00ff00';
             } else { 
-                hp = 220; radius = 28; fireRate = 130; color = '#333'; secColor = '#ff8800';
+                hp = 160; radius = 28; fireRate = 260; color = '#333'; secColor = '#ff8800';
             }
             
-            hp += (level * 20);
+            hp += (level * 10); // Smoother HP scaling per level
             return {
                 x, y, type, radius, hp, maxHp: hp, color, secColor,
                 fireTimer: Math.random() * fireRate, maxFireRate: fireRate
@@ -419,18 +405,49 @@
                 return;
             }
 
-            let spawnThreshold = Math.max(40, 200 - (level * 20)); 
-            dragonSlots.forEach(slot => {
-                if (!slot.dragon) {
-                    slot.timer++;
-                    if (slot.timer >= spawnThreshold) {
-                        slot.dragon = createDragon(slot.x, slot.y);
-                        dragons.push(slot.dragon);
-                        slot.timer = 0;
-                        createExplosion(slot.x, slot.y, '#aa0000', 1.5);
+            // Dragon Spatial Spawning
+            let maxDragons = 4 + (level * 2); // More dragons allowed on screen as level scales
+            spawnTimer--;
+            
+            if (spawnTimer <= 0 && dragons.length < maxDragons) {
+                let validSpawn = false;
+                let rx, ry;
+                let attempts = 0;
+                
+                // Try to find a spot that isn't on top of another dragon or the players
+                while (!validSpawn && attempts < 10) {
+                    validSpawn = true;
+                    // Spawn zone: Top half of the road (below the door)
+                    rx = roadL + 30 + (Math.random() * (roadW - 60));
+                    ry = 120 + (Math.random() * ((logicalHeight / 2) - 120));
+                    
+                    // Check against other dragons
+                    for (let d of dragons) {
+                        if (Math.hypot(d.x - rx, d.y - ry) < 45) {
+                            validSpawn = false;
+                            break;
+                        }
                     }
+                    // Check against players
+                    for (let p of players) {
+                        if (p.hp > 0 && Math.hypot(p.x - rx, p.y - ry) < 60) {
+                            validSpawn = false;
+                            break;
+                        }
+                    }
+                    attempts++;
                 }
-            });
+                
+                if (validSpawn) {
+                    let newDragon = createDragon(rx, ry);
+                    dragons.push(newDragon);
+                    createExplosion(rx, ry, '#aa0000', 1.5);
+                    // Gradual spawn rate scaling, caps at 1 spawn per 60 frames (1 second)
+                    spawnTimer = Math.max(60, 150 - (level * 15)); 
+                } else {
+                    spawnTimer = 10; // Try again soon if the board is too crowded
+                }
+            }
 
             for (let i = dragons.length - 1; i >= 0; i--) {
                 let d = dragons[i];
@@ -438,27 +455,25 @@
                     createExplosion(d.x, d.y, d.color, 2);
                     playSound('hit');
                     score += (d.type === 'armored' ? 300 : (d.type === 'drake' ? 200 : 100));
-                    let slot = dragonSlots.find(s => s.x === d.x);
-                    if (slot) slot.dragon = null;
                     dragons.splice(i, 1);
                     continue;
                 }
 
                 d.fireTimer--;
                 if (d.fireTimer <= 0) {
-                    d.fireTimer = d.maxFireRate + Math.random() * 40;
+                    d.fireTimer = d.maxFireRate + (Math.random() * 60);
                     playSound('fire');
                     
                     if (d.type === 'whelp') {
-                        projectiles.push({ x: d.x, y: d.y + 15, vx: 0, vy: FIRE_SPEED, damage: 15 + level*2, isFire: true, size: 8 });
+                        projectiles.push({ x: d.x, y: d.y + 15, vx: 0, vy: FIRE_SPEED, damage: 15 + level, isFire: true, size: 8 });
                     } else if (d.type === 'drake') {
                         let target = getNearestPlayer(d.x, d.y);
                         let angle = target ? Math.atan2(target.y - d.y, target.x - d.x) : Math.PI/2;
                         projectiles.push({ x: d.x, y: d.y + 15, vx: Math.cos(angle)*FIRE_SPEED*1.2, vy: Math.sin(angle)*FIRE_SPEED*1.2, damage: 10 + level, isFire: true, size: 6 });
                     } else if (d.type === 'armored') {
-                        projectiles.push({ x: d.x, y: d.y + 15, vx: 0, vy: FIRE_SPEED*0.8, damage: 25 + level*3, isFire: true, size: 12 });
-                        projectiles.push({ x: d.x, y: d.y + 15, vx: -3, vy: FIRE_SPEED*0.8, damage: 25 + level*3, isFire: true, size: 12 });
-                        projectiles.push({ x: d.x, y: d.y + 15, vx: 3, vy: FIRE_SPEED*0.8, damage: 25 + level*3, isFire: true, size: 12 });
+                        projectiles.push({ x: d.x, y: d.y + 15, vx: 0, vy: FIRE_SPEED*0.8, damage: 20 + level*2, isFire: true, size: 12 });
+                        projectiles.push({ x: d.x, y: d.y + 15, vx: -3, vy: FIRE_SPEED*0.8, damage: 20 + level*2, isFire: true, size: 12 });
+                        projectiles.push({ x: d.x, y: d.y + 15, vx: 3, vy: FIRE_SPEED*0.8, damage: 20 + level*2, isFire: true, size: 12 });
                     }
                 }
             }
@@ -595,25 +610,21 @@
             ctx.fillStyle = 'red'; ctx.fillRect(door.x, door.y - 10, door.w, 6);
             ctx.fillStyle = '#ffaa00'; ctx.fillRect(door.x, door.y - 10, door.w * doorHpPct, 6);
 
-            // Draw Dragon Slots (Empty indicators)
-            dragonSlots.forEach(s => {
-                if (!s.dragon) {
-                    ctx.beginPath(); ctx.ellipse(s.x, s.y, 25, 10, 0, 0, Math.PI * 2);
-                    ctx.strokeStyle = '#1a1a20'; ctx.lineWidth = 4; ctx.stroke();
-                }
-            });
-
             // Draw Dragons
             dragons.forEach(d => {
+                // Outer body
                 ctx.fillStyle = d.color;
                 ctx.beginPath(); ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2); ctx.fill();
+                // Inner snout/belly
                 ctx.fillStyle = d.secColor; 
                 ctx.beginPath(); ctx.arc(d.x, d.y+(d.radius/2), d.radius/1.5, 0, Math.PI*2); ctx.fill();
+                // Eyes
                 ctx.fillStyle = 'yellow';
                 let eyeOffset = d.radius / 3;
                 ctx.beginPath(); ctx.arc(d.x - eyeOffset, d.y - 5, 4, 0, Math.PI * 2); ctx.fill();
                 ctx.beginPath(); ctx.arc(d.x + eyeOffset, d.y - 5, 4, 0, Math.PI * 2); ctx.fill();
 
+                // Health Bar
                 let hpPct = Math.max(0, d.hp / d.maxHp);
                 ctx.fillStyle = 'red'; ctx.fillRect(d.x - 20, d.y - d.radius - 10, 40, 4);
                 ctx.fillStyle = '#00ff00'; ctx.fillRect(d.x - 20, d.y - d.radius - 10, 40 * hpPct, 4);
