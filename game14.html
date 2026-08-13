@@ -24,6 +24,7 @@
         let roadL = 0;
         let roadR = 0;
         let sceneryTrees = [];
+        let currentSealBottom = 0;
 
         function generateScenery() {
             sceneryTrees = [];
@@ -115,6 +116,13 @@
                 gain.gain.setValueAtTime(0.1, now);
                 gain.gain.linearRampToValueAtTime(0, now + 0.3);
                 osc.start(now); osc.stop(now + 0.3);
+            } else if (type === 'gate_fire') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(80, now);
+                osc.frequency.exponentialRampToValueAtTime(20, now + 0.6);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.6);
+                osc.start(now); osc.stop(now + 0.6);
             } else if (type === 'hit') {
                 osc.type = 'sawtooth';
                 osc.frequency.setValueAtTime(150, now);
@@ -179,13 +187,14 @@
 
         let players = [];
         let dragons = [];
+        let dragonSlots = [];
         let spawnTimer = 0;
         let projectiles = [];
         let activeMeleeHitboxes = [];
         let particles = [];
         let shakeTime = 0;
 
-        let door = { x: 0, y: 0, w: 200, h: 80, hp: 1000, maxHp: 1000 };
+        let door = { x: 0, y: 0, w: 200, h: 80, hp: 150, maxHp: 150, attackTimer: 100 };
 
         function initMode(selectedMode, isNextLevel = false) {
             initAudio();
@@ -199,14 +208,34 @@
             door.x = roadL + 20;
             door.h = 80;
             door.y = 20;
-            door.maxHp = 800 + (level * 300); // Smoother door scaling
+            door.maxHp = 150 + (level * 50); // Low health, easily shattered once exposed
             door.hp = door.maxHp;
+            door.attackTimer = 150; 
 
             projectiles = [];
             activeMeleeHitboxes = [];
             particles = [];
             dragons = [];
-            spawnTimer = 30; // Brief delay before first spawn
+            dragonSlots = [];
+            spawnTimer = 60; 
+
+            // Setup Dragon Grid
+            let rows = 2 + Math.min(3, Math.ceil(level / 2)); // 3 rows at Lv1, 4 at Lv3, etc.
+            let cols = Math.max(3, Math.floor(door.w / 60));
+            let slotW = door.w / cols;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    let cx = door.x + (c * slotW) + (slotW / 2);
+                    let cy = door.y + door.h + 40 + (r * 60);
+                    let slot = { x: cx, y: cy, dragon: null };
+                    
+                    let d = createDragon(cx, cy);
+                    slot.dragon = d;
+                    dragons.push(d);
+                    dragonSlots.push(slot);
+                }
+            }
 
             if (!isNextLevel) {
                 players = [];
@@ -237,13 +266,11 @@
             let roll = Math.random();
             let type = 'whelp';
             
-            // Gradual transition of enemy types
             if (level >= 2 && roll > 0.85 - (level * 0.05)) type = 'drake';
             if (level >= 3 && roll > 0.95 - (level * 0.05)) type = 'armored';
 
             let hp, radius, fireRate, color, secColor;
             
-            // Significantly slowed down the fireRate (higher number = slower)
             if (type === 'whelp') { 
                 hp = 80; radius = 22; fireRate = 220; color = '#8e0000'; secColor = '#ff4400';
             } else if (type === 'drake') { 
@@ -252,7 +279,7 @@
                 hp = 160; radius = 28; fireRate = 260; color = '#333'; secColor = '#ff8800';
             }
             
-            hp += (level * 10); // Smoother HP scaling per level
+            hp += (level * 10); 
             return {
                 x, y, type, radius, hp, maxHp: hp, color, secColor,
                 fireTimer: Math.random() * fireRate, maxFireRate: fireRate
@@ -347,9 +374,9 @@
                 p.x += vx * PLAYER_SPEED;
                 p.y += vy * PLAYER_SPEED;
 
-                // Bounds constrained to the ROAD
+                // Bounds constrained to the ROAD and the SEAL
                 p.x = Math.max(roadL + p.radius, Math.min(roadR - p.radius, p.x));
-                p.y = Math.max(170, Math.min(logicalHeight - p.radius, p.y)); 
+                p.y = Math.max(currentSealBottom + p.radius + 10, Math.min(logicalHeight - p.radius, p.y)); 
 
                 if (p.cooldowns.sword > 0) p.cooldowns.sword--;
                 if (p.cooldowns.spear > 0) p.cooldowns.spear--;
@@ -398,6 +425,13 @@
         }
 
         function updateLogic() {
+            // Calculate Current Seal Bottom before player input
+            if (dragons.length > 0) {
+                currentSealBottom = Math.max(...dragons.map(d => d.y + d.radius)) + 15;
+            } else {
+                currentSealBottom = door.y + door.h;
+            }
+
             handlePlayerInput();
 
             if (players.every(p => p.hp <= 0)) {
@@ -405,56 +439,56 @@
                 return;
             }
 
-            // Dragon Spatial Spawning
-            let maxDragons = 4 + (level * 2); // More dragons allowed on screen as level scales
-            spawnTimer--;
-            
-            if (spawnTimer <= 0 && dragons.length < maxDragons) {
-                let validSpawn = false;
-                let rx, ry;
-                let attempts = 0;
+            // GATE ATTACKS
+            door.attackTimer--;
+            if (door.attackTimer <= 0) {
+                playSound('gate_fire');
+                door.attackTimer = 180 - Math.min(60, level * 10);
                 
-                // Try to find a spot that isn't on top of another dragon or the players
-                while (!validSpawn && attempts < 10) {
-                    validSpawn = true;
-                    // Spawn zone: Top half of the road (below the door)
-                    rx = roadL + 30 + (Math.random() * (roadW - 60));
-                    ry = 120 + (Math.random() * ((logicalHeight / 2) - 120));
-                    
-                    // Check against other dragons
-                    for (let d of dragons) {
-                        if (Math.hypot(d.x - rx, d.y - ry) < 45) {
-                            validSpawn = false;
-                            break;
-                        }
-                    }
-                    // Check against players
-                    for (let p of players) {
-                        if (p.hp > 0 && Math.hypot(p.x - rx, p.y - ry) < 60) {
-                            validSpawn = false;
-                            break;
-                        }
-                    }
-                    attempts++;
-                }
+                projectiles.push({ 
+                    x: door.x + door.w/2, 
+                    y: door.y + door.h, 
+                    vx: 0, 
+                    vy: FIRE_SPEED * 1.5, 
+                    damage: 25 + level*5, 
+                    isFire: true, 
+                    size: 30 
+                });
                 
-                if (validSpawn) {
-                    let newDragon = createDragon(rx, ry);
-                    dragons.push(newDragon);
-                    createExplosion(rx, ry, '#aa0000', 1.5);
-                    // Gradual spawn rate scaling, caps at 1 spawn per 60 frames (1 second)
-                    spawnTimer = Math.max(60, 150 - (level * 15)); 
-                } else {
-                    spawnTimer = 10; // Try again soon if the board is too crowded
-                }
+                projectiles.push({ x: door.x + 20, y: door.y + door.h, vx: -2, vy: FIRE_SPEED, damage: 15, isFire: true, size: 12 });
+                projectiles.push({ x: door.x + door.w - 20, y: door.y + door.h, vx: 2, vy: FIRE_SPEED, damage: 15, isFire: true, size: 12 });
+                
+                shakeTime = 8;
             }
 
+            // Dragon Spawning within the Seal
+            let maxDragons = 4 + (level * 2); 
+            spawnTimer--;
+            
+            // Only spawn in slots that are at or above the current seal line
+            let eligibleSlots = dragonSlots.filter(s => !s.dragon && s.y <= currentSealBottom + 10);
+
+            if (spawnTimer <= 0 && eligibleSlots.length > 0 && dragons.length < maxDragons) {
+                let slot = eligibleSlots[Math.floor(Math.random() * eligibleSlots.length)];
+                let newDragon = createDragon(slot.x, slot.y);
+                slot.dragon = newDragon;
+                dragons.push(newDragon);
+                createExplosion(slot.x, slot.y, '#aa0000', 1.5);
+                spawnTimer = Math.max(80, 180 - (level * 15)); 
+            }
+
+            // Dragon Logic
             for (let i = dragons.length - 1; i >= 0; i--) {
                 let d = dragons[i];
                 if (d.hp <= 0) {
                     createExplosion(d.x, d.y, d.color, 2);
                     playSound('hit');
                     score += (d.type === 'armored' ? 300 : (d.type === 'drake' ? 200 : 100));
+                    
+                    // Clear from slot
+                    let slot = dragonSlots.find(s => s.dragon === d);
+                    if (slot) slot.dragon = null;
+
                     dragons.splice(i, 1);
                     continue;
                 }
@@ -478,6 +512,7 @@
                 }
             }
 
+            // Projectile Logic
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 let pr = projectiles[i];
                 pr.x += pr.vx;
@@ -500,27 +535,34 @@
                         }
                     });
                 } else {
-                    if (pr.x > door.x && pr.x < door.x + door.w && pr.y > door.y && pr.y < door.y + door.h) {
+                    // Check against dragons first
+                    dragons.forEach(d => {
+                        if (!removed && Math.hypot(d.x - pr.x, d.y - pr.y) < d.radius + pr.size) {
+                            d.hp -= pr.damage;
+                            playSound('hit');
+                            createExplosion(pr.x, pr.y, '#ffcc00', 0.5);
+                            removed = true;
+                        }
+                    });
+                    
+                    // If it bypassed dragons and hit the seal line
+                    if (!removed && dragons.length > 0 && pr.y < currentSealBottom) {
+                        createExplosion(pr.x, currentSealBottom, '#00ffff', 0.5);
+                        removed = true;
+                    } 
+                    // If seal is down and it hit the door
+                    else if (!removed && dragons.length === 0 && pr.x > door.x && pr.x < door.x + door.w && pr.y > door.y && pr.y < door.y + door.h) {
                         door.hp -= pr.damage;
                         playSound('hit');
                         createExplosion(pr.x, pr.y, '#aaaaaa', 0.5);
                         removed = true;
-                    }
-                    if (!removed) {
-                        dragons.forEach(d => {
-                            if (Math.hypot(d.x - pr.x, d.y - pr.y) < d.radius + pr.size) {
-                                d.hp -= pr.damage;
-                                playSound('hit');
-                                createExplosion(pr.x, pr.y, '#ffcc00', 0.5);
-                                removed = true;
-                            }
-                        });
                     }
                 }
 
                 if (removed) projectiles.splice(i, 1);
             }
 
+            // Melee Hitbox Logic
             for (let i = activeMeleeHitboxes.length - 1; i >= 0; i--) {
                 let hb = activeMeleeHitboxes[i];
                 hb.life--;
@@ -530,18 +572,27 @@
                     else { hb.x = hb.owner.x - 10; hb.y = hb.owner.y - 100; }
                 }
 
-                if (hb.y < door.y + door.h && hb.x + hb.w > door.x && hb.x < door.x + door.w) {
-                    door.hp -= hb.damage / 5; 
-                    createExplosion(hb.x + hb.w/2, door.y + door.h, '#aaaaaa', 0.2);
-                }
-
+                let hitDragon = false;
                 dragons.forEach(d => {
                     if (d.x + d.radius > hb.x && d.x - d.radius < hb.x + hb.w &&
                         d.y + d.radius > hb.y && d.y - d.radius < hb.y + hb.h) {
                         d.hp -= hb.damage / 5; 
                         createExplosion(d.x, d.y, d.color, 0.2);
+                        hitDragon = true;
                     }
                 });
+
+                // Hit Seal
+                if (!hitDragon && dragons.length > 0 && hb.y < currentSealBottom) {
+                    createExplosion(hb.x + hb.w/2, currentSealBottom, '#00ffff', 0.2);
+                    if (hb.owner) hb.owner.y += 3.5; // Melee Recoil
+                } 
+                // Hit Gate
+                else if (dragons.length === 0 && hb.y < door.y + door.h && hb.x + hb.w > door.x && hb.x < door.x + door.w) {
+                    door.hp -= hb.damage / 5; 
+                    createExplosion(hb.x + hb.w/2, door.y + door.h, '#aaaaaa', 0.2);
+                    if (hb.owner) hb.owner.y += 3.5; // Melee Recoil
+                }
 
                 if (hb.life <= 0) activeMeleeHitboxes.splice(i, 1);
             }
@@ -584,7 +635,7 @@
                 ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, Math.PI, true); ctx.fill();
             });
 
-            // Draw Road (Middle Third)
+            // Draw Road
             ctx.fillStyle = '#2c2c30';
             ctx.fillRect(roadL, 0, roadW, logicalHeight);
             ctx.fillStyle = '#1e1e22';
@@ -599,6 +650,19 @@
                 shakeTime--;
             }
 
+            // Draw Dynamic Dragon Seal
+            if (dragons.length > 0) {
+                ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
+                ctx.fillRect(door.x, door.y + door.h, door.w, currentSealBottom - (door.y + door.h));
+                
+                ctx.strokeStyle = `rgba(0, 255, 255, ${0.5 + Math.sin(Date.now()*0.005)*0.3})`;
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(door.x, currentSealBottom);
+                ctx.lineTo(door.x + door.w, currentSealBottom);
+                ctx.stroke();
+            }
+
             // Draw Door
             ctx.fillStyle = '#37474f';
             ctx.fillRect(door.x, door.y, door.w, door.h);
@@ -606,25 +670,29 @@
             for (let i = 0; i < door.w; i += 20) {
                 ctx.fillRect(door.x + i, door.y, 4, door.h);
             }
+            
+            // Draw Door Warning
+            if (door.attackTimer < 40) {
+                ctx.fillStyle = `rgba(255, 100, 0, ${1 - (door.attackTimer/40)})`;
+                ctx.fillRect(door.x + door.w/2 - 20, door.y + door.h - 10, 40, 10);
+            }
+
             let doorHpPct = Math.max(0, door.hp / door.maxHp);
             ctx.fillStyle = 'red'; ctx.fillRect(door.x, door.y - 10, door.w, 6);
-            ctx.fillStyle = '#ffaa00'; ctx.fillRect(door.x, door.y - 10, door.w * doorHpPct, 6);
+            ctx.fillStyle = dragons.length > 0 ? '#555555' : '#ffaa00'; 
+            ctx.fillRect(door.x, door.y - 10, door.w * doorHpPct, 6);
 
             // Draw Dragons
             dragons.forEach(d => {
-                // Outer body
                 ctx.fillStyle = d.color;
                 ctx.beginPath(); ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2); ctx.fill();
-                // Inner snout/belly
                 ctx.fillStyle = d.secColor; 
                 ctx.beginPath(); ctx.arc(d.x, d.y+(d.radius/2), d.radius/1.5, 0, Math.PI*2); ctx.fill();
-                // Eyes
                 ctx.fillStyle = 'yellow';
                 let eyeOffset = d.radius / 3;
                 ctx.beginPath(); ctx.arc(d.x - eyeOffset, d.y - 5, 4, 0, Math.PI * 2); ctx.fill();
                 ctx.beginPath(); ctx.arc(d.x + eyeOffset, d.y - 5, 4, 0, Math.PI * 2); ctx.fill();
 
-                // Health Bar
                 let hpPct = Math.max(0, d.hp / d.maxHp);
                 ctx.fillStyle = 'red'; ctx.fillRect(d.x - 20, d.y - d.radius - 10, 40, 4);
                 ctx.fillStyle = '#00ff00'; ctx.fillRect(d.x - 20, d.y - d.radius - 10, 40 * hpPct, 4);
@@ -679,9 +747,18 @@
             ctx.restore();
 
             // HUD
-            ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, logicalWidth, 40);
+            ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, logicalWidth, 40);
             ctx.fillStyle = 'white'; ctx.font = 'bold 20px Georgia';
             ctx.fillText(`Level: ${level}   Score: ${score}`, 20, 26);
+            
+            if (dragons.length > 0) {
+                ctx.fillStyle = '#00ffff';
+                ctx.fillText(`SEAL ACTIVE - CLEAR THE DRAGONS`, logicalWidth/2 - 180, 26);
+            } else {
+                ctx.fillStyle = '#ff4444';
+                ctx.fillText(`GATE EXPOSED! STRIKE NOW!`, logicalWidth/2 - 140, 26);
+            }
+            
             ctx.font = '14px Georgia'; ctx.fillStyle = '#aaaaaa';
             ctx.fillText(`P1: Move (WASD) | Sword (J) | Spear (K) | Crossbow (L)`, 20, logicalHeight - 20);
         }
@@ -689,7 +766,6 @@
         function drawMenu() {
             ctx.clearRect(0, 0, logicalWidth, logicalHeight);
             
-            // Background ambiance for menu
             ctx.fillStyle = '#111'; ctx.fillRect(0,0,logicalWidth,logicalHeight);
             ctx.fillStyle = '#2c2c30'; ctx.fillRect(roadL, 0, roadW, logicalHeight);
             
