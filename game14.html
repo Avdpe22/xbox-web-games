@@ -247,7 +247,7 @@
                 players.forEach(p => {
                     p.x = logicalWidth / 2 + (p.id === 1 ? -20 : 20);
                     p.y = logicalHeight - 100;
-                    p.hp = Math.min(p.maxHp, p.hp + 50); 
+                    p.hp = p.maxHp; 
                 });
             }
 
@@ -257,7 +257,7 @@
         function createPlayer(id, color, startX, startY) {
             return {
                 id: id, color: color, x: startX, y: startY, radius: 15,
-                hp: 200, maxHp: 200, cooldowns: { sword: 0, spear: 0, crossbow: 0 },
+                hp: 500, maxHp: 500, cooldowns: { sword: 0, spear: 0, crossbow: 0 },
                 buttons: {} 
             };
         }
