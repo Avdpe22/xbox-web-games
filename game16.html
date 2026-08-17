@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEO-PADDLE 2026 // CYBER ARENA</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #030308;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+        /* 16:9 native canvas with dynamic TV scaling */
+        #gameCanvas {
+            background: radial-gradient(circle at center, #0a0d1a 0%, #030308 100%);
+            max-width: 100vw;
+            max-height: 100vh;
+            aspect-ratio: 16 / 9;
+            box-shadow: 0 0 40px rgba(0, 240, 255, 0.15);
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="1920" height="1080"></canvas>
+
+<script>
+/**
+ * NEO-PADDLE 2026 - MULTIPLAYER ARENA
+ * Optimized for Xbox Series S Controller on Microsoft Edge
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// --- WEB AUDIO PROCEDURAL SFX ---
+let audioCtx = null;
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+}
+
+function playSound(type) {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (type === 'hit') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(80, now + 0.08);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.08);
+        osc.start(now); osc.stop(now + 0.08);
+    } else if (type === 'smash') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(120, now + 0.22);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.22);
+        osc.start(now); osc.stop(now + 0.22);
+    } else if (type === 'curve') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.linearRampToValueAtTime(550, now + 0.18);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.18);
+        osc.start(now); osc.stop(now + 0.18);
+    } else if (type === 'dash') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.12);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.12);
+        osc.start(now); osc.stop(now + 0.12);
+    } else if (type === 'super') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.linearRampToValueAtTime(900, now + 0.35);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.35);
+        osc.start(now); osc.stop(now + 0.35);
+    } else if (type === 'goal') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(120, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.6);
+        gain.gain.setValueAtTime(0.45, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.6);
+        osc.start(now); osc.stop(now + 0.6);
+    }
+}
+
+// --- GAMEPAD & KEYBOARD MANAGER ---
+const Input = {
+    pads: {},
+    keys: {
+        p1: { up: false, down: false, left: false, right: false, smash: false, curve: false, dash: false, superAtk: false },
+        p2: { up: false, down: false, left: false, right: false, smash: false, curve: false, dash: false, superAtk: false }
+    },
+    poll() {
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        for (let i = 0; i < gamepads.length; i++) {
+            this.pads[i] = gamepads[i];
+        }
+    },
+    getState(padIndex, isP2Fallback = false) {
+        const pad = this.pads[padIndex];
+        const k = isP2Fallback ? this.keys.p2 : this.keys.p1;
+        let vx = 0, vy = 0, smash = false, curve = false, dash = false, superAtk = false;
+
+        if (pad) {
+            const axisX = pad.axes[0] || 0;
+            const axisY = pad.axes[1] || 0;
+            if (Math.abs(axisX) > 0.2) vx = axisX;
+            if (Math.abs(axisY) > 0.2) vy = axisY;
+
+            // D-Pad
+            if (pad.buttons[14]?.pressed) vx = -1;
+            if (pad.buttons[15]?.pressed) vx = 1;
+            if (pad.buttons[12]?.pressed) vy = -1;
+            if (pad.buttons[13]?.pressed) vy = 1;
+
+            // Buttons: A (0), RT (7), B (1), LT (6), X (2), LB (4), Y (3), RB (5)
+            smash = pad.buttons[0]?.pressed || pad.buttons[7]?.pressed;
+            curve = pad.buttons[1]?.pressed || pad.buttons[6]?.pressed;
+            dash = pad.buttons[2]?.pressed || pad.buttons[4]?.pressed;
+            superAtk = pad.buttons[3]?.pressed || pad.buttons[5]?.pressed;
+        }
+
+        // Keyboard Fallback
+        if (k.left) vx = -1;
+        if (k.right) vx = 1;
+        if (k.up) vy = -1;
+        if (k.down) vy = 1;
+        if (k.smash) smash = true;
+        if (k.curve) curve = true;
+        if (k.dash) dash = true;
+        if (k.superAtk) superAtk = true;
+
+        return { vx, vy, smash, curve, dash, superAtk };
+    }
+};
+
+// --- GAME CONSTANTS & STATE ---
+const ARENA = { x: 80, y: 80, w: 1760, h: 920 };
+const WIN_SCORE = 7;
+const STATES = { MENU: 0, PLAYING: 1, ROUND_SCORED: 2, GAMEOVER: 3 };
+let gameState = STATES.MENU;
+let gameMode = 'VS_AI'; // 'VS_AI' or 'VS_PLAYER'
+let winner = null;
+let screenShake = 0;
+let scoreP1 = 0;
+let scoreP2 = 0;
+
+// --- ENTITIES ---
+class Paddle {
+    constructor(id, x, isRightSide) {
+        this.id = id;
+        this.x = x;
+        this.y = 540;
+        this.w = 34;
+        this.h = 170;
+        this.isRight = isRightSide;
+        this.color = isRightSide ? '#ff3366' : '#00f0ff';
+        this.glow = isRightSide ? 'rgba(255, 51, 102, 0.6)' : 'rgba(0, 240, 255, 0.6)';
+        
+        this.speed = 13;
+        this.dashTimer = 0;
+        this.dashCooldown = 0;
+        this.meter = 0; // Overdrive gauge (0 to 100)
+
+        this.swingState = 'IDLE'; // 'SMASH', 'CURVE', 'IDLE'
+        this.swingTimer = 0;
+    }
+
+    update(input, ball) {
+        if (this.dashCooldown > 0) this.dashCooldown--;
+        if (this.swingTimer > 0) {
+            this.swingTimer--;
+            if (this.swingTimer <= 0) this.swingState = 'IDLE';
+        }
+
+        let curSpeed = this.speed;
+
+        // Dash Logic
+        if (input.dash && this.dashCooldown <= 0) {
+            this.dashTimer = 9;
+            this.dashCooldown = 38;
+            playSound('dash');
+            createParticles(this.x, this.y, this.color, 12);
+        }
+
+        if (this.dashTimer > 0) {
+            curSpeed *= 2.3;
+            this.dashTimer--;
+        }
+
+        // Apply Movement
+        this.x += input.vx * curSpeed;
+        this.y += input.vy * curSpeed;
+
+        // Clamp to Half Courts
+        const halfWidth = ARENA.w / 2;
+        if (!this.isRight) {
+            this.x = Math.max(ARENA.x + 30, Math.min(ARENA.x + halfWidth - 60, this.x));
+        } else {
+            this.x = Math.max(ARENA.x + halfWidth + 60, Math.min(ARENA.x + ARENA.w - 30, this.x));
+        }
+        this.y = Math.max(ARENA.y + this.h / 2, Math.min(ARENA.y + ARENA.h - this.h / 2, this.y));
+
+        // Swing inputs
+        if (input.smash && this.swingTimer <= 0) {
+            this.swingState = 'SMASH';
+            this.swingTimer = 14;
+        } else if (input.curve && this.swingTimer <= 0) {
+            this.swingState = 'CURVE';
+            this.swingTimer = 14;
+        }
+    }
+
+    updateAI(ball) {
+        const input = { vx: 0, vy: 0, smash: false, curve: false, dash: false, superAtk: false };
+        const targetX = ARENA.x + ARENA.w - 180;
+        const targetY = ball.y;
+
+        // Horizontal positioning
+        if (this.x < targetX - 20) input.vx = 1;
+        else if (this.x > targetX + 20) input.vx = -0.7;
+
+        // Vertical tracking with intentional reaction threshold
+        const dy = targetY - this.y;
+        if (Math.abs(dy) > 20) {
+            input.vy = dy > 0 ? 0.92 : -0.92;
+        }
+
+        // AI Smashing and Dashing
+        const distToBall = Math.hypot(ball.x - this.x, ball.y - this.y);
+        if (ball.vx > 0 && distToBall < 180) {
+            if (Math.random() < 0.25) input.smash = true;
+            else if (Math.random() < 0.15) input.curve = true;
+        }
+
+        if (ball.vx > 0 && distToBall > 350 && Math.abs(dy) > 120 && Math.random() < 0.04) {
+            input.dash = true;
+        }
+
+        if (this.meter >= 100 && ball.vx > 0 && distToBall < 200) {
+            input.superAtk = true;
+        }
+
+        this.update(input, ball);
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.shadowColor = this.glow;
+        ctx.shadowBlur = this.dashTimer > 0 ? 30 : 15;
+
+        // Paddle Body
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - this.w / 2, this.y - this.h / 2, this.w, this.h);
+
+        // Core Energy Strip
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(this.x - 4, this.y - this.h / 2 + 10, 8, this.h - 20);
+
+        // Swing Aura Visualizer
+        if (this.swingState !== 'IDLE') {
+            ctx.strokeStyle = this.swingState === 'SMASH' ? '#ffff00' : '#b000ff';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(this.x - this.w / 2 - 8, this.y - this.h / 2 - 8, this.w + 16, this.h + 16);
+        }
+
+        ctx.restore();
+    }
+}
+
+class Ball {
+    constructor() {
+        this.reset(1);
+    }
+
+    reset(direction = 1) {
+        this.x = ARENA.x + ARENA.w / 2;
+        this.y = ARENA.y + ARENA.h / 2;
+        this.r = 18;
+        this.baseSpeed = 16;
+        this.speed = this.baseSpeed;
+        
+        const angle = (Math.random() * 0.5 - 0.25) * Math.PI;
+        this.vx = Math.cos(angle) * this.speed * direction;
+        this.vy = Math.sin(angle) * this.speed;
+        
+        this.spin = 0;
+        this.isSuper = false;
+        this.lastHitter = null;
+        this.tail = [];
+    }
+
+    update(p1, p2) {
+        // Apply Spin Curvature
+        this.vy += this.spin;
+        this.spin *= 0.97;
+
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Trail history
+        this.tail.push({ x: this.x, y: this.y, r: this.r, isSuper: this.isSuper });
+        if (this.tail.length > 14) this.tail.shift();
+
+        // Arena Top & Bottom Bounce
+        if (this.y - this.r < ARENA.y) {
+            this.y = ARENA.y + this.r;
+            this.vy = Math.abs(this.vy);
+            playSound('hit');
+            createParticles(this.x, this.y, '#ffffff', 8);
+        } else if (this.y + this.r > ARENA.y + ARENA.h) {
+            this.y = ARENA.y + ARENA.h - this.r;
+            this.vy = -Math.abs(this.vy);
+            playSound('hit');
+            createParticles(this.x, this.y, '#ffffff', 8);
+        }
+
+        // Check Paddle Collisions
+        this.checkPaddleHit(p1);
+        this.checkPaddleHit(p2);
+
+        // Goal Scoring
+        if (this.x < ARENA.x - 20) {
+            scoreP2++;
+            onScoreScored(2);
+        } else if (this.x > ARENA.x + ARENA.w + 20) {
+            scoreP1++;
+            onScoreScored(1);
+        }
+    }
+
+    checkPaddleHit(paddle) {
+        const testX = Math.max(paddle.x - paddle.w / 2, Math.min(this.x, paddle.x + paddle.w / 2));
+        const testY = Math.max(paddle.y - paddle.h / 2, Math.min(this.y, paddle.y + paddle.h / 2));
+        const distX = this.x - testX;
+        const distY = this.y - testY;
+        const dist = Math.hypot(distX, distY);
+
+        if (dist <= this.r) {
+            // Prevent sticking behind paddle
+            if (!paddle.isRight && this.vx > 0) return;
+            if (paddle.isRight && this.vx < 0) return;
+
+            this.lastHitter = paddle;
+            paddle.meter = Math.min(100, paddle.meter + 16);
+
+            // Angle mapping based on impact location relative to paddle center
+            const relativeIntersectY = (paddle.y - this.y) / (paddle.h / 2);
+            const bounceAngle = -relativeIntersectY * (Math.PI / 3); // Max 60 deg angle
+
+            const direction = paddle.isRight ? -1 : 1;
+
+            // Trigger Super / Smash / Curve modulations
+            const input = paddle.id === 1 ? Input.getState(0) : Input.getState(1, gameMode === 'VS_PLAYER');
+            
+            if (input.superAtk && paddle.meter >= 100) {
+                paddle.meter = 0;
+                this.isSuper = true;
+                this.speed = 36;
+                this.spin = (Math.random() - 0.5) * 1.5;
+                screenShake = 18;
+                playSound('super');
+                createParticles(this.x, this.y, '#ffff00', 35);
+            } else if (paddle.swingState === 'SMASH') {
+                this.isSuper = false;
+                this.speed = Math.min(32, this.speed + 4.5);
+                this.spin = 0;
+                screenShake = 9;
+                playSound('smash');
+                createParticles(this.x, this.y, '#ffffff', 20);
+            } else if (paddle.swingState === 'CURVE') {
+                this.isSuper = false;
+                this.speed = Math.max(16, this.speed * 0.9);
+                this.spin = relativeIntersectY * 1.3;
+                playSound('curve');
+                createParticles(this.x, this.y, '#b000ff', 18);
+            } else {
+                this.isSuper = false;
+                this.speed = Math.min(26, this.speed + 0.8);
+                playSound('hit');
+                createParticles(this.x, this.y, paddle.color, 10);
+            }
+
+            this.vx = Math.cos(bounceAngle) * this.speed * direction;
+            this.vy = Math.sin(bounceAngle) * this.speed;
+
+            // Push clear of hitbox
+            this.x = paddle.isRight ? paddle.x - paddle.w / 2 - this.r - 2 : paddle.x + paddle.w / 2 + this.r + 2;
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        // Dynamic Tail Blur
+        this.tail.forEach((pos, idx) => {
+            const alpha = (idx + 1) / this.tail.length;
+            ctx.fillStyle = pos.isSuper ? `rgba(255, 240, 0, ${alpha * 0.4})` : `rgba(0, 240, 255, ${alpha * 0.25})`;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, pos.r * alpha, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Main Plasma Core
+        ctx.shadowColor = this.isSuper ? '#ffff00' : '#00ffff';
+        ctx.shadowBlur = this.isSuper ? 30 : 18;
+        ctx.fillStyle = this.isSuper ? '#fffb00' : '#ffffff';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+// --- PARTICLES ---
+let particles = [];
+function createParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        const speed = Math.random() * 10 + 2;
+        const angle = Math.random() * Math.PI * 2;
+        particles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            color,
+            life: 1.0,
+            decay: Math.random() * 0.05 + 0.03
+        });
+    }
+}
+
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= p.decay;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+}
+
+function drawParticles(ctx) {
+    particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life;
+        ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+    });
+    ctx.globalAlpha = 1.0;
+}
+
+// --- STATE MANAGEMENT & SCORING ---
+let p1 = new Paddle(1, ARENA.x + 120, false);
+let p2 = new Paddle(2, ARENA.x + ARENA.w - 120, true);
+let ball = new Ball();
+let scoredTimer = 0;
+let lastScorer = 1;
+
+function onScoreScored(scorerId) {
+    playSound('goal');
+    screenShake = 22;
+    lastScorer = scorerId;
+    createParticles(ball.x, ball.y, scorerId === 1 ? '#00f0ff' : '#ff3366', 60);
+
+    if (scoreP1 >= WIN_SCORE || scoreP2 >= WIN_SCORE) {
+        winner = scoreP1 >= WIN_SCORE ? 'PLAYER 1' : (gameMode === 'VS_PLAYER' ? 'PLAYER 2' : 'AI MASTER');
+        gameState = STATES.GAMEOVER;
+    } else {
+        gameState = STATES.ROUND_SCORED;
+        scoredTimer = 75; // frames delay
+    }
+}
+
+function startMatch(mode) {
+    initAudio();
+    gameMode = mode;
+    scoreP1 = 0;
+    scoreP2 = 0;
+    p1 = new Paddle(1, ARENA.x + 120, false);
+    p2 = new Paddle(2, ARENA.x + ARENA.w - 120, true);
+    ball.reset(1);
+    gameState = STATES.PLAYING;
+}
+
+// --- DRAW UI / HUD ---
+function drawHUD(ctx) {
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 64px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+
+    // Scores
+    ctx.fillText(`${scoreP1}   ${scoreP2}`, 1920 / 2, 160);
+
+    // Overdrive Super Meters
+    drawSuperMeter(ctx, ARENA.x + 100, 45, p1.meter, p1.color, 'P1 OVERDRIVE');
+    drawSuperMeter(ctx, ARENA.x + ARENA.w - 400, 45, p2.meter, p2.color, gameMode === 'VS_PLAYER' ? 'P2 OVERDRIVE' : 'AI OVERDRIVE');
+}
+
+function drawSuperMeter(ctx, x, y, val, color, label) {
+    ctx.fillStyle = '#111728';
+    ctx.fillRect(x, y, 300, 18);
+    ctx.strokeStyle = '#22304d';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, 300, 18);
+
+    ctx.fillStyle = val >= 100 ? '#ffea00' : color;
+    ctx.fillRect(x + 2, y + 2, (val / 100) * 296, 14);
+
+    ctx.font = '600 14px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#8e9bb4';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, x, y - 6);
+}
+
+function drawArena(ctx) {
+    // Outer Border
+    ctx.strokeStyle = '#00f0ff22';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+
+    // Center Net/Laser Divider
+    ctx.strokeStyle = '#00f0ff44';
+    ctx.setLineDash([16, 16]);
+    ctx.beginPath();
+    ctx.moveTo(1920 / 2, ARENA.y);
+    ctx.lineTo(1920 / 2, ARENA.y + ARENA.h);
+    ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+function drawMenu() {
+    ctx.fillStyle = 'rgba(3, 3, 8, 0.85)';
+    ctx.fillRect(0, 0, 1920, 1080);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#00f0ff';
+    ctx.font = '900 86px "Segoe UI", sans-serif';
+    ctx.fillText("NEO-PADDLE 2026", 1920 / 2, 380);
+
+    ctx.font = '600 28px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText("HIGH-IMPACT HYPER PADDLE COMBAT", 1920 / 2, 440);
+
+    // Mode Buttons
+    ctx.fillStyle = '#00f0ff';
+    ctx.font = '700 36px "Segoe UI", sans-serif';
+    ctx.fillText("Press (A) / (Space) : 1-PLAYER VS AI", 1920 / 2, 600);
+    
+    ctx.fillStyle = '#ff3366';
+    ctx.fillText("Press (X) / (J) : 2-PLAYER LOCAL VS", 1920 / 2, 680);
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '500 22px "Segoe UI", sans-serif';
+    ctx.fillText("Xbox Controller: Left Stick = Move | (A)/RT = Smash | (B)/LT = Curve | (X)/LB = Dash | (Y)/RB = Super", 1920 / 2, 940);
+}
+
+function drawGameOver() {
+    ctx.fillStyle = 'rgba(3, 3, 8, 0.85)';
+    ctx.fillRect(0, 0, 1920, 1080);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 80px "Segoe UI", sans-serif';
+    ctx.fillText(`${winner} TRIUMPHS!`, 1920 / 2, 480);
+
+    ctx.font = '600 34px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#00f0ff';
+    ctx.fillText("Press (A) or (Space) to Return to Menu", 1920 / 2, 600);
+}
+
+// --- MAIN LOOP ---
+function update() {
+    Input.poll();
+    const p1Input = Input.getState(0);
+    const p2Input = Input.getState(1, true);
+
+    if (gameState === STATES.MENU) {
+        if (p1Input.smash) startMatch('VS_AI');
+        if (p1Input.dash) startMatch('VS_PLAYER');
+        return;
+    }
+
+    if (gameState === STATES.GAMEOVER) {
+        if (p1Input.smash) gameState = STATES.MENU;
+        return;
+    }
+
+    if (gameState === STATES.ROUND_SCORED) {
+        scoredTimer--;
+        if (scoredTimer <= 0) {
+            ball.reset(lastScorer === 1 ? -1 : 1);
+            gameState = STATES.PLAYING;
+        }
+        return;
+    }
+
+    if (gameState === STATES.PLAYING) {
+        p1.update(p1Input, ball);
+        if (gameMode === 'VS_PLAYER') {
+            p2.update(p2Input, ball);
+        } else {
+            p2.updateAI(ball);
+        }
+        ball.update(p1, p2);
+        updateParticles();
+    }
+}
+
+function loop() {
+    update();
+
+    ctx.save();
+    if (screenShake > 0) {
+        ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+        screenShake *= 0.9;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawArena(ctx);
+    p1.draw(ctx);
+    p2.draw(ctx);
+    ball.draw(ctx);
+    drawParticles(ctx);
+    drawHUD(ctx);
+
+    if (gameState === STATES.MENU) drawMenu();
+    if (gameState === STATES.GAMEOVER) drawGameOver();
+
+    ctx.restore();
+    requestAnimationFrame(loop);
+}
+
+// --- KEYBOARD LISTENERS ---
+window.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'w') Input.keys.p1.up = true;
+    if (k === 's') Input.keys.p1.down = true;
+    if (k === 'a') Input.keys.p1.left = true;
+    if (k === 'd') Input.keys.p1.right = true;
+    if (k === 'j' || e.code === 'Space') Input.keys.p1.smash = true;
+    if (k === 'k') Input.keys.p1.curve = true;
+    if (k === 'l' || e.key === 'Shift') Input.keys.p1.dash = true;
+    if (k === 'i' || e.key === 'Enter') Input.keys.p1.superAtk = true;
+
+    // P2 Keyboard
+    if (e.key === 'ArrowUp') Input.keys.p2.up = true;
+    if (e.key === 'ArrowDown') Input.keys.p2.down = true;
+    if (e.key === 'ArrowLeft') Input.keys.p2.left = true;
+    if (e.key === 'ArrowRight') Input.keys.p2.right = true;
+    if (k === '1') Input.keys.p2.smash = true;
+    if (k === '2') Input.keys.p2.curve = true;
+    if (k === '3') Input.keys.p2.dash = true;
+    if (k === '5') Input.keys.p2.superAtk = true;
+});
+
+window.addEventListener('keyup', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'w') Input.keys.p1.up = false;
+    if (k === 's') Input.keys.p1.down = false;
+    if (k === 'a') Input.keys.p1.left = false;
+    if (k === 'd') Input.keys.p1.right = false;
+    if (k === 'j' || e.code === 'Space') Input.keys.p1.smash = false;
+    if (k === 'k') Input.keys.p1.curve = false;
+    if (k === 'l' || e.key === 'Shift') Input.keys.p1.dash = false;
+    if (k === 'i' || e.key === 'Enter') Input.keys.p1.superAtk = false;
+
+    // P2 Keyboard
+    if (e.key === 'ArrowUp') Input.keys.p2.up = false;
+    if (e.key === 'ArrowDown') Input.keys.p2.down = false;
+    if (e.key === 'ArrowLeft') Input.keys.p2.left = false;
+    if (e.key === 'ArrowRight') Input.keys.p2.right = false;
+    if (k === '1') Input.keys.p2.smash = false;
+    if (k === '2') Input.keys.p2.curve = false;
+    if (k === '3') Input.keys.p2.dash = false;
+    if (k === '5') Input.keys.p2.superAtk = false;
+});
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GALACTIC ONSLAUGHT // NEXT-GEN 1980s SHOOTER</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #020205;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+        /* 16:9 native canvas with TV display curve framing */
+        #gameCanvas {
+            background: #000;
+            max-width: 100vw;
+            max-height: 100vh;
+            aspect-ratio: 16 / 9;
+            box-shadow: 0 0 50px rgba(176, 38, 255, 0.25), inset 0 0 100px rgba(0,0,0,0.8);
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="1920" height="1080"></canvas>
+
+<script>
+/**
+ * GALACTIC ONSLAUGHT: OVERDRIVE
+ * 1980s Fixed Shooter Modernized for Xbox Series S Controller
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// --- 8-BIT DUBSTEP SYNTH AUDIO ENGINE ---
+let audioCtx = null;
+let musicInterval = null;
+let musicStep = 0;
+let isAudioInit = false;
+
+function initAudio() {
+    if (isAudioInit) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    isAudioInit = true;
+    start8BitDubstepBGM();
+}
+
+function playSound(type) {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (type === 'laser') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(110, now + 0.09);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.09);
+        osc.start(now); osc.stop(now + 0.09);
+    } else if (type === 'explode') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(25, now + 0.35);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+        osc.start(now); osc.stop(now + 0.35);
+    } else if (type === 'dash') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now); osc.stop(now + 0.15);
+    } else if (type === 'shield') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.linearRampToValueAtTime(600, now + 0.1);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now); osc.stop(now + 0.1);
+    } else if (type === 'hyperbeam') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(120, now);
+        osc.frequency.linearRampToValueAtTime(440, now + 0.6);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.6);
+        osc.start(now); osc.stop(now + 0.6);
+    }
+}
+
+// Procedural 8-Bit Dubstep Sequencer: Chip arpeggios + Wobble Sub Bass + Heavy Snare
+function start8BitDubstepBGM() {
+    if (musicInterval) clearInterval(musicInterval);
+    
+    // Dubstep 140 BPM half-time feel -> 16th note steps = ~107ms
+    const stepTime = 0.107;
+    const bassNotes = [43.65, 43.65, 43.65, 43.65, 38.89, 38.89, 48.99, 51.91]; // F1, D#1, G1, G#1
+    const chipArp = [523.25, 659.25, 783.99, 1046.5, 659.25, 783.99, 1046.5, 1318.5];
+
+    musicInterval = setInterval(() => {
+        if (!audioCtx || gameState !== STATES.PLAYING) return;
+        const now = audioCtx.currentTime;
+
+        // 1. CHIPTUNE LEAD (Square Wave Arp)
+        const arpOsc = audioCtx.createOscillator();
+        const arpGain = audioCtx.createGain();
+        arpOsc.type = 'square';
+        arpOsc.frequency.setValueAtTime(chipArp[musicStep % chipArp.length], now);
+        arpGain.gain.setValueAtTime(0.04, now);
+        arpGain.gain.exponentialRampToValueAtTime(0.001, now + stepTime * 0.9);
+        arpOsc.connect(arpGain);
+        arpGain.connect(audioCtx.destination);
+        arpOsc.start(now); arpOsc.stop(now + stepTime * 0.9);
+
+        // 2. 8-BIT WOBBLE BASS (LFO Filter Modulated Saw/Square)
+        if (musicStep % 2 === 0) {
+            const bassOsc = audioCtx.createOscillator();
+            const filter = audioCtx.createBiquadFilter();
+            const bassGain = audioCtx.createGain();
+
+            bassOsc.type = 'sawtooth';
+            const baseFreq = bassNotes[Math.floor((musicStep % 32) / 4)];
+            bassOsc.frequency.setValueAtTime(baseFreq, now);
+
+            // Wobble Cutoff Envelope
+            filter.type = 'lowpass';
+            const wobbleRate = (musicStep % 8 < 4) ? 800 : 250;
+            filter.frequency.setValueAtTime(150, now);
+            filter.frequency.exponentialRampToValueAtTime(wobbleRate, now + stepTime);
+            filter.Q.setValueAtTime(8, now);
+
+            bassGain.gain.setValueAtTime(0.18, now);
+            bassGain.gain.linearRampToValueAtTime(0.01, now + stepTime * 1.9);
+
+            bassOsc.connect(filter);
+            filter.connect(bassGain);
+            bassGain.connect(audioCtx.destination);
+            bassOsc.start(now); bassOsc.stop(now + stepTime * 1.9);
+        }
+
+        // 3. 8-BIT HALF-TIME DRUM KIT (Kick on 0, Heavy 8-bit Noise Snare on 8)
+        if (musicStep % 16 === 0) {
+            // Sub Kick
+            const kick = audioCtx.createOscillator();
+            const kickGain = audioCtx.createGain();
+            kick.type = 'sine';
+            kick.frequency.setValueAtTime(130, now);
+            kick.frequency.exponentialRampToValueAtTime(30, now + 0.12);
+            kickGain.gain.setValueAtTime(0.3, now);
+            kickGain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+            kick.connect(kickGain);
+            kickGain.connect(audioCtx.destination);
+            kick.start(now); kick.stop(now + 0.12);
+        } else if (musicStep % 16 === 8) {
+            // Chip Noise Snare
+            const snare = audioCtx.createOscillator();
+            const sGain = audioCtx.createGain();
+            snare.type = 'square';
+            snare.frequency.setValueAtTime(220, now);
+            snare.frequency.linearRampToValueAtTime(60, now + 0.14);
+            sGain.gain.setValueAtTime(0.2, now);
+            sGain.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
+            snare.connect(sGain);
+            sGain.connect(audioCtx.destination);
+            snare.start(now); snare.stop(now + 0.14);
+        }
+
+        musicStep = (musicStep + 1) % 64;
+    }, 107);
+}
+
+// --- GAMEPAD & KEYBOARD MANAGER ---
+const Input = {
+    pads: {},
+    keys: { left: false, right: false, up: false, down: false, fire: false, shield: false, dash: false, hyper: false },
+    poll() {
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        for (let i = 0; i < gamepads.length; i++) {
+            this.pads[i] = gamepads[i];
+        }
+    },
+    getState() {
+        const pad = this.pads[0]; // Primary controller
+        let vx = 0, vy = 0;
+        let aimX = 0, aimY = -1;
+        let fire = false, shield = false, dash = false, hyper = false;
+
+        if (pad) {
+            // Left Stick (Movement)
+            if (Math.abs(pad.axes[0]) > 0.18) vx = pad.axes[0];
+            if (Math.abs(pad.axes[1]) > 0.18) vy = pad.axes[1];
+
+            // D-Pad
+            if (pad.buttons[14]?.pressed) vx = -1;
+            if (pad.buttons[15]?.pressed) vx = 1;
+            if (pad.buttons[12]?.pressed) vy = -1;
+            if (pad.buttons[13]?.pressed) vy = 1;
+
+            // Right Stick (Aim vectoring)
+            if (Math.hypot(pad.axes[2], pad.axes[3]) > 0.3) {
+                aimX = pad.axes[2];
+                aimY = pad.axes[3];
+            }
+
+            // Buttons: RT(7)/(A)(0), LT(6)/(B)(1), LB(4)/(X)(2), RB(5)/(Y)(3)
+            fire = pad.buttons[7]?.pressed || pad.buttons[0]?.pressed;
+            shield = pad.buttons[6]?.pressed || pad.buttons[1]?.pressed;
+            dash = pad.buttons[4]?.pressed || pad.buttons[2]?.pressed;
+            hyper = pad.buttons[5]?.pressed || pad.buttons[3]?.pressed;
+        }
+
+        // Keyboard Fallback
+        if (this.keys.left) vx = -1;
+        if (this.keys.right) vx = 1;
+        if (this.keys.up) vy = -1;
+        if (this.keys.down) vy = 1;
+        if (this.keys.fire) fire = true;
+        if (this.keys.shield) shield = true;
+        if (this.keys.dash) dash = true;
+        if (this.keys.hyper) hyper = true;
+
+        return { vx, vy, aimX, aimY, fire, shield, dash, hyper };
+    }
+};
+
+// --- GAME CONSTANTS & STATE ---
+const STATES = { MENU: 0, PLAYING: 1, GAMEOVER: 2, VICTORY: 3 };
+let gameState = STATES.MENU;
+let score = 0;
+let highScore = 999999;
+let screenShake = 0;
+
+// --- SPACE DUST & NEBULA BACKGROUND ---
+const stars = [];
+for (let i = 0; i < 160; i++) {
+    stars.push({
+        x: Math.random() * 1920,
+        y: Math.random() * 1080,
+        z: Math.random() * 4 + 1,
+        size: Math.random() * 2 + 1,
+        color: ['#ffffff', '#00f0ff', '#b026ff', '#ff0077'][Math.floor(Math.random() * 4)]
+    });
+}
+
+// --- PLAYER FIGHTER ---
+class PlayerShip {
+    constructor() {
+        this.reset();
+    }
+
+    reset() {
+        this.x = 1920 / 2;
+        this.y = 920;
+        this.w = 54;
+        this.h = 44;
+        this.speed = 12;
+        this.lives = 3;
+        this.shield = 100;
+        this.hyperMeter = 0; // 0 to 100
+        this.isShieldActive = false;
+        this.dashTimer = 0;
+        this.dashCooldown = 0;
+        this.fireCooldown = 0;
+        this.invulnerableTimer = 0;
+        this.trail = [];
+    }
+
+    update(input) {
+        if (this.dashCooldown > 0) this.dashCooldown--;
+        if (this.invulnerableTimer > 0) this.invulnerableTimer--;
+        if (this.fireCooldown > 0) this.fireCooldown--;
+
+        // DASH (LB / X)
+        if (input.dash && this.dashCooldown <= 0) {
+            this.dashTimer = 10;
+            this.dashCooldown = 45;
+            this.invulnerableTimer = 14;
+            screenShake = 6;
+            playSound('dash');
+            createExplosion(this.x, this.y, '#00f0ff', 12);
+        }
+
+        let curSpeed = this.speed;
+        if (this.dashTimer > 0) {
+            curSpeed *= 2.2;
+            this.dashTimer--;
+        }
+
+        // Movement with constrained bottom zone for fixed shooter style
+        this.x += input.vx * curSpeed;
+        this.y += input.vy * (curSpeed * 0.75);
+
+        this.x = Math.max(120, Math.min(1800, this.x));
+        this.y = Math.max(760, Math.min(1020, this.y)); // Fixed bottom pocket
+
+        // SHIELD (LT / B)
+        this.isShieldActive = input.shield && this.shield > 0;
+        if (this.isShieldActive) {
+            this.shield = Math.max(0, this.shield - 0.45);
+        } else {
+            this.shield = Math.min(100, this.shield + 0.15); // passive regen
+        }
+
+        // WEAPONS (RT / A)
+        if (input.fire && this.fireCooldown <= 0) {
+            this.fireCooldown = 6; // High rate twin blaster
+            playSound('laser');
+            projectiles.push(new Projectile(this.x - 22, this.y - 15, 0, -26, '#00f0ff', true));
+            projectiles.push(new Projectile(this.x + 22, this.y - 15, 0, -26, '#00f0ff', true));
+        }
+
+        // OVERDRIVE HYPER-BEAM (RB / Y)
+        if (input.hyper && this.hyperMeter >= 100) {
+            this.hyperMeter = 0;
+            screenShake = 30;
+            playSound('hyperbeam');
+            hyperBeams.push(new HyperBeam(this.x));
+            createExplosion(this.x, this.y - 50, '#ff00ff', 30);
+        }
+
+        // Plasma Engine Trail
+        this.trail.push({ x: this.x, y: this.y, alpha: 1.0 });
+        if (this.trail.length > 8) this.trail.shift();
+    }
+
+    draw(ctx) {
+        ctx.save();
+
+        // Afterburner Thruster Trails
+        this.trail.forEach((t, idx) => {
+            const a = (idx + 1) / this.trail.length;
+            ctx.fillStyle = `rgba(0, 240, 255, ${a * 0.35})`;
+            ctx.fillRect(t.x - 14, t.y + 14, 28, 16);
+        });
+
+        // Shield Bubble
+        if (this.isShieldActive) {
+            ctx.strokeStyle = `rgba(0, 240, 255, ${0.6 + Math.sin(Date.now() * 0.02) * 0.3})`;
+            ctx.lineWidth = 4;
+            ctx.shadowColor = '#00f0ff';
+            ctx.shadowBlur = 25;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 55, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // Draw Modern High-Tech Fighter (Vector Polygons)
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 18;
+        ctx.fillStyle = this.invulnerableTimer % 4 > 2 ? '#ffffff' : '#d8e5ff';
+        
+        // Main Fuselage
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - 30);
+        ctx.lineTo(this.x + 14, this.y + 16);
+        ctx.lineTo(this.x + 36, this.y + 24);
+        ctx.lineTo(this.x + 12, this.y + 28);
+        ctx.lineTo(this.x - 12, this.y + 28);
+        ctx.lineTo(this.x - 36, this.y + 24);
+        ctx.lineTo(this.x - 14, this.y + 16);
+        ctx.closePath();
+        ctx.fill();
+
+        // Cockpit Glow
+        ctx.fillStyle = '#00f0ff';
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y - 2, 6, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Twin Engine Thrusters
+        ctx.fillStyle = '#ff9900';
+        ctx.shadowColor = '#ff5500';
+        ctx.shadowBlur = 15;
+        ctx.fillRect(this.x - 18, this.y + 26, 6, 12 + Math.random() * 8);
+        ctx.fillRect(this.x + 12, this.y + 26, 6, 12 + Math.random() * 8);
+
+        ctx.restore();
+    }
+}
+
+// --- PROJECTILES & HYPER-BEAMS ---
+class Projectile {
+    constructor(x, y, vx, vy, color, isPlayer = false, dmg = 25) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.color = color;
+        this.isPlayer = isPlayer;
+        this.dmg = dmg;
+        this.radius = isPlayer ? 5 : 6;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class HyperBeam {
+    constructor(x) {
+        this.x = x;
+        this.w = 120;
+        this.life = 40;
+    }
+
+    update() {
+        this.life--;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.shadowColor = '#ff00ff';
+        ctx.shadowBlur = 35;
+        
+        // Inner intense plasma core
+        ctx.fillStyle = `rgba(255, 255, 255, ${this.life / 40})`;
+        ctx.fillRect(this.x - this.w / 4, 0, this.w / 2, 1080);
+
+        // Outer devastating beam aura
+        ctx.fillStyle = `rgba(255, 0, 255, ${(this.life / 40) * 0.45})`;
+        ctx.fillRect(this.x - this.w / 2, 0, this.w, 1080);
+        ctx.restore();
+    }
+}
+
+// --- ENEMY FORMATION ENGINE ---
+class Enemy {
+    constructor(formationX, formationY, type = 'scout') {
+        this.origX = formationX;
+        this.origY = formationY;
+        this.x = formationX;
+        this.y = -80 - Math.random() * 200;
+        this.type = type; // 'scout', 'destroyer', 'boss'
+        
+        if (type === 'boss') {
+            this.hp = 2600;
+            this.maxHp = 2600;
+            this.w = 180;
+            this.h = 100;
+            this.color = '#ff0055';
+        } else if (type === 'destroyer') {
+            this.hp = 80;
+            this.maxHp = 80;
+            this.w = 44;
+            this.h = 36;
+            this.color = '#ff5500';
+        } else {
+            this.hp = 30;
+            this.maxHp = 30;
+            this.w = 34;
+            this.h = 28;
+            this.color = '#a832ff';
+        }
+
+        this.diveState = 'ENTER'; // 'ENTER', 'HOVER', 'DIVING', 'RETURNING'
+        this.diveAngle = 0;
+        this.fireTimer = Math.random() * 120 + 60;
+    }
+
+    update(player, globalWaveTimer) {
+        // Entry Flight Path
+        if (this.diveState === 'ENTER') {
+            this.y += 5;
+            if (this.y >= this.origY) {
+                this.y = this.origY;
+                this.diveState = 'HOVER';
+            }
+        } 
+        // 1980s Formation Oscillation
+        else if (this.diveState === 'HOVER') {
+            const sway = Math.sin(globalWaveTimer * 0.035) * 45;
+            const bob = Math.cos(globalWaveTimer * 0.045) * 8;
+            this.x = this.origX + sway;
+            this.y = this.origY + bob;
+
+            // Random dive-bomb triggering (Galaga style)
+            if (this.type !== 'boss' && Math.random() < 0.0018) {
+                this.diveState = 'DIVING';
+                this.diveAngle = Math.atan2(player.y - this.y, player.x - this.x);
+            }
+        } 
+        // Swooping Attack Dive
+        else if (this.diveState === 'DIVING') {
+            this.x += Math.cos(this.diveAngle) * 9;
+            this.y += Math.sin(this.diveAngle) * 9;
+
+            if (this.y > 1150 || this.x < -50 || this.x > 1970) {
+                this.y = -60;
+                this.x = this.origX;
+                this.diveState = 'RETURNING';
+            }
+        } else if (this.diveState === 'RETURNING') {
+            this.y += 6;
+            if (this.y >= this.origY) {
+                this.y = this.origY;
+                this.diveState = 'HOVER';
+            }
+        }
+
+        // Enemy Attack Fire
+        this.fireTimer--;
+        if (this.fireTimer <= 0) {
+            this.fireTimer = this.type === 'boss' ? 24 : 150 + Math.random() * 90;
+            
+            if (this.type === 'boss') {
+                // Boss triple spread + aim bullet
+                projectiles.push(new Projectile(this.x - 50, this.y + 40, -3, 9, '#ff0055'));
+                projectiles.push(new Projectile(this.x, this.y + 50, 0, 11, '#ff00bb'));
+                projectiles.push(new Projectile(this.x + 50, this.y + 40, 3, 9, '#ff0055'));
+            } else if (this.diveState === 'DIVING' || Math.random() < 0.25) {
+                const angle = Math.atan2(player.y - this.y, player.x - this.x);
+                projectiles.push(new Projectile(this.x, this.y + 15, Math.cos(angle) * 7.5, Math.sin(angle) * 7.5, '#ff3366'));
+            }
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 18;
+
+        if (this.type === 'boss') {
+            // Massive Alien Flagship (from picture)
+            ctx.fillStyle = '#1c0e2b';
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 4;
+            
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 70, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Glowing Alien Eye
+            ctx.fillStyle = '#ff00aa';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y + 10, 28, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Wing Clusters
+            ctx.fillStyle = '#ff0055';
+            ctx.fillRect(this.x - 110, this.y - 20, 45, 55);
+            ctx.fillRect(this.x + 65, this.y - 20, 45, 55);
+
+            // Boss Health Bar
+            const barW = 340;
+            ctx.fillStyle = '#220011';
+            ctx.fillRect(this.x - barW / 2, this.y - 75, barW, 10);
+            ctx.fillStyle = '#ff0055';
+            ctx.fillRect(this.x - barW / 2, this.y - 75, (this.hp / this.maxHp) * barW, 10);
+        } else {
+            // Standard Interceptor Swarm Drone
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y + 18);
+            ctx.lineTo(this.x + this.w / 2, this.y - this.h / 2);
+            ctx.lineTo(this.x, this.y - this.h / 4);
+            ctx.lineTo(this.x - this.w / 2, this.y - this.h / 2);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+}
+
+// --- PARTICLES & EXPLOSIONS ---
+let particles = [];
+function createExplosion(x, y, color, count = 16) {
+    for (let i = 0; i < count; i++) {
+        const speed = Math.random() * 12 + 2;
+        const angle = Math.random() * Math.PI * 2;
+        particles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            color,
+            life: 1.0,
+            decay: Math.random() * 0.04 + 0.02,
+            size: Math.random() * 6 + 3
+        });
+    }
+}
+
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= p.decay;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+}
+
+function drawParticles(ctx) {
+    particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10;
+        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    });
+    ctx.globalAlpha = 1.0;
+}
+
+// --- GAME INSTANCES & FORMATIONS ---
+let player = new PlayerShip();
+let enemies = [];
+let projectiles = [];
+let hyperBeams = [];
+let globalWaveTimer = 0;
+
+function spawnGalacticFormation() {
+    enemies = [];
+    projectiles = [];
+    hyperBeams = [];
+
+    // Mother Boss
+    enemies.push(new Enemy(1920 / 2, 220, 'boss'));
+
+    // Top Destroyer Row
+    for (let c = 0; c < 8; c++) {
+        enemies.push(new Enemy(540 + c * 120, 360, 'destroyer'));
+    }
+
+    // Two Bottom Interceptor Rows (Fixed Shooter Matrix)
+    for (let r = 0; r < 2; r++) {
+        for (let c = 0; c < 10; c++) {
+            enemies.push(new Enemy(480 + c * 105, 450 + r * 75, 'scout'));
+        }
+    }
+}
+
+function startNewGame() {
+    initAudio();
+    score = 0;
+    player.reset();
+    spawnGalacticFormation();
+    gameState = STATES.PLAYING;
+}
+
+// --- DRAW ARCADE HUD & PERSPECTIVE FRAME ---
+function drawHUD(ctx) {
+    ctx.save();
+
+    // Curved Arcade Bezel Lighting (as in picture)
+    const grad = ctx.createRadialGradient(960, 540, 400, 960, 540, 1100);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(2, 6, 23, 0.7)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 1920, 1080);
+
+    // Top Scoreboard
+    ctx.font = '900 36px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#00f0ff';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Score: ${score.toLocaleString()}`, 140, 90);
+
+    ctx.fillStyle = '#ff00aa';
+    ctx.textAlign = 'right';
+    ctx.fillText(`High Score: ${highScore.toLocaleString()}`, 1780, 90);
+
+    // Title Logo Marquee
+    ctx.textAlign = 'center';
+    ctx.font = '900 48px "Segoe UI", sans-serif';
+    ctx.shadowColor = '#b026ff';
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText("GALACTIC ONSLAUGHT", 1920 / 2, 80);
+
+    // Bottom Status HUD
+    ctx.textAlign = 'left';
+    ctx.font = '700 28px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#00f0ff';
+    ctx.fillText(`Player 1 // Lives: ${player.lives}`, 140, 1020);
+
+    // Shield Meter
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#00f0ff';
+    ctx.fillText(`Shield: ${Math.round(player.shield)}%`, 1780, 1020);
+
+    // Overdrive Super Bar (Center Bottom)
+    const barW = 400;
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(1920 / 2 - barW / 2, 1005, barW, 20);
+    ctx.strokeStyle = '#00f0ff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1920 / 2 - barW / 2, 1005, barW, 20);
+
+    ctx.fillStyle = player.hyperMeter >= 100 ? '#ff00ff' : '#00f0ff';
+    ctx.shadowColor = ctx.fillStyle;
+    ctx.shadowBlur = 15;
+    ctx.fillRect(1920 / 2 - barW / 2 + 2, 1007, (player.hyperMeter / 100) * (barW - 4), 16);
+
+    ctx.textAlign = 'center';
+    ctx.font = '800 16px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(player.hyperMeter >= 100 ? "OVERDRIVE READY [RB / Y]" : "OVERDRIVE CHARGE", 1920 / 2, 995);
+
+    ctx.restore();
+}
+
+function drawMenu() {
+    ctx.fillStyle = 'rgba(2, 3, 10, 0.85)';
+    ctx.fillRect(0, 0, 1920, 1080);
+
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#00f0ff';
+    ctx.shadowBlur = 30;
+    ctx.fillStyle = '#00f0ff';
+    ctx.font = '900 90px "Segoe UI", sans-serif';
+    ctx.fillText("GALACTIC ONSLAUGHT", 1920 / 2, 360);
+
+    ctx.font = '600 32px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#ff00bb';
+    ctx.fillText("NEXT-GEN 1980s FIXED SHOOTER", 1920 / 2, 430);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 38px "Segoe UI", sans-serif';
+    ctx.fillText("PRESS (A) OR (SPACE) TO ENGAGE", 1920 / 2, 600);
+
+    // Xbox Controller Mapping Guide
+    ctx.font = '500 22px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText("XBOX CONTROLLER: Left Stick = Move | RT/(A) = Twin Cannons | LT/(B) = Energy Shield", 1920 / 2, 880);
+    ctx.fillText("LB/(X) = Afterburner Dash | RB/(Y) = Overdrive Hyper-Beam", 1920 / 2, 920);
+}
+
+function drawGameOver() {
+    ctx.fillStyle = 'rgba(2, 3, 10, 0.9)';
+    ctx.fillRect(0, 0, 1920, 1080);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = gameState === STATES.VICTORY ? '#00f0ff' : '#ff0055';
+    ctx.font = '900 84px "Segoe UI", sans-serif';
+    ctx.fillText(gameState === STATES.VICTORY ? "GALAXY LIBERATED!" : "VESSEL DESTROYED", 1920 / 2, 440);
+
+    ctx.font = '700 36px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`Final Score: ${score.toLocaleString()}`, 1920 / 2, 530);
+
+    ctx.fillStyle = '#00f0ff';
+    ctx.font = '600 30px "Segoe UI", sans-serif';
+    ctx.fillText("Press (A) or (Space) to Deploy Again", 1920 / 2, 640);
+}
+
+// --- MAIN LOOP ---
+function update() {
+    Input.poll();
+    const input = Input.getState();
+
+    if (gameState === STATES.MENU) {
+        if (input.fire) startNewGame();
+        return;
+    }
+
+    if (gameState === STATES.GAMEOVER || gameState === STATES.VICTORY) {
+        if (input.fire) gameState = STATES.MENU;
+        return;
+    }
+
+    globalWaveTimer++;
+    player.update(input);
+
+    // Hyper Beams Update & Collision
+    for (let i = hyperBeams.length - 1; i >= 0; i--) {
+        const hb = hyperBeams[i];
+        hb.update();
+
+        // Vaporize intersecting enemies
+        enemies.forEach(e => {
+            if (Math.abs(e.x - hb.x) < hb.w / 2 + e.w / 2) {
+                e.hp -= 25;
+                createExplosion(e.x, e.y, '#ff00ff', 4);
+            }
+        });
+
+        // Vaporize enemy projectiles
+        for (let pIdx = projectiles.length - 1; pIdx >= 0; pIdx--) {
+            if (!projectiles[pIdx].isPlayer && Math.abs(projectiles[pIdx].x - hb.x) < hb.w / 2) {
+                projectiles.splice(pIdx, 1);
+            }
+        }
+
+        if (hb.life <= 0) hyperBeams.splice(i, 1);
+    }
+
+    // Update Enemies
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        e.update(player, globalWaveTimer);
+
+        if (e.hp <= 0) {
+            playSound('explode');
+            createExplosion(e.x, e.y, e.color, e.type === 'boss' ? 80 : 20);
+            score += (e.type === 'boss' ? 50000 : (e.type === 'destroyer' ? 2500 : 1000));
+            player.hyperMeter = Math.min(100, player.hyperMeter + (e.type === 'boss' ? 40 : 8));
+            enemies.splice(i, 1);
+        }
+    }
+
+    // Victory Check
+    if (enemies.length === 0) {
+        gameState = STATES.VICTORY;
+    }
+
+    // Update Projectiles
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+        p.update();
+
+        if (p.y < -30 || p.y > 1110 || p.x < -30 || p.x > 1950) {
+            projectiles.splice(i, 1);
+            continue;
+        }
+
+        // Player Blasters hitting Enemies
+        if (p.isPlayer) {
+            for (let e of enemies) {
+                const hitDist = Math.hypot(p.x - e.x, p.y - e.y);
+                if (hitDist < (e.type === 'boss' ? 70 : 28)) {
+                    e.hp -= p.dmg;
+                    createExplosion(p.x, p.y, '#00f0ff', 4);
+                    projectiles.splice(i, 1);
+                    break;
+                }
+            }
+        } 
+        // Enemy Blasters hitting Player
+        else {
+            const dist = Math.hypot(p.x - player.x, p.y - player.y);
+            
+            // Shield Absorption
+            if (player.isShieldActive && dist < 55) {
+                playSound('shield');
+                player.hyperMeter = Math.min(100, player.hyperMeter + 6); // Shield absorbs into Super!
+                createExplosion(p.x, p.y, '#00f0ff', 6);
+                projectiles.splice(i, 1);
+                continue;
+            }
+
+            // Direct Hit
+            if (dist < 26 && player.invulnerableTimer <= 0) {
+                playSound('explode');
+                screenShake = 22;
+                createExplosion(player.x, player.y, '#ff0055', 25);
+                player.lives--;
+                player.invulnerableTimer = 90; // Invincibility flash
+                projectiles.splice(i, 1);
+
+                if (player.lives <= 0) {
+                    gameState = STATES.GAMEOVER;
+                }
+            }
+        }
+    }
+
+    updateParticles();
+}
+
+function loop() {
+    update();
+
+    ctx.save();
+    if (screenShake > 0) {
+        ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+        screenShake *= 0.9;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Dynamic Starfield Scrolling
+    stars.forEach(s => {
+        s.y += s.z * 1.8;
+        if (s.y > 1080) { s.y = 0; s.x = Math.random() * 1920; }
+        ctx.fillStyle = s.color;
+        ctx.fillRect(s.x, s.y, s.size, s.size * (s.z * 1.5));
+    });
+
+    // Draw Entities
+    hyperBeams.forEach(hb => hb.draw(ctx));
+    enemies.forEach(e => e.draw(ctx));
+    projectiles.forEach(p => p.draw(ctx));
+    if (gameState === STATES.PLAYING) player.draw(ctx);
+    drawParticles(ctx);
+
+    // Draw HUD
+    drawHUD(ctx);
+
+    if (gameState === STATES.MENU) drawMenu();
+    if (gameState === STATES.GAMEOVER || gameState === STATES.VICTORY) drawGameOver();
+
+    ctx.restore();
+    requestAnimationFrame(loop);
+}
+
+// --- KEYBOARD LISTENERS (PC FALLBACK) ---
+window.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'w' || e.key === 'ArrowUp') Input.keys.up = true;
+    if (k === 's' || e.key === 'ArrowDown') Input.keys.down = true;
+    if (k === 'a' || e.key === 'ArrowLeft') Input.keys.left = true;
+    if (k === 'd' || e.key === 'ArrowRight') Input.keys.right = true;
+    if (k === 'j' || e.code === 'Space') Input.keys.fire = true;
+    if (k === 'k') Input.keys.shield = true;
+    if (k === 'l' || e.key === 'Shift') Input.keys.dash = true;
+    if (k === 'i' || e.key === 'Enter') Input.keys.hyper = true;
+});
+
+window.addEventListener('keyup', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'w' || e.key === 'ArrowUp') Input.keys.up = false;
+    if (k === 's' || e.key === 'ArrowDown') Input.keys.down = false;
+    if (k === 'a' || e.key === 'ArrowLeft') Input.keys.left = false;
+    if (k === 'd' || e.key === 'ArrowRight') Input.keys.right = false;
+    if (k === 'j' || e.code === 'Space') Input.keys.fire = false;
+    if (k === 'k') Input.keys.shield = false;
+    if (k === 'l' || e.key === 'Shift') Input.keys.dash = false;
+    if (k === 'i' || e.key === 'Enter') Input.keys.hyper = false;
+});
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
