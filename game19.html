@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SLIME CONTAINMENT // OVERDRIVE</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #050505;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        /* 16:9 Arcade Canvas with CRT Scanline Effect */
+        #gameWrapper {
+            position: relative;
+            max-width: 100vw;
+            max-height: 100vh;
+            aspect-ratio: 16 / 9;
+            box-shadow: 0 0 50px rgba(50, 255, 150, 0.2);
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            background-color: #1a202c;
+            image-rendering: pixelated;
+        }
+        /* Retro CRT overlay */
+        #gameWrapper::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2;
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="gameWrapper">
+    <canvas id="gameCanvas" width="1280" height="720"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Reference Image for the Store
+const storeImage = new Image();
+storeImage.src = 'watermarked_img_1759009538149875951.png';
+
+// --- AUDIO ENGINE ---
+let audioCtx = null;
+function initAudio() {
+    if (audioCtx) return;
+    try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch(e) { console.warn("Web Audio API not supported"); }
+}
+
+function playSound(type) {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (type === 'shoot_slime') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.linearRampToValueAtTime(150, now + 0.2);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now); osc.stop(now + 0.2);
+    } else if (type === 'pop') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.1);
+        osc.start(now); osc.stop(now + 0.1);
+    } else if (type === 'jump') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(250, now);
+        osc.frequency.exponentialRampToValueAtTime(500, now + 0.2);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now); osc.stop(now + 0.2);
+    } else if (type === 'freeze') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.15);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.15);
+        osc.start(now); osc.stop(now + 0.15);
+    }
+}
+
+const Input = {
+    pads: {},
+    keys: { left: false, right: false, up: false, down: false, shoot: false, jump: false, select: false },
+    mouseAim: { active: false, x: 1, y: 0 },
+    poll() {
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        for (let i = 0; i < gamepads.length; i++) {
+            if (gamepads[i]) this.pads[i] = gamepads[i];
+        }
+    },
+    getState() {
+        const pad = this.pads[0];
+        let vx = 0;
+        let aimX = 0, aimY = 0;
+        let shoot = false, jump = false, select = false;
+        let usingPad = false;
+
+        if (pad) {
+            usingPad = true;
+            // Movement (Left Stick / D-Pad)
+            if (Math.abs(pad.axes[0]) > 0.2) vx = pad.axes[0];
+            if (pad.buttons[14]?.pressed) vx = -1;
+            if (pad.buttons[15]?.pressed) vx = 1;
+
+            // Aiming (Right Stick)
+            if (Math.hypot(pad.axes[2], pad.axes[3]) > 0.25) {
+                aimX = pad.axes[2];
+                aimY = pad.axes[3];
+                this.mouseAim.active = false;
+            }
+
+            // Actions (RT=Shoot, A/LT=Jump, A=Select)
+            shoot = pad.buttons[7]?.pressed || pad.buttons[2]?.pressed; 
+            jump = pad.buttons[0]?.pressed || pad.buttons[6]?.pressed; 
+            select = pad.buttons[0]?.pressed; 
+        }
+
+        // Keyboard/Mouse Fallback
+        if (this.keys.left) { vx = -1; usingPad = false; }
+        if (this.keys.right) { vx = 1; usingPad = false; }
+        if (this.keys.shoot) { shoot = true; usingPad = false; }
+        if (this.keys.jump || this.keys.up) { jump = true; usingPad = false; }
+        if (this.keys.select) { select = true; usingPad = false; }
+
+        if (this.mouseAim.active) {
+            aimX = this.mouseAim.x;
+            aimY = this.mouseAim.y;
+            usingPad = false;
+        }
+
+        return { vx, aimX, aimY, shoot, jump, select, usingPad };
+    }
+};
+
+const STATES = { MENU: 0, PLAYING: 1, UPGRADE: 2, ZONE_CLEAR: 3, GAMEOVER: 4 };
+let gameState = STATES.MENU;
+let screenShake = 0;
+let level = 1;
+let pacified = 0;
+let pacifiedRequired = 10;
+let menuSelection = 0;
+
+// Camera & World
+const camera = { x: 0, targetX: 0, w: 1280, h: 720 };
+let levelWidth = 6000;
+const groundY = 600;
+
+// Weapon Types (Physics Focus)
+const WEAPONS = {
+    NORMAL: { name: 'WATER-JET', color: '#4299e1', fireRate: 8, speed: 22, power: 20, type: 'normal', size: 6 },
+    FREEZE: { name: 'CRYO-SLIME', color: '#00ffff', fireRate: 6, speed: 18, power: 15, type: 'freeze', size: 9 },
+    SLIP:   { name: 'SLICK-SLIME', color: '#33ff00', fireRate: 5, speed: 16, power: 20, type: 'slip', size: 12 },
+    PUSH:   { name: 'KINETIC-SLIME', color: '#ff6600', fireRate: 15, speed: 28, power: 25, type: 'push', size: 14 }
+};
+
+let currentWeapon = WEAPONS.NORMAL;
+const upgradePool = [WEAPONS.FREEZE, WEAPONS.SLIP, WEAPONS.PUSH];
+
+let platforms = [];
+function generateLevel() {
+    platforms = [];
+    levelWidth = 4000 + (level * 1000); 
+
+    // Base ground blocks
+    let currentX = -500; 
+    while (currentX < levelWidth + 500) {
+        let blockWidth = Math.random() * 800 + 400;
+        let pitWidth = Math.random() > 0.6 ? Math.random() * 200 + 150 : 0; 
+        
+        if (currentX < 1000 || currentX > levelWidth - 1000) pitWidth = 0;
+
+        platforms.push({ x: currentX, y: groundY, w: blockWidth, h: 200, type: 'ground' });
+        currentX += blockWidth + pitWidth;
+    }
+
+    // Floating Scaffolds
+    currentX = 800;
+    while (currentX < levelWidth - 1000) {
+        if (Math.random() > 0.4) {
+            let w = Math.random() * 300 + 150;
+            let h = Math.random() * 150 + 50;
+            let y = groundY - h;
+            platforms.push({ x: currentX, y: y, w: w, h: 30, type: 'scaffold' });
+        }
+        currentX += Math.random() * 500 + 300;
+    }
+}
+
+function drawCyberSoldier(ctx, x, y, facing, walkCycle, isJumping, aimAngle) {
+    ctx.save();
+    ctx.translate(x, y);
+    if (facing === -1) ctx.scale(-1, 1);
+
+    let visualArmAngle = facing === -1 ? Math.PI - aimAngle : aimAngle;
+    const legSwing = isJumping ? 0 : Math.sin(walkCycle * 0.4) * 25;
+
+    const suitColor = '#2b6cb0'; 
+    const armorColor = '#edf2f7'; 
+    const bandanaColor = '#e53e3e';
+    const gunColor = '#2d3748';
+    const slimeGlow = currentWeapon.color;
+
+    // Back Leg
+    ctx.save();
+    ctx.translate(-5, -15);
+    ctx.rotate(-legSwing * Math.PI / 180);
+    ctx.fillStyle = suitColor; ctx.beginPath(); ctx.roundRect(-8, 0, 16, 35, 6); ctx.fill();
+    ctx.fillStyle = '#4a5568'; ctx.fillRect(-10, 25, 22, 12);
+    ctx.restore();
+
+    // Front Leg
+    ctx.save();
+    ctx.translate(5, -15);
+    ctx.rotate(legSwing * Math.PI / 180);
+    ctx.fillStyle = armorColor; ctx.beginPath(); ctx.roundRect(-8, 0, 16, 35, 6); ctx.fill();
+    ctx.fillStyle = '#2d3748'; ctx.fillRect(-10, 25, 22, 12);
+    ctx.restore();
+
+    // Torso (Hazmat Style)
+    ctx.fillStyle = suitColor;
+    ctx.beginPath();
+    ctx.moveTo(-16, -15); ctx.lineTo(16, -15);
+    ctx.lineTo(20, -45); ctx.lineTo(-20, -45);
+    ctx.closePath(); ctx.fill();
+
+    // Chest Plate
+    ctx.fillStyle = armorColor;
+    ctx.fillRect(-12, -40, 24, 20);
+    ctx.fillStyle = slimeGlow; 
+    ctx.beginPath(); ctx.arc(0, -30, 6, 0, Math.PI*2); ctx.fill(); // Core gauge
+
+    // Head
+    ctx.save();
+    ctx.translate(0, -50);
+    ctx.rotate(visualArmAngle * 0.15);
+    
+    ctx.fillStyle = '#fbd38d'; // Skin
+    ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+    
+    // Bandana
+    ctx.fillStyle = bandanaColor;
+    ctx.fillRect(-16, -10, 32, 8);
+    ctx.beginPath(); ctx.moveTo(-16, -6); ctx.lineTo(-35, -12 + Math.sin(Date.now()*0.01)*5); ctx.lineTo(-30, 2); ctx.fill();
+
+    // Visor / Goggles
+    ctx.fillStyle = '#1a202c';
+    ctx.fillRect(0, -5, 16, 10);
+    ctx.fillStyle = slimeGlow;
+    ctx.shadowColor = slimeGlow; ctx.shadowBlur = 10;
+    ctx.fillRect(4, -3, 10, 6);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Front Arm & Sprayer (Rotates based on aimAngle)
+    ctx.save();
+    ctx.translate(0, -38); 
+    ctx.rotate(visualArmAngle);
+    
+    // Arm
+    ctx.fillStyle = armorColor;
+    ctx.beginPath(); ctx.roundRect(-8, -8, 30, 16, 8); ctx.fill();
+
+    // Slime Sprayer
+    ctx.fillStyle = gunColor;
+    ctx.fillRect(15, -12, 45, 24); 
+    ctx.fillStyle = '#cbd5e0';
+    ctx.beginPath(); ctx.moveTo(60, -16); ctx.lineTo(75, -22); ctx.lineTo(75, 22); ctx.lineTo(60, 16); ctx.fill(); // Flared nozzle
+    
+    // Slime Tank on gun
+    ctx.fillStyle = slimeGlow;
+    ctx.beginPath(); ctx.arc(35, 5, 10, 0, Math.PI*2); ctx.fill();
+
+    ctx.restore();
+    ctx.restore();
+}
+
+function drawMutant(ctx, x, y, facing, walkCycle, statusType) {
+    ctx.save();
+    ctx.translate(x, y);
+    if (facing === -1) ctx.scale(-1, 1);
+
+    let legSwing = Math.sin(walkCycle * 0.2) * 20;
+    if (statusType === 'slip') legSwing = Math.sin(Date.now() * 0.03) * 45; // Flailing wildly
+    if (statusType === 'push') legSwing = 45; // Knocked back pose
+    
+    let bodyColor = '#805ad5'; // Base purple mutant
+    if (statusType === 'freeze') bodyColor = '#90cdf4'; 
+    else if (statusType === 'slip') bodyColor = '#68d391'; 
+
+    // Gooey Legs
+    ctx.save(); ctx.translate(-6, -15); ctx.rotate(-legSwing * Math.PI / 180);
+    ctx.fillStyle = bodyColor; ctx.beginPath(); ctx.roundRect(-8, 0, 16, 25, 8); ctx.fill();
+    ctx.restore();
+
+    ctx.save(); ctx.translate(6, -15); ctx.rotate(legSwing * Math.PI / 180);
+    ctx.fillStyle = bodyColor; ctx.beginPath(); ctx.roundRect(-8, 0, 16, 25, 8); ctx.fill();
+    ctx.restore();
+
+    // Gelatinous Torso
+    ctx.save();
+    ctx.translate(0, -25);
+    ctx.rotate(statusType === 'slip' || statusType === 'push' ? -0.8 : 0.1); 
+    
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath(); 
+    // Wobbly body path
+    const wobble = statusType === 'freeze' ? 0 : Math.sin(Date.now()*0.005) * 3;
+    ctx.ellipse(0, -10, 22 + wobble, 28 - wobble, 0, 0, Math.PI*2); 
+    ctx.fill();
+    
+    // Tentacle Arms
+    ctx.save();
+    ctx.translate(5, -15);
+    ctx.rotate(statusType === 'slip' ? -2 : -0.2 + Math.sin(walkCycle * 0.1) * 0.3);
+    ctx.beginPath(); ctx.roundRect(0, -6, 35, 12, 6); ctx.fill();
+    ctx.restore();
+
+    // Single Giant Eye
+    ctx.fillStyle = '#ffffff'; 
+    ctx.beginPath(); ctx.arc(10, -20, 10, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = statusType === 'freeze' ? '#4299e1' : '#e53e3e'; 
+    ctx.beginPath(); ctx.arc(12, -20, 4, 0, Math.PI*2); ctx.fill();
+
+    ctx.restore();
+
+    // Ice block effect
+    if (statusType === 'freeze') {
+        ctx.fillStyle = 'rgba(226, 232, 240, 0.6)';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.roundRect(-30, -75, 60, 85, 10); ctx.fill(); ctx.stroke();
+    }
+    
+    ctx.restore();
+}
+
+class Player {
+    constructor() {
+        this.x = 200;
+        this.y = groundY - 100;
+        this.w = 30; 
+        this.h = 60; 
+        this.vx = 0;
+        this.vy = 0;
+        this.speed = 8;
+        this.jumpPower = -17;
+        this.gravity = 0.85;
+        this.grounded = false;
+        this.hp = 100;
+        this.fireCooldown = 0;
+        this.facing = 1;
+        this.aimAngle = 0;
+        this.walkCycle = 0;
+    }
+
+    update(input) {
+        this.vx = input.vx * this.speed;
+
+        if (Math.abs(this.vx) > 0.1) this.walkCycle += Math.abs(input.vx);
+        else this.walkCycle = 0;
+
+        // 360 Aiming Logic
+        let stickDist = Math.hypot(input.aimX, input.aimY);
+        if (stickDist > 0.2) {
+            this.aimAngle = Math.atan2(input.aimY, input.aimX);
+            this.facing = Math.abs(this.aimAngle) > Math.PI / 2 ? -1 : 1;
+        } else {
+            if (this.vx !== 0) this.facing = this.vx > 0 ? 1 : -1;
+            this.aimAngle = this.facing === 1 ? 0 : Math.PI;
+        }
+
+        this.x += this.vx;
+        this.x = Math.max(camera.x + 20, Math.min(levelWidth - 20, this.x));
+
+        // Physics & Gravity
+        this.vy += this.gravity;
+        this.y += this.vy;
+        this.grounded = false;
+
+        // Platforms
+        for (let p of platforms) {
+            if (this.vy >= 0 && this.y >= p.y && this.y - this.vy <= p.y + 15 &&
+                this.x > p.x - this.w && this.x < p.x + p.w + this.w) {
+                this.y = p.y;
+                this.vy = 0;
+                this.grounded = true;
+                break;
+            }
+        }
+
+        // Pit death (respawn)
+        if (this.y > 1000) {
+            this.hp -= 25;
+            screenShake = 15;
+            this.y = 0; 
+            this.vy = 0;
+            let safeP = platforms.find(p => p.x < this.x && p.x + p.w > this.x);
+            if (!safeP) this.x = camera.x + 200; 
+        }
+
+        if (input.jump && this.grounded) {
+            this.vy = this.jumpPower;
+            this.grounded = false;
+            playSound('jump');
+            createParticles(this.x, this.y, '#ffffff', 6, 2);
+        }
+
+        // Slime Sprayer
+        if (this.fireCooldown > 0) this.fireCooldown--;
+        
+        if (input.shoot && this.fireCooldown <= 0) {
+            this.fireCooldown = currentWeapon.fireRate;
+            playSound('shoot_slime');
+            
+            const barrelL = 65;
+            const spawnX = this.x + Math.cos(this.aimAngle) * barrelL;
+            const spawnY = (this.y - 38) + Math.sin(this.aimAngle) * barrelL;
+
+            projectiles.push(new Projectile(
+                spawnX, spawnY,
+                Math.cos(this.aimAngle) * currentWeapon.speed, 
+                Math.sin(this.aimAngle) * currentWeapon.speed, 
+                currentWeapon
+            ));
+            
+            screenShake = currentWeapon.type === 'push' ? 5 : 1;
+            createParticles(spawnX, spawnY, currentWeapon.color, 4, 6);
+        }
+    }
+
+    draw(ctx) {
+        drawCyberSoldier(ctx, this.x, this.y, this.facing, this.walkCycle, !this.grounded, this.aimAngle);
+    }
+}
+
+class Mutant {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y || 0; 
+        this.w = 35;
+        this.h = 60;
+        this.baseSpeed = (Math.random() * 2 + 1.5) + (level * 0.2);
+        this.speed = this.baseSpeed;
+        this.pacificationMeter = 0; 
+        this.maxPacification = 80 + (level * 20);
+        this.walkCycle = Math.random() * 100;
+        this.facing = -1;
+        
+        this.vx = 0;
+        this.vy = 0;
+        this.gravity = 0.85;
+        this.grounded = false;
+        
+        this.statusTimer = 0;
+        this.statusType = null;
+    }
+
+    update(player) {
+        this.vy += this.gravity;
+        const dx = player.x - this.x;
+        
+        // Physics / Status Effects
+        if (this.statusTimer > 0) {
+            this.statusTimer--;
+            if (this.statusType === 'freeze') {
+                this.vx = 0; 
+            } else if (this.statusType === 'slip') {
+                // Sliding uncontrollably
+                if (Math.abs(this.vx) < 0.5) this.vx = this.facing * -12; // Initial slip backward
+                this.vx *= 0.98; // Frictionless slide
+                createParticles(this.x, this.y, '#68d391', 1, 2); 
+            } else if (this.statusType === 'push') {
+                // Launched through the air
+                this.vx *= 0.95;
+            }
+        } else {
+            this.statusType = null;
+            // Normal Pathfinding
+            this.facing = dx > 0 ? 1 : -1;
+            this.vx = this.facing * this.speed;
+
+            // Gap Detection (Jump)
+            if (this.grounded && Math.abs(dx) < 800) {
+                let gapAhead = true;
+                let lookX = this.x + (this.facing * 60);
+                for (let p of platforms) {
+                    if (lookX > p.x && lookX < p.x + p.w && this.y + 10 <= p.y + p.h && this.y + 100 > p.y) {
+                        gapAhead = false; break;
+                    }
+                }
+                if (gapAhead || (player.y < this.y - 80 && Math.random() < 0.05)) {
+                    this.vy = -15;
+                    this.grounded = false;
+                }
+            }
+        }
+
+        this.x += this.vx;
+        this.y += this.vy;
+        this.grounded = false;
+
+        // Collisions
+        for (let p of platforms) {
+            if (this.vy >= 0 && this.y >= p.y && this.y - this.vy <= p.y + 15 &&
+                this.x > p.x - this.w && this.x < p.x + p.w + this.w) {
+                this.y = p.y;
+                this.vy = 0;
+                this.grounded = true;
+                break;
+            }
+        }
+
+        // Pacified by falling into pit (off map)
+        if (this.y > 1000) this.pacificationMeter = this.maxPacification; 
+
+        if (this.statusType !== 'freeze') this.walkCycle += Math.abs(this.vx);
+    }
+
+    applyStatus(weapon) {
+        this.statusType = weapon.type;
+        this.pacificationMeter += weapon.power;
+
+        if (weapon.type === 'freeze') {
+            this.statusTimer = 180; 
+            this.vx = 0;
+            playSound('freeze');
+        } else if (weapon.type === 'slip') {
+            this.statusTimer = 150; 
+            this.vx = this.facing * -18; // Force backward slide
+            this.vy = -4; // Slight pop up
+        } else if (weapon.type === 'push') {
+            this.statusTimer = 40;
+            this.vx = (this.x > player.x ? 1 : -1) * 35; // Massive knockback
+            this.vy = -12; // Launch up
+            this.grounded = false;
+        }
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath(); ctx.ellipse(this.x, this.y + 5, 25, 6, 0, 0, Math.PI*2); ctx.fill();
+        drawMutant(ctx, this.x, this.y, this.facing, this.walkCycle, this.statusType);
+
+        // Pacification Meter above head
+        if (this.pacificationMeter > 0 && this.pacificationMeter < this.maxPacification) {
+            let pct = this.pacificationMeter / this.maxPacification;
+            ctx.fillStyle = '#2d3748'; ctx.fillRect(this.x - 20, this.y - 85, 40, 6);
+            ctx.fillStyle = '#48bb78'; ctx.fillRect(this.x - 20, this.y - 85, 40 * pct, 6);
+        }
+    }
+}
+
+class Projectile {
+    constructor(x, y, vx, vy, weapon) {
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+        this.weapon = weapon; this.life = 90;
+    }
+    update() {
+        this.x += this.vx; this.y += this.vy;
+        this.life--;
+        this.vy += 0.25; // Slime gravity arc
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.weapon.color;
+        ctx.shadowColor = this.weapon.color; ctx.shadowBlur = 12;
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.weapon.size, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+}
+
+let particles = [];
+function createParticles(x, y, color, count, speed = 8) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x, y: y,
+            vx: (Math.random() - 0.5) * speed, vy: (Math.random() - 0.5) * speed - (speed/2),
+            life: 1.0, decay: Math.random() * 0.04 + 0.02,
+            color: color, size: Math.random() * 8 + 4
+        });
+    }
+}
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx; p.y += p.vy; p.vy += 0.2; 
+        p.life -= p.decay;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+}
+function drawParticles(ctx) {
+    particles.forEach(p => {
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size/2, 0, Math.PI*2); ctx.fill();
+    });
+    ctx.globalAlpha = 1.0;
+}
+
+let player = new Player();
+let mutants = [];
+let projectiles = [];
+
+function resetGame() {
+    level = 1; pacified = 0; pacifiedRequired = 10;
+    menuSelection = 0; currentWeapon = WEAPONS.NORMAL;
+    player = new Player(); 
+    mutants = []; projectiles = []; particles = [];
+    camera.x = 0; camera.targetX = 0; screenShake = 0;
+    generateLevel();
+    gameState = STATES.PLAYING;
+}
+
+function startNextLevel() {
+    level++; pacified = 0; pacifiedRequired += 5;
+    mutants = []; projectiles = [];
+    player.x = 200; player.y = groundY - 100; player.hp = 100;
+    camera.x = 0;
+    generateLevel();
+    gameState = STATES.PLAYING;
+}
+
+function update() {
+    Input.poll();
+    const input = Input.getState();
+
+    if (gameState === STATES.MENU) {
+        if (input.jump || input.shoot || input.select) {
+            initAudio(); resetGame();
+        }
+        return;
+    }
+
+    if (gameState === STATES.GAMEOVER) {
+        if (input.select || input.jump) resetGame();
+        return;
+    }
+
+    if (gameState === STATES.ZONE_CLEAR) {
+        if (mutants.length === 0) { gameState = STATES.UPGRADE; menuSelection = 1; }
+        return;
+    }
+
+    if (gameState === STATES.UPGRADE) {
+        if (input.vx < -0.5) menuSelection = Math.max(0, menuSelection - 1);
+        if (input.vx > 0.5) menuSelection = Math.min(upgradePool.length-1, menuSelection + 1);
+        if (input.vx !== 0) input.vx = 0; 
+
+        if (input.select || input.jump) {
+            playSound('shoot_slime'); 
+            currentWeapon = upgradePool[menuSelection];
+            startNextLevel();
+        }
+        return;
+    }
+
+    // PLAYING STATE
+    player.update(input);
+
+    // Spawn Mutants
+    if (mutants.length < 6 + (level * 2) && player.x < levelWidth - 800) {
+        if (Math.random() < 0.03 + (level * 0.005)) {
+            let spawnX = camera.x + (Math.random() > 0.2 ? 1280 + Math.random()*300 : -200);
+            spawnX = Math.max(0, Math.min(spawnX, levelWidth - 50));
+            mutants.push(new Mutant(spawnX, 0)); 
+        }
+    }
+
+    // Camera Tracking
+    camera.targetX = player.x - 400; 
+    camera.targetX = Math.max(0, Math.min(levelWidth - 1280, camera.targetX));
+    camera.x += (camera.targetX - camera.x) * 0.08;
+
+    // End of Zone
+    if (player.x > levelWidth - 300) {
+        if (pacified >= pacifiedRequired) {
+            gameState = STATES.ZONE_CLEAR;
+            mutants.forEach(m => createParticles(m.x, m.y, '#805ad5', 20)); // Clear screen
+            mutants = [];
+        } else {
+            player.x = levelWidth - 300; // Block exit
+        }
+    }
+
+    // Projectiles
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        let p = projectiles[i];
+        p.update();
+        
+        if (p.life <= 0 || p.y >= groundY + 20 || p.x < camera.x - 100 || p.x > camera.x + 1380) {
+            projectiles.splice(i, 1); continue;
+        }
+
+        // Platform Hit
+        let hitPlatform = false;
+        for (let plat of platforms) {
+            if (p.x > plat.x && p.x < plat.x + plat.w && p.y > plat.y && p.y < plat.y + plat.h) { hitPlatform = true; break; }
+        }
+        if (hitPlatform) {
+            createParticles(p.x, p.y, p.weapon.color, 5);
+            projectiles.splice(i, 1); continue;
+        }
+
+        // Mutant Hit
+        let hitMutant = false;
+        for (let j = mutants.length - 1; j >= 0; j--) {
+            let m = mutants[j];
+            if (Math.abs(p.x - m.x) < 35 && Math.abs(p.y - (m.y - 30)) < 40) {
+                m.applyStatus(p.weapon);
+                createParticles(p.x, p.y, p.weapon.color, 8);
+                hitMutant = true; break; 
+            }
+        }
+        if (hitMutant) projectiles.splice(i, 1);
+    }
+
+    // Mutants
+    for (let i = mutants.length - 1; i >= 0; i--) {
+        let m = mutants[i];
+        
+        // Despawn or Pacified
+        if (m.x < camera.x - 600 || m.pacificationMeter >= m.maxPacification) {
+            if (m.pacificationMeter >= m.maxPacification) {
+                pacified++;
+                playSound('pop');
+                createParticles(m.x, m.y - 30, '#805ad5', 25); // Burst into bubbles/slime
+                createParticles(m.x, m.y - 30, '#68d391', 15);
+            }
+            mutants.splice(i, 1); continue;
+        }
+
+        if (Math.abs(m.x - camera.x) < 1500) {
+            m.update(player);
+            // Player Collision (Damage)
+            if (Math.abs(m.x - player.x) < 30 && Math.abs((m.y - 30) - (player.y - 30)) < 50 && m.statusType !== 'freeze') {
+                player.hp -= 1.0; 
+                screenShake = 6;
+                createParticles(player.x, player.y, '#fbd38d', 2);
+                if (player.hp <= 0) gameState = STATES.GAMEOVER;
+            }
+        }
+    }
+    updateParticles();
+}
+
+function drawParallax(ctx) {
+    ctx.fillStyle = '#1a202c'; ctx.fillRect(0, 0, 1280, 720);
+
+    // City Ruins
+    ctx.save(); ctx.fillStyle = '#2d3748';
+    const cityOffset = camera.x * 0.15;
+    ctx.translate(-cityOffset % 1280, 0);
+    for(let i=0; i<30; i++) {
+        let x = i * 200;
+        ctx.fillRect(x, 250 + Math.sin(i)*80, 120, 500);
+        if (i%3===0) { ctx.fillStyle = '#68d391'; ctx.fillRect(x+20, 300+Math.sin(i)*80, 10, 10); ctx.fillStyle = '#2d3748'; }
+    }
+    ctx.translate(1280 * Math.ceil(30 * 200 / 1280), 0); ctx.restore();
+
+    // Midground
+    ctx.save(); ctx.fillStyle = '#4a5568';
+    const midOffset = camera.x * 0.4;
+    ctx.translate(-midOffset % 1280, 0);
+    for(let i=0; i<30; i++) {
+        let x = i * 150;
+        ctx.beginPath(); ctx.moveTo(x, 720); ctx.lineTo(x + 60, 450 + Math.cos(i)*120); ctx.lineTo(x + 180, 720); ctx.fill();
+    }
+    ctx.restore();
+}
+
+function drawLevel(ctx) {
+    platforms.forEach(p => {
+        if (p.x + p.w < camera.x || p.x > camera.x + 1280) return; 
+        if (p.type === 'ground') {
+            ctx.fillStyle = '#718096'; ctx.fillRect(p.x, p.y, p.w, 720 - p.y);
+            ctx.fillStyle = '#a0aec0'; ctx.fillRect(p.x, p.y, p.w, 15);
+        } else {
+            ctx.fillStyle = '#4a5568'; ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.fillStyle = '#f6e05e'; ctx.fillRect(p.x, p.y, p.w, 4);
+            ctx.strokeStyle = '#2d3748'; ctx.lineWidth = 4; ctx.beginPath();
+            ctx.moveTo(p.x + 20, p.y + p.h); ctx.lineTo(p.x + 20, p.y + p.h + 200);
+            ctx.moveTo(p.x + p.w - 20, p.y + p.h); ctx.lineTo(p.x + p.w - 20, p.y + p.h + 200);
+            ctx.stroke();
+        }
+    });
+
+    // Extraction Point
+    if (levelWidth - camera.x < 1500) {
+        ctx.fillStyle = 'rgba(104, 211, 145, 0.2)'; ctx.fillRect(levelWidth - 300, 0, 300, 720);
+        ctx.fillStyle = '#68d391'; ctx.font = 'bold 36px Courier';
+        ctx.save(); ctx.translate(levelWidth - 150, 360); ctx.rotate(-Math.PI/2);
+        ctx.fillText("DECONTAMINATION ZONE", 0, 0); ctx.restore();
+    }
+}
+
+function drawHUD(ctx, input) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    // Top Stats
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 28px Courier New'; ctx.textAlign = 'left';
+    ctx.fillText(`ZONE: ${level}`, 30, 50);
+    ctx.fillStyle = currentWeapon.color; ctx.fillText(`SLIME: ${currentWeapon.name}`, 30, 90);
+    
+    ctx.textAlign = 'right';
+    ctx.fillStyle = pacified >= pacifiedRequired ? '#68d391' : '#fff';
+    ctx.fillText(`PACIFIED: ${pacified} / ${pacifiedRequired}`, 1250, 50);
+    
+    // HP
+    ctx.fillStyle = '#2d3748'; ctx.fillRect(1250 - 300, 70, 300, 24);
+    ctx.fillStyle = '#fbd38d'; ctx.fillRect(1250 - 300, 70, 300 * Math.max(0, player.hp / 100), 24);
+
+    // Controls Overlay Overlay (Bottom Left)
+    ctx.fillStyle = 'rgba(26, 32, 44, 0.6)'; ctx.roundRect(20, 600, 340, 100, 10); ctx.fill();
+    ctx.fillStyle = '#cbd5e0'; ctx.font = '16px Courier New'; ctx.textAlign = 'left';
+    if (input.usingPad) {
+        ctx.fillText("🎮 XBOX CONTROLS:", 35, 625);
+        ctx.fillText("Move: L-Stick/DPad | Aim: R-Stick", 35, 650);
+        ctx.fillText("Shoot: RT          | Jump: (A)/LT", 35, 675);
+    } else {
+        ctx.fillText("⌨️ PC CONTROLS:", 35, 625);
+        ctx.fillText("Move: W A S D      | Aim: Mouse", 35, 650);
+        ctx.fillText("Shoot: Click/Space | Jump: W/Up", 35, 675);
+    }
+}
+
+function drawUpgradeScreen() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, 1280, 720);
+
+    // Store Image Backdrop
+    if (storeImage.complete && storeImage.naturalWidth > 0) {
+        ctx.globalAlpha = 0.5;
+        // Draw centered and scaled
+        const scale = Math.max(1280 / storeImage.width, 720 / storeImage.height);
+        const imgW = storeImage.width * scale;
+        const imgH = storeImage.height * scale;
+        ctx.drawImage(storeImage, (1280 - imgW)/2, (720 - imgH)/2, imgW, imgH);
+        ctx.globalAlpha = 1.0;
+    }
+
+    ctx.fillStyle = '#68d391'; ctx.font = 'bold 54px Courier New'; ctx.textAlign = 'center';
+    ctx.shadowColor = '#68d391'; ctx.shadowBlur = 15;
+    ctx.fillText("DECONTAMINATION STORE", 1280/2, 100); ctx.shadowBlur = 0;
+
+    const boxW = 340; const boxH = 420;
+    const startX = 1280/2 - (boxW * 1.5) - 40;
+
+    upgradePool.forEach((wep, i) => {
+        const x = startX + i * (boxW + 40); const y = 160;
+        
+        ctx.fillStyle = menuSelection === i ? 'rgba(45, 55, 72, 0.9)' : 'rgba(26, 32, 44, 0.8)';
+        ctx.fillRect(x, y, boxW, boxH);
+        ctx.strokeStyle = menuSelection === i ? wep.color : '#4a5568';
+        ctx.lineWidth = menuSelection === i ? 6 : 2; ctx.strokeRect(x, y, boxW, boxH);
+
+        // Icon
+        ctx.fillStyle = wep.color; ctx.beginPath(); ctx.arc(x + boxW/2, y + 80, 40, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#1a202c'; ctx.font = 'bold 24px Courier'; ctx.fillText(wep.type.toUpperCase(), x + boxW/2, y + 88);
+
+        ctx.fillStyle = wep.color; ctx.font = 'bold 32px Courier New'; ctx.fillText(wep.name, x + boxW/2, y + 180);
+
+        ctx.fillStyle = '#cbd5e0'; ctx.font = '20px Courier New';
+        let desc = wep.type === 'freeze' ? "Stops targets solid in ice." : (wep.type === 'slip' ? "Coats targets, destroying friction." : "Massive kinetic knockback force.");
+        
+        let words = desc.split(' '); let line = ''; let lineY = 260;
+        for(let n = 0; n < words.length; n++) {
+            let testLine = line + words[n] + ' ';
+            if (ctx.measureText(testLine).width > boxW - 40 && n > 0) {
+                ctx.fillText(line, x + boxW/2, lineY); line = words[n] + ' '; lineY += 30;
+            } else line = testLine;
+        }
+        ctx.fillText(line, x + boxW/2, lineY);
+    });
+
+    ctx.fillStyle = '#fff'; ctx.font = '24px Courier New';
+    ctx.fillText("Use L-Stick/DPad to Select, Press (A)/Enter to Equip", 1280/2, 650);
+}
+
+function loop() {
+    update();
+    const input = Input.getState();
+
+    ctx.save();
+    if (screenShake > 0) {
+        ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+        screenShake *= 0.9;
+        if (screenShake < 0.5) screenShake = 0;
+    }
+
+    if (gameState === STATES.PLAYING || gameState === STATES.GAMEOVER || gameState === STATES.ZONE_CLEAR) {
+        drawParallax(ctx);
+        ctx.save(); ctx.translate(-camera.x, 0);
+        drawLevel(ctx);
+        mutants.forEach(m => m.draw(ctx));
+        player.draw(ctx);
+        projectiles.forEach(p => p.draw(ctx));
+        drawParticles(ctx);
+        ctx.restore(); 
+        
+        drawHUD(ctx, input); 
+
+        if (gameState === STATES.ZONE_CLEAR) {
+            ctx.fillStyle = 'rgba(104, 211, 145, 0.2)'; ctx.fillRect(0, 0, 1280, 720);
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 72px Courier'; ctx.textAlign = 'center';
+            ctx.fillText("AREA CONTAINED", 1280/2, 360);
+        }
+    }
+
+    if (gameState === STATES.MENU) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#1a202c'; ctx.fillRect(0, 0, 1280, 720);
+        ctx.shadowColor = '#68d391'; ctx.shadowBlur = 20;
+        ctx.fillStyle = '#68d391'; ctx.font = 'bold 84px Courier New'; ctx.textAlign = 'center';
+        ctx.fillText("SLIME CONTAINMENT", 1280/2, 250); ctx.shadowBlur = 0;
+
+        ctx.fillStyle = '#fff'; ctx.font = '32px Courier New';
+        ctx.fillText("PRESS (A) or SPACE to START", 1280/2, 400);
+        
+        // Draw Controls visually in menu
+        ctx.fillStyle = 'rgba(45, 55, 72, 0.8)'; ctx.roundRect(1280/2 - 400, 480, 800, 180, 15); ctx.fill();
+        ctx.fillStyle = '#cbd5e0'; ctx.font = '24px Courier New';
+        ctx.fillText("--- XBOX SERIES CONTROLS ---", 1280/2, 520);
+        ctx.fillText("Left Stick: Move  |  Right Stick: Aim 360", 1280/2, 570);
+        ctx.fillText("RT: Shoot Slime   |  (A) or LT: Jump", 1280/2, 610);
+    }
+
+    if (gameState === STATES.UPGRADE) drawUpgradeScreen();
+
+    if (gameState === STATES.GAMEOVER) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = 'rgba(229, 62, 62, 0.4)'; ctx.fillRect(0, 0, 1280, 720);
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 96px Courier New'; ctx.textAlign = 'center';
+        ctx.fillText("OVERRUN!", 1280/2, 360);
+        ctx.font = '36px Courier New'; ctx.fillText("PRESS (A) OR ENTER TO RETRY", 1280/2, 480);
+    }
+
+    ctx.restore();
+    requestAnimationFrame(loop);
+}
+
+window.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'a' || e.key === 'ArrowLeft') Input.keys.left = true;
+    if (k === 'd' || e.key === 'ArrowRight') Input.keys.right = true;
+    if (k === 'w' || e.key === 'ArrowUp') Input.keys.up = true;
+    if (k === 's' || e.key === 'ArrowDown') Input.keys.down = true;
+    if (e.code === 'Space') Input.keys.shoot = true;
+    if (e.code === 'Enter') Input.keys.select = true;
+});
+
+window.addEventListener('keyup', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'a' || e.key === 'ArrowLeft') Input.keys.left = false;
+    if (k === 'd' || e.key === 'ArrowRight') Input.keys.right = false;
+    if (k === 'w' || e.key === 'ArrowUp') Input.keys.up = false;
+    if (k === 's' || e.key === 'ArrowDown') Input.keys.down = false;
+    if (e.code === 'Space') Input.keys.shoot = false;
+    if (e.code === 'Enter') Input.keys.select = false;
+});
+
+window.addEventListener('mousemove', e => {
+    if (Input.pads[0]) return; 
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const worldMouseX = ((e.clientX - rect.left) * scaleX) + camera.x;
+    const mouseY = (e.clientY - rect.top) * scaleY;
+    
+    const dx = worldMouseX - player.x;
+    const dy = mouseY - (player.y - 38); 
+    const dist = Math.hypot(dx, dy);
+    
+    if (dist > 0) {
+        Input.mouseAim.active = true;
+        Input.mouseAim.x = dx / dist; Input.mouseAim.y = dy / dist;
+    }
+});
+window.addEventListener('mousedown', e => { if (e.button === 0) Input.keys.shoot = true; });
+window.addEventListener('mouseup', e => { if (e.button === 0) Input.keys.shoot = false; });
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
