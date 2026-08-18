@@ -22,8 +22,12 @@ A small static web project that mimics an Xbox-style game hub. It hosts a dashbo
 | [game10.html](game10.html) | The Claw | Win the prize |
 | [game12.html](game12.html) | Hex & Hearth | Pass-and-play hex strategy |
 | [pictionary/game13.html](pictionary/game13.html) | Pictionary | Phone-controlled drawing game |
+| [game14.html](game14.html) | Dragon vs Knights | Arcade, Vs, and Continuous modes |
+| [game15.html](game15.html) | Robot Wars | Bot battle game |
 
 New games are registered as a `.game-card` block in [index.html](index.html); the card's `onclick` calls `launchGame('gameN.html')`, which points the overlay iframe at that file.
+
+Note: [game6.html](game6.html), [game7.html](game7.html), and [game11.html](game11.html) exist in the repo but aren't linked from the hub — they're earlier standalone Tadpole variants superseded by game3.html's mode-select hub.
 
 ## Features
 
@@ -31,7 +35,7 @@ New games are registered as a `.game-card` block in [index.html](index.html); th
 - Responsive game card grid on the hub, keyboard-accessible (Enter/Space launches a card)
 - Fullscreen game overlay with an Exit button
 - Controller support via the browser Gamepad API (left stick movement, face buttons)
-- Nine canvas-based games covering shooters, tower-defense/base-assault, builders, a claw machine, and a hex strategy game
+- Eleven canvas-based games covering shooters, tower-defense/base-assault, builders, a claw machine, a hex strategy game, and dragon/robot battlers
 - A separate phone-as-controller drawing game (Pictionary) using PeerJS for peer-to-peer connections between a TV host and phone clients
 
 ## How to Run

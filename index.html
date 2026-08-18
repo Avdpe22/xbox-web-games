@@ -291,7 +291,7 @@
     <!-- The overlay that runs the game -->
     <div id="gameContainer">
         <button class="close-btn" tabindex="0" onclick="closeGame()" onkeypress="handleCloseKeyPress(event)">Exit Game (Back to Hub)</button>
-        <iframe id="gameFrame" src=""></iframe>
+        <iframe id="gameFrame" src="" allow="gamepad; autoplay"></iframe>
     </div>
 
     <script>
@@ -364,16 +364,25 @@
 
             const frame = document.getElementById('gameFrame');
             const container = document.getElementById('gameContainer');
-            
+
+            // Focus the frame element now, while we're still inside the user
+            // gesture that triggered launchGame (click/A-button or Enter/Space).
+            // The Gamepad API on Xbox's Edge browser is only exposed to whichever
+            // document currently has focus, so losing focus here is what stops
+            // controller input from reaching the game once it loads.
+            frame.onload = () => {
+                frame.focus();
+                frame.contentWindow?.focus();
+            };
             frame.src = gameUrl;
             container.style.display = 'block';
-            
-            // Force focus so the controller works immediately in the iframe
-            setTimeout(() => { frame.focus(); }, 100);
+            frame.focus();
         }
 
         function closeGame() {
-            document.getElementById('gameFrame').src = '';
+            const frame = document.getElementById('gameFrame');
+            frame.onload = null;
+            frame.src = '';
             document.getElementById('gameContainer').style.display = 'none';
         }
     </script>
