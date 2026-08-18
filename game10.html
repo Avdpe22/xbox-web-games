@@ -3,303 +3,865 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Xbox Claw Machine</title>
+    <title>NEON CLAW // XBOX SERIES S</title>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #1a1a2e;
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden; /* Prevents Xbox browser scrolling */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #050508;
+            overflow: hidden;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            color: #fff;
         }
-        canvas {
-            background-color: #16213e;
-            border: 4px solid #0f3460;
-            box-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
-            max-width: 100%;
-            max-height: 100%;
-        }
-        #instructions {
+        
+        /* 16:9 Arcade Canvas Wrapper */
+        #gameWrapper {
             position: absolute;
-            bottom: 20px;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100vw;
+            height: 100vh;
+            aspect-ratio: 16 / 9;
+            background: #000;
+            box-shadow: inset 0 0 100px rgba(255, 0, 128, 0.2);
+        }
+
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* HUD Overlay */
+        #hud {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 30px 50px;
+            z-index: 10;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .neon-text {
+            font-weight: 900;
+            font-size: 36px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #fff;
+            text-shadow: 0 0 10px #00f0ff, 0 0 20px #00f0ff, 0 0 40px #00f0ff;
+        }
+
+        .neon-pink {
+            color: #ff007f;
+            text-shadow: 0 0 10px #ff007f, 0 0 20px #ff007f, 0 0 40px #ff007f;
+        }
+
+        .score-box {
+            background: rgba(0, 20, 40, 0.6);
+            border: 2px solid #00f0ff;
+            padding: 15px 30px;
+            border-radius: 12px;
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
+            backdrop-filter: blur(4px);
+        }
+
+        .controls-hint {
+            font-size: 20px;
+            font-weight: 600;
+            color: #aaa;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+
+        #statusMessage {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 64px;
+            font-weight: 900;
+            opacity: 0;
+            transition: opacity 0.3s;
             text-align: center;
-            color: #e94560;
-            font-weight: bold;
-            font-size: 1.2rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        .visible { opacity: 1 !important; }
+
+        /* CRT Overlay Effect */
+        #crt-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+            z-index: 20;
+            mix-blend-mode: overlay;
         }
     </style>
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
-    <canvas id="gameCanvas" width="1280" height="720"></canvas>
-    <div id="instructions">Xbox: Left Stick/D-Pad to Move | 'A' Button to Drop<br>PC: Arrows to Move | Spacebar to Drop</div>
+<div id="gameWrapper">
+    <canvas id="gameCanvas"></canvas>
+    <div id="crt-overlay"></div>
+    <div id="hud">
+        <div class="hud-top">
+            <div class="score-box">
+                <div style="font-size: 18px; color: #00f0ff;">PRIZES WON</div>
+                <div class="neon-text" id="scoreDisplay">0</div>
+            </div>
+            <div class="score-box" style="border-color: #ff007f;">
+                <div style="font-size: 18px; color: #ff007f;">CREDITS</div>
+                <div class="neon-text neon-pink" id="creditsDisplay">FREE PLAY</div>
+            </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+            <div class="controls-hint">
+                🕹️ L-Stick/D-Pad: Move Claw<br>
+                🎯 R-Stick: Rotate Camera
+            </div>
+            <div class="controls-hint" style="text-align: right;">
+                🟢 (A) / RT: Drop Claw<br>
+                ⌨️ PC: WASD to Move, Space to Drop
+            </div>
+        </div>
+    </div>
+    <div id="statusMessage" class="neon-text neon-pink">PRIZE WON!</div>
+    
+    <!-- AI Announcer Settings and Display -->
+    <div id="aiAnnouncerBox" style="position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0, 20, 40, 0.8); border: 2px solid #ff007f; padding: 15px 30px; border-radius: 12px; display: flex; align-items: center; gap: 15px; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4); backdrop-filter: blur(5px); z-index: 15; min-width: 400px; justify-content: space-between;">
+        <div id="announcerText" class="neon-text" style="font-size: 18px; color: #fff; text-shadow: none; letter-spacing: 1px; text-transform: none; text-align: left; flex-grow: 1;">
+            Ready to play! Insert coin.
+        </div>
+        <button id="btnSettings" style="background: transparent; border: 1px solid #00f0ff; color: #00f0ff; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">⚙️ AI Settings</button>
+    </div>
 
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        canvas.tabIndex = 0;
-        // Xbox Edge (console browser) only exposes the Gamepad API to the currently
-        // focused document, and gains focus can be lost when loaded inside the hub's
-        // iframe -- pull focus onto this game whenever we get a chance to.
-        function ensureGameFocus() { window.focus(); canvas.focus({ preventScroll: true }); }
-        ensureGameFocus();
-        window.addEventListener('load', ensureGameFocus);
-        document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureGameFocus(); });
-        window.addEventListener('gamepadconnected', ensureGameFocus);
-        const ctx = canvas.getContext('2d');
+    <!-- AI Settings Modal -->
+    <div id="aiModal" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 30; justify-content: center; align-items: center;">
+        <div style="background: #111; border: 2px solid #00f0ff; padding: 30px; border-radius: 12px; width: 400px; text-align: center;">
+            <h2 class="neon-text" style="font-size: 24px; margin-bottom: 20px;">AI Announcer Setup</h2>
+            <div style="margin-bottom: 15px; text-align: left;">
+                <label style="color: #aaa; display: block; margin-bottom: 5px;">Gemini API Key (Required for AI features)</label>
+                <input type="password" id="apiKeyInput" placeholder="Paste your API key here..." style="width: 100%; padding: 10px; background: #222; border: 1px solid #444; color: #fff; border-radius: 4px;">
+                <div style="font-size: 12px; color: #888; margin-top: 5px;">If left blank, the app will try to use the system provided key if available in the Canvas environment.</div>
+            </div>
+             <div style="margin-bottom: 20px; text-align: left;">
+                <label style="color: #aaa; display: block; margin-bottom: 5px;">Announcer Persona</label>
+                <select id="personaSelect" style="width: 100%; padding: 10px; background: #222; border: 1px solid #444; color: #fff; border-radius: 4px;">
+                    <option value="hype">Hype Arcade MC (Default)</option>
+                    <option value="sarcastic">Sarcastic & Judgemental</option>
+                    <option value="pirate">Space Pirate</option>
+                    <option value="robot">Depressed Robot</option>
+                </select>
+            </div>
+            <button id="btnSaveModal" style="background: #ff007f; color: #fff; border: none; padding: 10px 20px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer;">Save & Close</button>
+        </div>
+    </div>
+</div>
 
-        // Game State
-        let attempts = 3;
-        let prizesWon = 0;
-        let gameState = 'playing'; // 'playing' or 'gameover'
-        let dropButtonLocked = false; 
+<script>
+    // --- GEMINI API INTEGRATION ---
+    const AIConfig = {
+        apiKey: "", // Key is populated dynamically
+        persona: "hype",
+        isGenerating: false,
+        lastEvent: null
+    };
 
-        // Claw Object
-        const claw = {
-            x: canvas.width / 2,
-            y: 80,
-            width: 60,
-            speed: 8,
-            dropSpeed: 12,
-            state: 'idle', // idle, dropping, retracting
-            grabbedPrize: null
+    // --- SECURE KEY INITIALIZATION ---
+    // Try to grab a key if it's injected by the hosting environment
+    // Do NOT hardcode your personal key here if pushing to a public repo.
+    if (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) {
+        AIConfig.apiKey = process.env.GEMINI_API_KEY;
+    } 
+
+    const Personas = {
+        "hype": "You are a hyper-energetic, over-the-top arcade announcer. Keep it to 1 short sentence.",
+        "sarcastic": "You are a highly sarcastic and slightly mean arcade announcer who expects the player to fail. Keep it to 1 short sentence.",
+        "pirate": "You are a space pirate who thinks the arcade prizes are legendary loot. Talk like a space pirate. Keep it to 1 short sentence.",
+        "robot": "You are a depressed robot who is forced to commentate on a claw machine. Keep it to 1 short sentence."
+    };
+
+    const VoiceConfigs = {
+         "hype": { prebuiltVoiceConfig: { voiceName: "Puck" } }, // Upbeat
+         "sarcastic": { prebuiltVoiceConfig: { voiceName: "Charon" } }, // Informative/dry
+         "pirate": { prebuiltVoiceConfig: { voiceName: "Fenrir" } }, // Excitable
+         "robot": { prebuiltVoiceConfig: { voiceName: "Kore" } } // Firm
+    };
+
+    // UI Event Listeners for Modal
+    document.getElementById('btnSettings').addEventListener('click', () => {
+        document.getElementById('aiModal').style.display = 'flex';
+    });
+    
+    document.getElementById('btnSaveModal').addEventListener('click', () => {
+        const key = document.getElementById('apiKeyInput').value;
+        if(key) AIConfig.apiKey = key;
+        AIConfig.persona = document.getElementById('personaSelect').value;
+        document.getElementById('aiModal').style.display = 'none';
+        
+        // Trigger a test announcement based on new persona
+        triggerAIAnnouncement("The player just updated the settings.", true);
+    });
+
+    // Helper to convert PCM to WAV for playback
+    function pcmToWav(pcmData, sampleRate) {
+        const numChannels = 1;
+        const bitsPerSample = 16;
+        const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+        const blockAlign = numChannels * (bitsPerSample / 8);
+        const wavHeader = new ArrayBuffer(44);
+        const view = new DataView(wavHeader);
+
+        // RIFF chunk descriptor
+        writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + pcmData.byteLength, true);
+        writeString(view, 8, 'WAVE');
+        // fmt sub-chunk
+        writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
+        view.setUint16(20, 1, true); // AudioFormat (1 for PCM)
+        view.setUint16(22, numChannels, true); // NumChannels
+        view.setUint32(24, sampleRate, true); // SampleRate
+        view.setUint32(28, byteRate, true); // ByteRate
+        view.setUint16(32, blockAlign, true); // BlockAlign
+        view.setUint16(34, bitsPerSample, true); // BitsPerSample
+        // data sub-chunk
+        writeString(view, 36, 'data');
+        view.setUint32(40, pcmData.byteLength, true);
+
+        return new Blob([wavHeader, pcmData], { type: 'audio/wav' });
+    }
+
+    function writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    }
+
+    function base64ToArrayBuffer(base64) {
+        const binaryString = window.atob(base64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+
+    // Function to call Gemini TTS
+    async function callGeminiTTS(text, promptInstruction) {
+         if (!AIConfig.apiKey) {
+             console.warn("AI features disabled: No API key provided.");
+             return null;
+         }
+
+         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${AIConfig.apiKey}`;
+         
+         const payload = {
+            contents: [{
+                parts: [{ text: `Instruction: ${promptInstruction}\n\nScenario to comment on: ${text}` }]
+            }],
+            generationConfig: {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                    voiceConfig: VoiceConfigs[AIConfig.persona]
+                }
+            },
+            model: "gemini-2.5-flash-preview-tts"
         };
 
-        // Plush Toys Setup
-        const plushies = [];
-        const colors = ['#e94560', '#0f3460', '#f9a826', '#4caf50', '#9c27b0'];
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if(!response.ok) {
+                console.error("API Error", response.status);
+                return null;
+            }
+
+            const result = await response.json();
+            const part = result?.candidates?.[0]?.content?.parts?.[0];
+            const audioData = part?.inlineData?.data;
+            const mimeType = part?.inlineData?.mimeType;
+            
+            // Note: The TTS model also returns a thought_signature but we are only interested in the audio for now.
+             
+            if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 24000; 
+                
+                const pcmBuffer = base64ToArrayBuffer(audioData);
+                const pcm16 = new Int16Array(pcmBuffer);
+                const wavBlob = pcmToWav(pcm16, sampleRate);
+                
+                return {
+                     audioUrl: URL.createObjectURL(wavBlob)
+                }
+            }
+        } catch (e) {
+            console.error("Fetch error:", e);
+        }
+        return null;
+    }
+    
+    // Function to generate the text response
+    async function generateAnnouncerText(scenario) {
+         if (!AIConfig.apiKey) {
+             console.warn("AI features disabled: No API key provided.");
+             return null;
+         }
+
+         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${AIConfig.apiKey}`;
+         const systemPrompt = Personas[AIConfig.persona];
+         
+         const payload = {
+            contents: [{ parts: [{ text: `Generate a 1 sentence comment on this scenario in the claw game: ${scenario}` }] }],
+            systemInstruction: { parts: [{ text: systemPrompt }] }
+         };
+         
+         try {
+             const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if(result.candidates && result.candidates[0].content.parts[0].text) {
+                return result.candidates[0].content.parts[0].text;
+            }
+         } catch(e) {
+             console.error("Text Gen Error", e);
+         }
+         return null;
+    }
+
+    async function triggerAIAnnouncement(eventDesc, force = false) {
+        // Prevent spamming the API
+        if (AIConfig.isGenerating || (eventDesc === AIConfig.lastEvent && !force)) return;
         
-        function initPlushies() {
-            for(let i = 0; i < 15; i++) {
-                plushies.push({
-                    x: 150 + Math.random() * (canvas.width - 300),
-                    y: canvas.height - 80 - Math.random() * 60,
-                    radius: 35,
-                    color: colors[Math.floor(Math.random() * colors.length)],
-                    active: true,
-                    isCat: Math.random() > 0.5
-                });
+        AIConfig.isGenerating = true;
+        AIConfig.lastEvent = eventDesc;
+        const uiText = document.getElementById('announcerText');
+        uiText.innerText = "...";
+        uiText.style.color = "#aaa";
+
+        // Step 1: Generate the text response
+        const spokenText = await generateAnnouncerText(eventDesc);
+        
+        if (spokenText) {
+            uiText.innerText = spokenText;
+            uiText.style.color = "#fff";
+            
+            // Step 2: Generate the audio
+            // Note: We use the text directly rather than asking the TTS model to generate text AND audio. 
+            // This is safer to ensure the text on screen matches the audio exactly.
+            const ttsResult = await callGeminiTTS(spokenText, "Read the following text exactly as written.");
+            
+            if (ttsResult && ttsResult.audioUrl) {
+                 const audio = new Audio(ttsResult.audioUrl);
+                 audio.play().catch(e => console.error("Audio play error", e));
+            }
+        } else {
+             uiText.innerText = "Error generating commentary.";
+        }
+        
+        // Cooldown
+        setTimeout(() => {
+            AIConfig.isGenerating = false;
+        }, 5000); 
+    }
+
+    const AudioEngine = {
+        ctx: null,
+        initialized: false,
+        init() {
+            if (this.initialized) return;
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.initialized = true;
+        },
+        play(type) {
+            if (!this.initialized) return;
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            if (type === 'move') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'drop') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3);
+            } else if (type === 'grab') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(80, now);
+                osc.frequency.linearRampToValueAtTime(120, now + 0.1);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'win') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(554, now + 0.1);
+                osc.frequency.setValueAtTime(659, now + 0.2);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.5);
+                osc.start(now); osc.stop(now + 0.5);
             }
         }
-        initPlushies();
+    };
 
-        // Keyboard Input (Fallback for PC testing)
-        const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
-        window.addEventListener('keydown', (e) => {
-            if(e.code === 'ArrowLeft') keys.ArrowLeft = true;
-            if(e.code === 'ArrowRight') keys.ArrowRight = true;
-            if(e.code === 'Space') keys.Space = true;
-        });
-        window.addEventListener('keyup', (e) => {
-            if(e.code === 'ArrowLeft') keys.ArrowLeft = false;
-            if(e.code === 'ArrowRight') keys.ArrowRight = false;
-            if(e.code === 'Space') keys.Space = false;
-        });
-
-        const GAMEPAD_DEADZONE = 0.2;
-
-        // HTML5 Gamepad API (Xbox Controller Support)
-        function getGamepad() {
-            const gamepads = navigator.getGamepads();
+    const Input = {
+        pads: {},
+        keys: { up: false, down: false, left: false, right: false, drop: false },
+        poll() {
+            const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
             for (let i = 0; i < gamepads.length; i++) {
-                if (gamepads[i] && gamepads[i].mapping === 'standard') return gamepads[i];
+                if (gamepads[i]) this.pads[i] = gamepads[i];
             }
-            return null;
+        },
+        getState() {
+            const pad = this.pads[0];
+            let vx = 0, vz = 0;
+            let cx = 0, cy = 0;
+            let drop = false;
+
+            if (pad) {
+                // L-Stick or D-Pad for movement
+                if (Math.abs(pad.axes[0]) > 0.2) vx = pad.axes[0];
+                if (Math.abs(pad.axes[1]) > 0.2) vz = pad.axes[1];
+                if (pad.buttons[14]?.pressed) vx = -1;
+                if (pad.buttons[15]?.pressed) vx = 1;
+                if (pad.buttons[12]?.pressed) vz = -1;
+                if (pad.buttons[13]?.pressed) vz = 1;
+
+                // R-Stick for Camera Orbit
+                if (Math.abs(pad.axes[2]) > 0.2) cx = pad.axes[2];
+                if (Math.abs(pad.axes[3]) > 0.2) cy = pad.axes[3];
+
+                // A Button or RT to drop
+                if (pad.buttons[0]?.pressed || pad.buttons[7]?.pressed) drop = true;
+            }
+
+            // Keyboard Fallback
+            if (this.keys.left) vx = -1;
+            if (this.keys.right) vx = 1;
+            if (this.keys.up) vz = -1;
+            if (this.keys.down) vz = 1;
+            if (this.keys.drop) drop = true;
+
+            return { vx, vz, cx, cy, drop };
         }
+    };
 
-        function update() {
-            if (gameState === 'gameover') return;
+    window.addEventListener('keydown', e => {
+        if (e.key === 'w' || e.key === 'ArrowUp') Input.keys.up = true;
+        if (e.key === 's' || e.key === 'ArrowDown') Input.keys.down = true;
+        if (e.key === 'a' || e.key === 'ArrowLeft') Input.keys.left = true;
+        if (e.key === 'd' || e.key === 'ArrowRight') Input.keys.right = true;
+        if (e.key === ' ' || e.key === 'Enter') Input.keys.drop = true;
+        AudioEngine.init(); // Init audio on first interaction
+    });
 
-            const gp = getGamepad();
+    window.addEventListener('keyup', e => {
+        if (e.key === 'w' || e.key === 'ArrowUp') Input.keys.up = false;
+        if (e.key === 's' || e.key === 'ArrowDown') Input.keys.down = false;
+        if (e.key === 'a' || e.key === 'ArrowLeft') Input.keys.left = false;
+        if (e.key === 'd' || e.key === 'ArrowRight') Input.keys.right = false;
+        if (e.key === ' ' || e.key === 'Enter') Input.keys.drop = false;
+    });
 
-            let moveLeft = keys.ArrowLeft;
-            let moveRight = keys.ArrowRight;
-            let drop = keys.Space;
+    window.addEventListener('gamepadconnected', () => AudioEngine.init());
 
-            if (gp) {
-                // Left Stick or D-Pad Left
-                if (gp.axes[0] < -GAMEPAD_DEADZONE || gp.buttons[14]?.pressed) moveLeft = true;
-                // Left Stick or D-Pad Right
-                if (gp.axes[0] > GAMEPAD_DEADZONE || gp.buttons[15]?.pressed) moveRight = true;
-                // A Button (Button 0)
-                if (gp.buttons[0]?.pressed) drop = true;
-            }
+    const canvas = document.getElementById('gameCanvas');
+    
+    // Fallback/Console-safe Renderer settings
+    let renderer;
+    try {
+        renderer = new THREE.WebGLRenderer({ 
+            canvas: canvas, 
+            antialias: false, // Often causes context failure on console browsers if forced
+            powerPreference: "high-performance",
+            alpha: false,
+            stencil: false
+        });
+        renderer.setPixelRatio(window.devicePixelRatio || 1);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    } catch (e) {
+        console.error("WebGL Context Creation Failed:", e);
+        document.getElementById('statusMessage').innerText = "WebGL Error";
+        document.getElementById('statusMessage').classList.add('visible');
+        // If it completely fails, we can't do much, but we won't crash the whole page silently.
+    }
 
-            // Logic Tree
-            if (claw.state === 'idle') {
-                if (moveLeft) claw.x -= claw.speed;
-                if (moveRight) claw.x += claw.speed;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050508);
+    scene.fog = new THREE.FogExp2(0x050508, 0.02);
+
+    const camera = new THREE.PerspectiveCamera(60, 16/9, 0.1, 100);
+    let camAngle = 0;
+    let camHeight = 12;
+    const camRadius = 18;
+    
+    // Lighting - Simplified for better console compatibility
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    mainLight.position.set(5, 20, 5);
+    scene.add(mainLight);
+
+    const bounds = { xMin: -9, xMax: 9, zMin: -9, zMax: 9, yFloor: 0.5 };
+    const chute = { xMin: -9, xMax: -4, zMin: 4, zMax: 9 }; 
+    
+    // Cabinet Floor
+    const floorGeo = new THREE.PlaneGeometry(20, 20);
+    // Use BasicMaterial instead of Standard to avoid shader compilation issues on some consoles
+    const floorMat = new THREE.MeshBasicMaterial({ color: 0x111122 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
+
+    // Chute Hole (Visual)
+    const chuteGeo = new THREE.PlaneGeometry(5.2, 5.2);
+    const chuteMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const chuteMesh = new THREE.Mesh(chuteGeo, chuteMat);
+    chuteMesh.rotation.x = -Math.PI / 2;
+    chuteMesh.position.set(-6.5, 0.01, 6.5);
+    scene.add(chuteMesh);
+    
+    // Neon Borders
+    function createNeonLine(x, z, w, d, color) {
+        const geo = new THREE.BoxGeometry(w, 0.2, d);
+        const mat = new THREE.MeshBasicMaterial({ color: color });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, 0.1, z);
+        scene.add(mesh);
+    }
+    createNeonLine(0, -9.9, 20, 0.2, 0x00f0ff);
+    createNeonLine(0, 9.9, 20, 0.2, 0x00f0ff);
+    createNeonLine(-9.9, 0, 0.2, 20, 0xff007f);
+    createNeonLine(9.9, 0, 0.2, 20, 0xff007f);
+
+    const prizes = [];
+    const geometries = [
+        new THREE.SphereGeometry(1, 16, 16),
+        new THREE.BoxGeometry(1.5, 1.5, 1.5)
+    ];
+    const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff, 0xffaa00];
+
+    for (let i = 0; i < 40; i++) { // Reduced count for performance
+        const geo = geometries[Math.floor(Math.random() * geometries.length)];
+        // Use Lambert material for simple lighting without complex reflections
+        const mat = new THREE.MeshLambertMaterial({
+            color: colors[Math.floor(Math.random() * colors.length)]
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        
+        let px, pz;
+        do {
+            px = (Math.random() - 0.5) * 16;
+            pz = (Math.random() - 0.5) * 16;
+        } while (px < chute.xMax + 1 && pz > chute.zMin - 1);
+        
+        mesh.position.set(px, 1 + Math.random() * 2, pz);
+        mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+        
+        mesh.isGrabbed = false;
+        mesh.inChute = false;
+        
+        scene.add(mesh);
+        prizes.push(mesh);
+    }
+
+    const clawAssembly = new THREE.Group();
+    scene.add(clawAssembly);
+
+    // Top Carriage
+    const carriageMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    const carriage = new THREE.Mesh(new THREE.BoxGeometry(2, 0.5, 2), carriageMat);
+    carriage.position.y = 15;
+    clawAssembly.add(carriage);
+
+    // Dropping Arm
+    const armGroup = new THREE.Group();
+    armGroup.position.y = 15;
+    clawAssembly.add(armGroup);
+
+    const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 15), new THREE.MeshBasicMaterial({color: 0x888888}));
+    wire.position.y = 7.5;
+    armGroup.add(wire);
+
+    const clawBase = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 1), carriageMat);
+    armGroup.add(clawBase);
+
+    // Prongs
+    const prongs = [];
+    const prongGeo = new THREE.BoxGeometry(0.2, 3, 0.2);
+    prongGeo.translate(0, -1.5, 0); 
+    const prongMat = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
+
+    for (let i = 0; i < 3; i++) {
+        const prong = new THREE.Mesh(prongGeo, prongMat);
+        const angle = (i * Math.PI * 2) / 3;
+        prong.position.set(Math.cos(angle) * 0.6, -0.2, Math.sin(angle) * 0.6);
+        prong.rotation.y = -angle;
+        prong.rotation.x = -0.5; 
+        armGroup.add(prong);
+        prongs.push(prong);
+    }
+
+    const CLAW_SPEED = 8;
+    const DROP_SPEED = 10;
+    let clawState = 'IDLE'; 
+    let grabbedPrize = null;
+    let score = 0;
+
+    let targetX = 0;
+    let targetZ = 0;
+    let dropY = 15;
+
+    // Simplified update logic without complex physics
+    function updateLogic(dt) {
+        if (grabbedPrize && !grabbedPrize.inChute) {
+             grabbedPrize.position.set(targetX, dropY - 2.0, targetZ);
+        }
+    }
+
+    function showStatus(msg) {
+        const el = document.getElementById('statusMessage');
+        el.innerText = msg;
+        el.classList.add('visible');
+        setTimeout(() => el.classList.remove('visible'), 2000);
+    }
+
+    const clock = new THREE.Clock();
+
+    function resize() {
+        const wrapper = document.getElementById('gameWrapper');
+        const aspect = 16 / 9;
+        let w = window.innerWidth;
+        let h = window.innerHeight;
+        
+        if (w / h > aspect) {
+            w = h * aspect;
+        } else {
+            h = w / aspect;
+        }
+        
+        wrapper.style.width = `${w}px`;
+        wrapper.style.height = `${h}px`;
+        
+        camera.aspect = aspect;
+        camera.updateProjectionMatrix();
+        
+        if(renderer) renderer.setSize(w, h);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let buttonPressedPreviously = false;
+
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        if (!renderer) return; // Stop loop if renderer failed
+
+        const dt = Math.min(clock.getDelta(), 0.1);
+
+        Input.poll();
+        const input = Input.getState();
+
+        // Camera Orbit
+        // We ensure cx and cy are numbers and default to 0 to prevent NaN errors
+        let camX = input.cx || 0;
+        let camY = input.cy || 0;
+        
+        camAngle += camX * 2 * dt;
+        camHeight -= camY * 10 * dt;
+        camHeight = Math.max(5, Math.min(25, camHeight)); 
+        
+        camera.position.x = Math.sin(camAngle) * camRadius;
+        camera.position.z = Math.cos(camAngle) * camRadius;
+        camera.position.y = camHeight;
+        camera.lookAt(0, 5, 0);
+
+        // State Machine
+        switch (clawState) {
+            case 'IDLE':
+                let vx = input.vx || 0;
+                let vz = input.vz || 0;
                 
-                // Keep claw on screen
-                claw.x = Math.max(80, Math.min(canvas.width - 80, claw.x));
-
-                // Initiate Drop
-                if (drop && attempts > 0 && !dropButtonLocked) {
-                    claw.state = 'dropping';
-                    attempts--;
-                    dropButtonLocked = true; // Prevent holding the button down
-                }
-                if (!drop) {
-                    dropButtonLocked = false;
-                }
-            } 
-            else if (claw.state === 'dropping') {
-                claw.y += claw.dropSpeed;
+                targetX += vx * CLAW_SPEED * dt;
+                targetZ += vz * CLAW_SPEED * dt;
                 
-                // Hit the floor
-                if (claw.y > canvas.height - 120) {
-                    claw.state = 'retracting';
+                targetX = Math.max(bounds.xMin + 1, Math.min(bounds.xMax - 1, targetX));
+                targetZ = Math.max(bounds.zMin + 1, Math.min(bounds.zMax - 1, targetZ));
+
+                if (input.drop && !buttonPressedPreviously) {
+                    clawState = 'DROPPING';
+                    AudioEngine.play('drop');
+                    triggerAIAnnouncement("The player just dropped the claw.");
+                }
+                break;
+
+            case 'DROPPING':
+                dropY -= DROP_SPEED * dt;
+                if (dropY <= 2.5) {
+                    dropY = 2.5;
+                    clawState = 'GRABBING';
+                    AudioEngine.play('grab');
+                }
+                break;
+
+            case 'GRABBING':
+                let allClosed = true;
+                prongs.forEach(p => {
+                    p.rotation.x += 2.0 * dt;
+                    if (p.rotation.x >= 0.2) p.rotation.x = 0.2;
+                    else allClosed = false;
+                });
+
+                if (allClosed) {
+                    let closest = null;
+                    let minDist = 2.0; 
+                    const clawCenter = new THREE.Vector3(targetX, dropY - 1.5, targetZ);
                     
-                    // Collision detection with plushies
-                    for (let p of plushies) {
-                        if (p.active) {
-                            let dist = Math.abs(p.x - claw.x);
-                            // If claw is perfectly centered over a plushie
-                            if (dist < 40) {
-                                claw.grabbedPrize = p;
-                                break;
-                            }
+                    prizes.forEach(prize => {
+                        if (prize.inChute) return;
+                        let dist = prize.position.distanceTo(clawCenter);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            closest = prize;
                         }
+                    });
+
+                    if (closest && Math.random() < 0.8) {
+                        grabbedPrize = closest;
+                        grabbedPrize.isGrabbed = true;
+                        triggerAIAnnouncement("The player successfully grabbed a prize!");
+                    } else {
+                        triggerAIAnnouncement("The claw slipped right off the prize. A total miss.");
                     }
+                    clawState = 'ASCENDING';
                 }
-            } 
-            else if (claw.state === 'retracting') {
-                claw.y -= claw.dropSpeed;
-                
-                // Carry the plushie up
-                if (claw.grabbedPrize) {
-                    claw.grabbedPrize.x = claw.x;
-                    claw.grabbedPrize.y = claw.y + 60;
-                }
+                break;
 
-                // Hit the ceiling
-                if (claw.y <= 80) {
-                    claw.y = 80;
-                    claw.state = 'idle';
-                    
-                    if (claw.grabbedPrize) {
-                        claw.grabbedPrize.active = false; // Remove from pool
-                        prizesWon++;
-                        claw.grabbedPrize = null;
+            case 'ASCENDING':
+                dropY += DROP_SPEED * dt;
+                if (dropY >= 15) {
+                    dropY = 15;
+                    clawState = 'RETURNING';
+                }
+                break;
+
+            case 'RETURNING':
+                const chuteX = -6.5;
+                const chuteZ = 6.5;
+                const dx = chuteX - targetX;
+                const dz = chuteZ - targetZ;
+                const distToChute = Math.hypot(dx, dz);
+                
+                if (distToChute < 0.2) {
+                    targetX = chuteX;
+                    targetZ = chuteZ;
+                    clawState = 'RELEASING';
+                    AudioEngine.play('drop');
+                } else {
+                    targetX += (dx / distToChute) * CLAW_SPEED * dt;
+                    targetZ += (dz / distToChute) * CLAW_SPEED * dt;
+                }
+                break;
+
+            case 'RELEASING':
+                let allOpen = true;
+                prongs.forEach(p => {
+                    p.rotation.x -= 2.0 * dt;
+                    if (p.rotation.x <= -0.5) p.rotation.x = -0.5;
+                    else allOpen = false;
+                });
+
+                if (allOpen) {
+                    if (grabbedPrize) {
+                        // "Drop" the prize into the chute
+                        grabbedPrize.position.y = -10; 
+                        grabbedPrize.inChute = true;
+                        grabbedPrize = null;
+                        
+                        score++;
+                        document.getElementById('scoreDisplay').innerText = score;
+                        AudioEngine.play('win');
+                        showStatus("PRIZE WON!");
                     }
-
-                    if (attempts <= 0) {
-                        gameState = 'gameover';
-                    }
+                    clawState = 'RESETTING';
                 }
-            }
-        }
+                break;
 
-        function drawPlushie(p) {
-            if (!p.active && claw.grabbedPrize !== p) return;
-            
-            ctx.fillStyle = p.color;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Draw Ears (to look like a plush toy)
-            ctx.beginPath();
-            if (p.isCat) {
-                // Pointy cat ears
-                ctx.moveTo(p.x - 20, p.y - 20);
-                ctx.lineTo(p.x - 30, p.y - 45);
-                ctx.lineTo(p.x - 5, p.y - 30);
+            case 'RESETTING':
+                const rdx = 0 - targetX;
+                const rdz = 0 - targetZ;
+                const rdist = Math.hypot(rdx, rdz);
                 
-                ctx.moveTo(p.x + 20, p.y - 20);
-                ctx.lineTo(p.x + 30, p.y - 45);
-                ctx.lineTo(p.x + 5, p.y - 30);
-            } else {
-                // Round bear ears
-                ctx.arc(p.x - 20, p.y - 25, 15, 0, Math.PI * 2);
-                ctx.arc(p.x + 20, p.y - 25, 15, 0, Math.PI * 2);
-            }
-            ctx.fill();
-            
-            // Eyes
-            ctx.fillStyle = 'white';
-            ctx.beginPath(); ctx.arc(p.x - 12, p.y - 5, 6, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(p.x + 12, p.y - 5, 6, 0, Math.PI*2); ctx.fill();
-            
-            ctx.fillStyle = 'black';
-            ctx.beginPath(); ctx.arc(p.x - 12, p.y - 5, 3, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(p.x + 12, p.y - 5, 3, 0, Math.PI*2); ctx.fill();
+                if (rdist < 0.2) {
+                    targetX = 0;
+                    targetZ = 0;
+                    clawState = 'IDLE';
+                } else {
+                    targetX += (rdx / rdist) * CLAW_SPEED * dt;
+                    targetZ += (rdz / rdist) * CLAW_SPEED * dt;
+                }
+                break;
         }
 
-        function draw() {
-            // Clear Canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        buttonPressedPreviously = input.drop;
 
-            // Draw Floor
-            ctx.fillStyle = '#0f3460';
-            ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+        carriage.position.x = targetX;
+        carriage.position.z = targetZ;
+        
+        armGroup.position.x = targetX;
+        armGroup.position.z = targetZ;
+        armGroup.position.y = dropY;
+        
+        wire.scale.y = (15 - dropY) / 15 + 0.01;
+        wire.position.y = (15 - dropY) / 2 + 1;
 
-            // Draw Plushies
-            plushies.forEach(drawPlushie);
+        updateLogic(dt);
+        renderer.render(scene, camera);
+    }
 
-            // Draw Claw Cable
-            ctx.strokeStyle = '#aaaaaa';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(claw.x, 0);
-            ctx.lineTo(claw.x, claw.y);
-            ctx.stroke();
+    // Attempt to hide the error message if the renderer was successfully created
+    if(renderer) {
+         document.getElementById('statusMessage').classList.remove('visible');
+    }
 
-            // Draw Claw Mechanism
-            ctx.fillStyle = '#silver';
-            ctx.fillRect(claw.x - 20, claw.y, 40, 20);
-            
-            // Draw Prongs
-            ctx.strokeStyle = '#e94560';
-            ctx.lineWidth = 6;
-            ctx.beginPath();
-            
-            // Left prong
-            ctx.moveTo(claw.x - 20, claw.y + 20);
-            let prongOffset = (claw.state === 'dropping' || claw.state === 'idle') ? 35 : 15;
-            ctx.lineTo(claw.x - prongOffset, claw.y + 60);
-            
-            // Right prong
-            ctx.moveTo(claw.x + 20, claw.y + 20);
-            ctx.lineTo(claw.x + prongOffset, claw.y + 60);
-            ctx.stroke();
+    animate();
 
-            // HUD
-            ctx.fillStyle = 'white';
-            ctx.font = '30px "Segoe UI"';
-            ctx.fillText(`Chances Left: ${attempts}`, 30, 50);
-            ctx.fillText(`Prizes Won: ${prizesWon}`, canvas.width - 250, 50);
-
-            if (gameState === 'gameover') {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                ctx.fillStyle = '#e94560';
-                ctx.font = '80px "Segoe UI"';
-                ctx.textAlign = 'center';
-                ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 40);
-                
-                ctx.fillStyle = 'white';
-                ctx.font = '40px "Segoe UI"';
-                ctx.fillText(`You won ${prizesWon} plushies!`, canvas.width / 2, canvas.height / 2 + 30);
-                ctx.fillText("Refresh the browser to play again.", canvas.width / 2, canvas.height / 2 + 100);
-            }
-        }
-
-        // Game Loop
-        function loop() {
-            update();
-            draw();
-            requestAnimationFrame(loop);
-        }
-
-        // Start Game
-        loop();
-    </script>
+</script>
 </body>
 </html>
