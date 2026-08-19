@@ -1,0 +1,30 @@
+{
+  "name": "The Iron Keep",
+  "width": 20,
+  "height": 12,
+  "layout": [
+    "MMMMMMMMMMMMMMMMMMMM",
+    "MGGGGGGGGMMMMGGGGGGM",
+    "MGMGGMMMGGMMGGEEGGGM",
+    "MGMGGMMMGGMGGGGGGGGM",
+    "MGMGGGGGGGGGGMMMGGGM",
+    "MGMGGMMMMMMGGMMMGGGM",
+    "MGMGGEEEEEMGGMMMGGGM",
+    "MGMGGMMMMMMGGGGGGXGM",
+    "MGGGGGGGGGGGGMMMMMMM",
+    "MMMMMMMMMMMMMGGGGGGM",
+    "MMMMMMMMMMMMMMMGMMMM",
+    "WWWWWWWWWWWWWWWGWWWW"
+  ],
+  "spawnX": 15,
+  "spawnY": 9
+}
+```eof
+
+
+### How to use these:
+1. Ensure you have a folder named `dungeons` located in the exact same directory as your main `index.html` file.
+2. Save the files above inside that folder (e.g., `dungeons/iron_keep.json` and `dungeons/abyssal_trench.json`).
+3. To trigger them in-game, you will need to map a cave entrance to load them. In your main `index.html`, locate the `handleInteraction` function and look for the `loadDungeon` call. You can change `"skull_cave"` to `"iron_keep"` or `"abyssal_trench"` to test them out! 
+
+*(Note: To create multiple different entrances across the overworld that load different JSONs, you would need to add a coordinate check to the `handleInteraction` function to determine which cave the player is standing in front of, and then pass the corresponding filename).*

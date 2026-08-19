@@ -1,0 +1,16 @@
+```json 
+{
+  "name": "Skull Caverns",
+  "width": 15,
+  "height": 10,
+  "layout": [
+    "MMMMMMMMMMMMMMM",
+    "MGGGGGEEEEGGGGM",
+    "MGGMMMMMMMMMGGM",
+    "MGGXGGGGGGGGEGM",
+    "MMMMMMMMMGMMMMM",
+    "WWWWWWWWWGWWWWW"
+  ],
+  "spawnX": 7, 
+  "spawnY": 4
+}
