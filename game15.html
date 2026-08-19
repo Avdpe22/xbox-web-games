@@ -3,443 +3,827 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mecha Brawler</title>
+    <title>Mecha Brawler: Steel Titans</title>
     <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
         body, html {
             margin: 0;
             padding: 0;
-            background-color: #000;
+            background-color: #050508;
+            color: #e0e6ed;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             overflow: hidden;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
         }
-        /* Forces 16:9 1080p scaling */
+        /* Fixed 16:9 Aspect Ratio Canvas Wrapper */
+        .game-container {
+            position: relative;
+            width: 100vw;
+            height: 56.25vw; /* 16:9 Aspect Ratio */
+            max-height: 100vh;
+            max-width: 177.78vh; /* 16:9 Aspect Ratio */
+            box-shadow: 0 0 30px rgba(0, 240, 255, 0.2);
+        }
         canvas {
-            background-color: #1a1a2e;
-            max-width: 100%;
-            max-height: 100%;
-            aspect-ratio: 16 / 9;
-            box-shadow: 0 0 20px rgba(0,255,255,0.2);
+            width: 100%;
+            height: 100%;
+            display: block;
+            background-color: #0d0e15;
         }
     </style>
 </head>
 <body>
 
-<canvas id="gameCanvas" width="1920" height="1080"></canvas>
+<div class="game-container">
+    <canvas id="gameCanvas" width="1920" height="1080"></canvas>
+</div>
 
 <script>
 /**
- * MECHA BRAWLER - ENHANCED EDITION
+ * MECHA BRAWLER: STEEL TITANS
+ * Designed for Xbox Series S Browser (Gamepad API) & PC Keyboard
  */
 
 const canvas = document.getElementById('gameCanvas');
-canvas.tabIndex = 0;
-// Xbox Edge (console browser) only exposes the Gamepad API to the currently
-// focused document, and gains focus can be lost when loaded inside the hub's
-// iframe -- pull focus onto this game whenever we get a chance to.
-function ensureGameFocus() { window.focus(); canvas.focus({ preventScroll: true }); }
-ensureGameFocus();
-window.addEventListener('load', ensureGameFocus);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureGameFocus(); });
-window.addEventListener('gamepadconnected', ensureGameFocus);
 const ctx = canvas.getContext('2d');
 
-// --- GAME STATE MANAGEMENT ---
-const STATES = { MENU: 0, BUILD: 1, VS_SELECT: 2, BATTLE: 3 };
-let currentState = STATES.MENU;
-let gameMode = 'SINGLE'; 
+// --- SOUND ENGINE (Web Audio API) ---
+let audioCtx = null;
 
-// --- INPUT MANAGER ---
+function initAudio() {
+    if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+    }
+}
+
+function playSound(type) {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (type === 'light_hit') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(80, now + 0.08);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.08);
+        osc.start(now); osc.stop(now + 0.08);
+    } else if (type === 'heavy_hit') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.2);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now); osc.stop(now + 0.2);
+    } else if (type === 'block') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.1);
+        osc.start(now); osc.stop(now + 0.1);
+    } else if (type === 'special') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.linearRampToValueAtTime(600, now + 0.15);
+        osc.frequency.exponentialRampToValueAtTime(50, now + 0.35);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.35);
+        osc.start(now); osc.stop(now + 0.35);
+    } else if (type === 'jump') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(120, now);
+        osc.frequency.exponentialRampToValueAtTime(350, now + 0.12);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.12);
+        osc.start(now); osc.stop(now + 0.12);
+    } else if (type === 'ko') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.exponentialRampToValueAtTime(20, now + 0.8);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.8);
+        osc.start(now); osc.stop(now + 0.8);
+    }
+}
+
+// --- GAME INPUT MANAGER ---
 const Input = {
-    pads: {},
-    keys: { 
-        p1: { left: false, right: false, up: false, down: false, lightPunch: false, heavyPunch: false, kick: false, block: false, start: false },
-        p2: { left: false, right: false, up: false, down: false, lightPunch: false, heavyPunch: false, kick: false, block: false, start: false }
+    keys: {},
+    padStates: [{}, {}],
+    init() {
+        window.addEventListener('keydown', e => { initAudio(); this.keys[e.code] = true; });
+        window.addEventListener('keyup', e => { this.keys[e.code] = false; });
     },
-    update() {
-        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-        for (let i = 0; i < gamepads.length; i++) {
-            if (gamepads[i]) {
-                this.pads[i] = gamepads[i];
-            }
-        }
+    getGamepads() {
+        return Array.from(navigator.getGamepads ? navigator.getGamepads() : []).filter(p => p && p.mapping === 'standard');
     },
-    getButton(padIndex, buttonIndex) {
-        if (this.pads[padIndex] && this.pads[padIndex].buttons[buttonIndex]) {
-            return this.pads[padIndex].buttons[buttonIndex].pressed;
+    getState(playerIdx) {
+        const pads = this.getGamepads();
+        const pad = pads[playerIdx];
+        
+        let moveX = 0, moveY = 0;
+        let lightAtk = false, heavyAtk = false, specialAtk = false, block = false, startBtn = false;
+
+        if (playerIdx === 0) {
+            // Player 1 Keyboard controls
+            if (this.keys['KeyA']) moveX -= 1;
+            if (this.keys['KeyD']) moveX += 1;
+            if (this.keys['KeyW']) moveY -= 1;
+            if (this.keys['KeyS']) moveY += 1;
+            if (this.keys['KeyJ']) lightAtk = true;
+            if (this.keys['KeyK']) heavyAtk = true;
+            if (this.keys['KeyL']) specialAtk = true;
+            if (this.keys['ShiftLeft'] || this.keys['KeyI']) block = true;
+            if (this.keys['Enter'] || this.keys['Space']) startBtn = true;
+        } else if (playerIdx === 1) {
+            // Player 2 Keyboard controls
+            if (this.keys['ArrowLeft']) moveX -= 1;
+            if (this.keys['ArrowRight']) moveX += 1;
+            if (this.keys['ArrowUp']) moveY -= 1;
+            if (this.keys['ArrowDown']) moveY += 1;
+            if (this.keys['Numpad1'] || this.keys['Digit1']) lightAtk = true;
+            if (this.keys['Numpad2'] || this.keys['Digit2']) heavyAtk = true;
+            if (this.keys['Numpad3'] || this.keys['Digit3']) specialAtk = true;
+            if (this.keys['Numpad0'] || this.keys['KeyO']) block = true;
         }
-        return false;
-    },
-    getAxis(padIndex, axisIndex) {
-        if (this.pads[padIndex] && this.pads[padIndex].axes[axisIndex]) {
-            return this.pads[padIndex].axes[axisIndex];
+
+        // Gamepad Override
+        if (pad) {
+            initAudio();
+            if (Math.abs(pad.axes[0]) > 0.2) moveX = pad.axes[0];
+            if (Math.abs(pad.axes[1]) > 0.2) moveY = pad.axes[1];
+            if (pad.buttons[14] && pad.buttons[14].pressed) moveX = -1; // D-Pad Left
+            if (pad.buttons[15] && pad.buttons[15].pressed) moveX = 1;  // D-Pad Right
+            if (pad.buttons[12] && pad.buttons[12].pressed) moveY = -1; // D-Pad Up
+            if (pad.buttons[13] && pad.buttons[13].pressed) moveY = 1;  // D-Pad Down
+
+            if (pad.buttons[0].pressed || pad.buttons[2].pressed) lightAtk = true;  // A or X
+            if (pad.buttons[1].pressed || pad.buttons[3].pressed) heavyAtk = true;  // B or Y
+            if (pad.buttons[5].pressed || pad.buttons[7].pressed) specialAtk = true;// RB or RT
+            if (pad.buttons[4].pressed || pad.buttons[6].pressed) block = true;     // LB or LT
+            if (pad.buttons[9].pressed) startBtn = true;                             // Start
         }
-        return 0;
+
+        return { moveX, moveY, lightAtk, heavyAtk, specialAtk, block, startBtn };
     }
 };
 
-// --- FIGHTER ENTITY ---
-class Fighter {
-    constructor(x, y, color, isPlayer2 = false) {
-        this.x = x;
-        this.y = y;
-        this.width = 100;
-        this.height = 250;
-        this.color = color;
-        this.isPlayer2 = isPlayer2;
-        
-        // Physics
+Input.init();
+
+// --- CONSTANTS & GAME STATE ---
+const STAGE_GROUND_Y = 880;
+const STAGE_LEFT = 200;
+const STAGE_RIGHT = 1720;
+
+const STATES = { MENU: 0, BATTLE: 1, ROUND_OVER: 2 };
+let gameState = STATES.MENU;
+let gameMode = 'SINGLE'; // 'SINGLE' or '2P'
+let menuIndex = 0;
+let menuDebounce = 0;
+
+let p1Wins = 0;
+let p2Wins = 0;
+let roundTimer = 99;
+let roundTimerFrames = 0;
+let announceText = '';
+let announceTimer = 0;
+
+// --- PARTICLES & PROJECTILES ---
+let particles = [];
+let projectiles = [];
+
+function createSparks(x, y, color = '#ffaa00', count = 12) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x, y,
+            vx: (Math.random() - 0.5) * 16,
+            vy: (Math.random() - 0.5) * 16,
+            size: Math.random() * 5 + 2,
+            color,
+            life: 20
+        });
+    }
+}
+
+// --- PROCEDURAL MECHA FIGHTER ---
+class MechaFighter {
+    constructor(id, startX, primaryColor, accentColor, isAI = false) {
+        this.id = id;
+        this.x = startX;
+        this.y = STAGE_GROUND_Y;
         this.vx = 0;
         this.vy = 0;
-        this.speed = 12;
-        this.jumpPower = -32;
-        this.gravity = 1.8;
-        this.grounded = false;
         
-        // Stats
-        this.maxHealth = 1000;
-        this.health = 1000;
+        // Logical Hitbox / Bounding Box (Decoupled from Visuals)
+        this.width = 110;
+        this.height = 210;
         
-        // Combat State
-        this.isAttacking = false;
+        this.primaryColor = primaryColor;
+        this.accentColor = accentColor;
+        this.isAI = isAI;
+
+        this.hp = 100;
+        this.maxHp = 100;
+        this.energy = 100;
+        this.maxEnergy = 100;
+
+        this.isGrounded = true;
+        this.isFacingLeft = id === 2;
         this.isBlocking = false;
-        this.attackCooldown = 0;
         this.hitStun = 0;
-        this.hitbox = { x: 0, y: 0, w: 0, h: 0, active: false, damage: 0 };
+
+        // Attack Logic
+        this.activeAttack = null; // { name, frame, maxFrames, damage, rangeX, rangeY, knockback, isSpecial }
+        this.attackCooldown = 0;
+
+        // Visual Animations
+        this.animTime = Math.random() * 100;
+        this.hitFlash = 0;
+
+        // AI Logic State
+        this.aiTimer = 0;
+        this.aiTargetAction = null;
+    }
+
+    reset(startX) {
+        this.x = startX;
+        this.y = STAGE_GROUND_Y;
+        this.vx = 0;
+        this.vy = 0;
+        this.hp = 100;
+        this.energy = 100;
+        this.hitStun = 0;
+        this.activeAttack = null;
+        this.isBlocking = false;
+        this.isFacingLeft = this.id === 2;
+    }
+
+    getHitbox() {
+        return {
+            x: this.x - this.width / 2,
+            y: this.y - this.height,
+            w: this.width,
+            h: this.height
+        };
+    }
+
+    update(opponent) {
+        this.animTime += 0.15;
+        if (this.hitStun > 0) this.hitStun--;
+        if (this.attackCooldown > 0) this.attackCooldown--;
+        if (this.hitFlash > 0) this.hitFlash--;
+
+        // Auto facing opponent
+        if (this.activeAttack === null && this.hitStun <= 0) {
+            this.isFacingLeft = this.x > opponent.x;
+        }
+
+        // Passive Energy Gain
+        if (this.energy < this.maxEnergy) {
+            this.energy = Math.min(this.maxEnergy, this.energy + 0.12);
+        }
+
+        if (this.hitStun > 0) {
+            // Locked in hitstun recoil
+            this.x += this.vx;
+            this.vx *= 0.85;
+            this.applyPhysics();
+            return;
+        }
+
+        // Input or AI Execution
+        let input = { moveX: 0, moveY: 0, lightAtk: false, heavyAtk: false, specialAtk: false, block: false };
+        if (this.isAI) {
+            input = this.updateAI(opponent);
+        } else {
+            input = Input.getState(this.id - 1);
+        }
+
+        // Blocking State
+        this.isBlocking = input.block && this.isGrounded && this.activeAttack === null;
+
+        // Attack Handling
+        if (!this.isBlocking && this.attackCooldown <= 0 && this.activeAttack === null) {
+            if (input.lightAtk) {
+                this.startAttack('LIGHT', 12, 10, 110, 60, 12);
+                playSound('light_hit');
+            } else if (input.heavyAtk) {
+                this.startAttack('HEAVY', 22, 22, 140, 90, 24);
+                playSound('heavy_hit');
+            } else if (input.specialAtk && this.energy >= 35) {
+                this.energy -= 35;
+                this.startAttack('SPECIAL', 28, 30, 260, 100, 35, true);
+                playSound('special');
+                // Launch Projectile Beam
+                projectiles.push({
+                    ownerId: this.id,
+                    x: this.x + (this.isFacingLeft ? -60 : 60),
+                    y: this.y - 120,
+                    vx: this.isFacingLeft ? -22 : 22,
+                    damage: 25,
+                    color: this.accentColor,
+                    size: 18
+                });
+            }
+        }
+
+        // Attack Progression
+        if (this.activeAttack) {
+            this.activeAttack.frame++;
+            if (this.activeAttack.frame >= this.activeAttack.maxFrames) {
+                this.activeAttack = null;
+                this.attackCooldown = 8;
+            }
+        }
+
+        // Movement (Only when not attacking or blocking)
+        if (this.activeAttack === null && !this.isBlocking) {
+            if (Math.abs(input.moveX) > 0.1) {
+                this.vx = input.moveX * 9.5;
+            } else {
+                this.vx *= 0.7;
+            }
+
+            if (input.moveY < -0.5 && this.isGrounded) {
+                this.vy = -22;
+                this.isGrounded = false;
+                playSound('jump');
+            }
+        } else {
+            this.vx *= 0.7;
+        }
+
+        // Apply Gravity & Movement
+        this.x += this.vx;
+        this.y += this.vy;
+        this.applyPhysics();
+
+        // Check Attack Collisions vs Opponent
+        if (this.activeAttack && this.activeAttack.frame === Math.floor(this.activeAttack.maxFrames / 3)) {
+            this.checkAttackImpact(opponent);
+        }
+    }
+
+    applyPhysics() {
+        if (!this.isGrounded) {
+            this.vy += 1.1; // Gravity
+        }
+
+        if (this.y >= STAGE_GROUND_Y) {
+            this.y = STAGE_GROUND_Y;
+            this.vy = 0;
+            this.isGrounded = true;
+        }
+
+        // Stage Boundary Bounds
+        this.x = Math.max(STAGE_LEFT + this.width / 2, Math.min(STAGE_RIGHT - this.width / 2, this.x));
+    }
+
+    startAttack(name, maxFrames, damage, rangeX, rangeY, knockback, isSpecial = false) {
+        this.activeAttack = { name, frame: 0, maxFrames, damage, rangeX, rangeY, knockback, isSpecial };
+    }
+
+    checkAttackImpact(opponent) {
+        const attackDirection = this.isFacingLeft ? -1 : 1;
+        const atkX = this.x + (attackDirection * (this.width / 2));
+        const atkW = this.activeAttack.rangeX;
+        const atkY = this.y - 140;
+        const atkH = this.activeAttack.rangeY;
+
+        const oppBox = opponent.getHitbox();
+
+        // Overlap Check
+        if (atkX < oppBox.x + oppBox.w && atkX + (atkW * attackDirection) > oppBox.x - oppBox.w &&
+            atkY < oppBox.y + oppBox.h && atkY + atkH > oppBox.y) {
+            
+            opponent.takeDamage(this.activeAttack.damage, this.activeAttack.knockback * attackDirection, opponent.isBlocking);
+            createSparks(opponent.x, opponent.y - 120, opponent.isBlocking ? '#00e5ff' : '#ff3300', 16);
+        }
+    }
+
+    takeDamage(amount, knockback, blocked) {
+        if (blocked) {
+            amount *= 0.15; // 85% damage reduction on block
+            knockback *= 0.3;
+            playSound('block');
+        } else {
+            this.hitStun = 18;
+            this.hitFlash = 8;
+            this.activeAttack = null; // Interrupt current attack
+            playSound('heavy_hit');
+        }
+
+        this.hp = Math.max(0, this.hp - amount);
+        this.vx = knockback;
+        this.vy = -4;
     }
 
     updateAI(opponent) {
-        let keys = Input.keys.p2;
-        // Reset AI keys
-        keys.left = keys.right = keys.up = keys.down = keys.lightPunch = keys.heavyPunch = keys.kick = keys.block = false;
+        this.aiTimer++;
+        const dist = Math.abs(this.x - opponent.x);
 
-        if (this.hitStun > 0) return; // Can't think while getting punched
+        let moveX = 0;
+        let lightAtk = false, heavyAtk = false, specialAtk = false, block = false;
 
-        let dist = opponent.x - this.x;
-        let absDist = Math.abs(dist);
-
-        // Move towards opponent
-        if (absDist > 160) {
-            if (dist < 0) keys.left = true;
-            else keys.right = true;
-        } 
-        // Attack range
-        else {
-            if (this.attackCooldown <= 0) {
-                let roll = Math.random();
-                if (roll < 0.05) keys.lightPunch = true;
-                else if (roll < 0.08) keys.heavyPunch = true;
-                else if (roll < 0.12) keys.kick = true;
-            }
-        }
-    }
-
-    update(padIndex, opponent) {
-        // Cooldowns & Hit Stun
-        if (this.hitStun > 0) {
-            this.hitStun--;
-            this.isAttacking = false;
-            this.hitbox.active = false;
-        }
-        if (this.attackCooldown > 0) this.attackCooldown--;
-        if (this.attackCooldown < 15) this.hitbox.active = false; 
-
-        let keys = padIndex === 0 ? Input.keys.p1 : Input.keys.p2;
-
-        // Inputs
-        let moveLeft = Input.getButton(padIndex, 14) || Input.getAxis(padIndex, 0) < -0.5 || keys.left;
-        let moveRight = Input.getButton(padIndex, 15) || Input.getAxis(padIndex, 0) > 0.5 || keys.right;
-        let jump = Input.getButton(padIndex, 12) || Input.getButton(padIndex, 0) || keys.up; 
-        let crouch = Input.getButton(padIndex, 13) || Input.getAxis(padIndex, 1) > 0.5 || keys.down;
-        
-        let lightPunch = Input.getButton(padIndex, 2) || keys.lightPunch;
-        let heavyPunch = Input.getButton(padIndex, 3) || keys.heavyPunch;
-        let kick = Input.getButton(padIndex, 1) || keys.kick;
-        this.isBlocking = (Input.getButton(padIndex, 5) || crouch || keys.block) && this.hitStun === 0 && !this.isAttacking;
-
-        // Movement (Only if not in hitstun, attacking, or blocking)
-        if (this.hitStun === 0 && !this.isAttacking && !this.isBlocking) {
-            if (moveLeft) this.vx = -this.speed;
-            else if (moveRight) this.vx = this.speed;
-            else this.vx = 0;
-
-            if (jump && this.grounded) {
-                this.vy = this.jumpPower;
-                this.grounded = false;
-            }
-        } else if (this.hitStun === 0) {
-            this.vx = 0; 
-        }
-
-        // Apply Attacks
-        if (this.hitStun === 0 && !this.isAttacking && this.attackCooldown === 0 && !this.isBlocking) {
-            if (lightPunch) this.attack('light');
-            else if (heavyPunch) this.attack('heavy');
-            else if (kick) this.attack('kick');
-        }
-
-        // Physics
-        this.vy += this.gravity;
-        
-        // Friction for knockback
-        if (this.hitStun > 0 || this.isBlocking) {
-            this.vx *= 0.85; 
-        }
-
-        this.x += this.vx;
-        this.y += this.vy;
-
-        // Physical Collision Pushback (Prevent phasing through bodies)
-        let dist = (this.x + this.width/2) - (opponent.x + opponent.width/2);
-        if (Math.abs(dist) < this.width && this.y + this.height > opponent.y && this.y < opponent.y + opponent.height) {
-            let push = (this.width - Math.abs(dist)) / 2;
-            if (dist > 0) this.x += push;
-            else this.x -= push;
-        }
-
-        // Floor collision
-        const floorY = 900;
-        if (this.y + this.height >= floorY) {
-            this.y = floorY - this.height;
-            this.vy = 0;
-            this.grounded = true;
-        }
-
-        // Screen bounds
-        if (this.x < 0) this.x = 0;
-        if (this.x + this.width > 1920) this.x = 1920 - this.width;
-
-        // Check hits against opponent
-        if (this.hitbox.active) {
-            this.checkHit(opponent);
-        }
-    }
-
-    attack(type) {
-        this.isAttacking = true;
-        let reach = 140;
-        let yOffset = 50;
-
-        let dir = this.isPlayer2 ? -1 : 1; 
-
-        if (type === 'light') {
-            this.attackCooldown = 20;
-            this.hitbox = { x: this.x + (this.width/2) + (dir * reach/2) - (dir===-1?reach:0), y: this.y + yOffset, w: reach, h: 40, active: true, damage: 30 };
-        } else if (type === 'heavy') {
-            this.attackCooldown = 45;
-            this.hitbox = { x: this.x + (this.width/2) + (dir * reach/2) - (dir===-1?reach+40:0), y: this.y + yOffset + 20, w: reach + 40, h: 80, active: true, damage: 80 };
-        } else if (type === 'kick') {
-            this.attackCooldown = 35;
-            this.hitbox = { x: this.x + (this.width/2) + (dir * reach/2) - (dir===-1?reach+20:0), y: this.y + yOffset + 120, w: reach + 20, h: 60, active: true, damage: 60 };
-        }
-        
-        setTimeout(() => this.isAttacking = false, 250);
-    }
-
-    checkHit(opponent) {
-        if (this.hitbox.x < opponent.x + opponent.width &&
-            this.hitbox.x + this.hitbox.w > opponent.x &&
-            this.hitbox.y < opponent.y + opponent.height &&
-            this.hitbox.y + this.hitbox.h > opponent.y) {
-            
-            this.hitbox.active = false; 
-            
-            if (opponent.isBlocking) {
-                opponent.health -= this.hitbox.damage * 0.1; 
-                opponent.vx = this.isPlayer2 ? -8 : 8; 
+        if (this.aiTimer % 15 === 0) {
+            if (dist > 220) {
+                this.aiTargetAction = 'APPROACH';
+            } else if (dist < 120) {
+                const rand = Math.random();
+                if (rand < 0.4) this.aiTargetAction = 'LIGHT';
+                else if (rand < 0.7) this.aiTargetAction = 'HEAVY';
+                else if (rand < 0.9) this.aiTargetAction = 'BLOCK';
+                else this.aiTargetAction = 'SPECIAL';
             } else {
-                opponent.health -= this.hitbox.damage;
-                opponent.vx = this.isPlayer2 ? -25 : 25; 
-                opponent.hitStun = 20; // Stunning the opponent!
-                opponent.vy = -5; // Slight juggle effect
+                this.aiTargetAction = Math.random() < 0.5 ? 'APPROACH' : 'SPECIAL';
             }
         }
+
+        if (this.aiTargetAction === 'APPROACH') {
+            moveX = opponent.x > this.x ? 1 : -1;
+        } else if (this.aiTargetAction === 'LIGHT') {
+            lightAtk = true;
+        } else if (this.aiTargetAction === 'HEAVY') {
+            heavyAtk = true;
+        } else if (this.aiTargetAction === 'SPECIAL') {
+            specialAtk = true;
+        } else if (this.aiTargetAction === 'BLOCK') {
+            block = true;
+        }
+
+        return { moveX, moveY: 0, lightAtk, heavyAtk, specialAtk, block };
     }
 
+    // --- PROCEDURAL CHARACTER RENDERING PIPELINE ---
     draw(ctx) {
-        // Draw Robot Body
-        ctx.fillStyle = this.hitStun > 0 ? '#ffffff' : this.color; // Flash white when hit
-        ctx.fillRect(this.x, this.y, this.width, this.height);
-        
-        // Draw visor/eye 
-        ctx.fillStyle = 'cyan';
-        let faceX = this.isPlayer2 ? this.x + 10 : this.x + this.width - 30;
-        ctx.fillRect(faceX, this.y + 20, 20, 10);
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        if (this.isFacingLeft) ctx.scale(-1, 1);
 
-        // Block indicator
+        const bob = Math.sin(this.animTime) * 4;
+
+        // 1. Shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 55, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 2. Thruster Flames during Jump
+        if (!this.isGrounded) {
+            ctx.fillStyle = '#ffaa00';
+            ctx.beginPath();
+            ctx.moveTo(-20, -40);
+            ctx.lineTo(0, -10 + Math.random() * 25);
+            ctx.lineTo(20, -40);
+            ctx.fill();
+        }
+
+        // White Flash Tint when Hit
+        if (this.hitFlash > 0) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(-this.width / 2, -this.height, this.width, this.height);
+            ctx.restore();
+            return;
+        }
+
+        // 3. Mecha Legs / Hydraulics
+        ctx.fillStyle = '#222831';
+        ctx.fillRect(-35, -70, 22, 70); // Left Leg
+        ctx.fillRect(13, -70, 22, 70);  // Right Leg
+
+        ctx.fillStyle = this.accentColor;
+        ctx.fillRect(-38, -20, 28, 20); // Feet
+        ctx.fillRect(10, -20, 28, 20);
+
+        // 4. Main Torso & Chestplate
+        ctx.fillStyle = this.primaryColor;
+        ctx.beginPath();
+        ctx.roundRect(-45, -160 + bob, 90, 95, [12, 12, 6, 6]);
+        ctx.fill();
+
+        // Chest Core Light (Pulsing)
+        const coreGlow = Math.abs(Math.sin(this.animTime * 1.5)) * 0.4 + 0.6;
+        ctx.fillStyle = this.accentColor;
+        ctx.globalAlpha = coreGlow;
+        ctx.beginPath();
+        ctx.arc(0, -120 + bob, 16, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+
+        // 5. Shoulder Pads
+        ctx.fillStyle = '#393e46';
+        ctx.fillRect(-62, -165 + bob, 25, 30);
+        ctx.fillRect(37, -165 + bob, 25, 30);
+
+        // 6. Mecha Head & Visor Slit
+        ctx.fillStyle = '#1e2022';
+        ctx.beginPath();
+        ctx.roundRect(-25, -200 + bob, 50, 42, [8, 8, 4, 4]);
+        ctx.fill();
+
+        // Glowing Visor
+        ctx.fillStyle = this.accentColor;
+        ctx.fillRect(2, -188 + bob, 20, 8);
+
+        // 7. Dynamic Arms & Weapon Extension (Attack Animations)
+        ctx.save();
+        ctx.translate(15, -135 + bob);
+
+        if (this.activeAttack) {
+            const progress = this.activeAttack.frame / this.activeAttack.maxFrames;
+            const extX = Math.sin(progress * Math.PI) * this.activeAttack.rangeX;
+
+            // Extending Plasma Blade / Fist
+            ctx.fillStyle = this.accentColor;
+            ctx.fillRect(0, -12, extX, 24);
+
+            // Energy Swing Arc
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.arc(extX, 0, 30, -Math.PI / 3, Math.PI / 3);
+            ctx.stroke();
+        } else {
+            // Idle Arm Guard
+            ctx.fillStyle = '#393e46';
+            ctx.fillRect(0, -10, 35, 20);
+        }
+        ctx.restore();
+
+        // 8. Shield Barrier Dome when Blocking
         if (this.isBlocking) {
-            ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
-            ctx.lineWidth = 10;
-            ctx.strokeRect(this.x - 10, this.y - 10, this.width + 20, this.height + 20);
+            ctx.strokeStyle = '#00f0ff';
+            ctx.lineWidth = 8;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(0, -100, 110, -Math.PI / 2, Math.PI / 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
         }
 
-        // Draw Hitbox (Visuals)
-        if (this.hitbox.active) {
-            ctx.fillStyle = 'rgba(255, 50, 50, 0.8)';
-            ctx.fillRect(this.hitbox.x, this.hitbox.y, this.hitbox.w, this.hitbox.h);
+        ctx.restore();
+    }
+}
+
+// --- FIGHTER INSTANCES ---
+const p1 = new MechaFighter(1, 450, '#990000', '#ffcc00', false);
+const p2 = new MechaFighter(2, 1470, '#0044cc', '#00f0ff', true);
+
+// --- COLLISION RESOLUTION (Solid Body Push) ---
+function resolveFighterCollisions() {
+    const b1 = p1.getHitbox();
+    const b2 = p2.getHitbox();
+
+    if (b1.x < b2.x + b2.w && b1.x + b1.w > b2.x &&
+        b1.y < b2.y + b2.h && b1.y + b1.h > b2.y) {
+        const overlap = (b1.x + b1.w) - b2.x;
+        if (p1.x < p2.x) {
+            p1.x -= overlap / 2;
+            p2.x += overlap / 2;
+        } else {
+            p1.x += overlap / 2;
+            p2.x -= overlap / 2;
         }
     }
 }
 
-// --- GAME INSTANCES ---
-let p1, p2;
+// --- PROJECTILE UPDATES ---
+function updateProjectiles() {
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const pr = projectiles[i];
+        pr.x += pr.vx;
 
-function initBattle() {
-    p1 = new Fighter(300, 600, '#4a90e2', false);
-    p2 = new Fighter(1520, 600, '#e24a4a', true);
-    currentState = STATES.BATTLE;
-}
+        // Draw Projectile
+        ctx.fillStyle = pr.color;
+        ctx.beginPath();
+        ctx.arc(pr.x, pr.y, pr.size, 0, Math.PI * 2);
+        ctx.fill();
 
-// --- RENDER & GAME LOOP ---
-function drawUI() {
-    ctx.fillStyle = 'white';
-    ctx.font = '40px Arial';
-    
-    if (currentState === STATES.MENU) {
-        ctx.textAlign = 'center';
-        ctx.font = '80px Arial';
-        ctx.fillText("MECHA BRAWLER", 1920/2, 400);
-        
-        ctx.font = '40px Arial';
-        ctx.fillText("Press (J) or (A) for Single Player", 1920/2, 600);
-        ctx.fillText("Press (K) or (X) for VS Mode", 1920/2, 700);
-        
-        ctx.font = '24px Arial';
-        ctx.fillStyle = '#aaa';
-        ctx.fillText("PC Controls: WASD to Move, S to Block | J = Light, K = Heavy, L = Kick", 1920/2, 950);
-        
-        if (Input.getButton(0, 0) || Input.keys.p1.lightPunch) { 
-            gameMode = 'SINGLE';
-            currentState = STATES.BUILD;
-            Input.keys.p1.lightPunch = false; // consume input
-            setTimeout(() => {}, 200); 
+        const target = pr.ownerId === 1 ? p2 : p1;
+        const box = target.getHitbox();
+
+        // Check Hit vs Target
+        if (pr.x > box.x && pr.x < box.x + box.w && pr.y > box.y && pr.y < box.y + box.h) {
+            target.takeDamage(pr.damage, pr.vx * 0.5, target.isBlocking);
+            createSparks(pr.x, pr.y, pr.color, 20);
+            projectiles.splice(i, 1);
+            continue;
         }
-        if (Input.getButton(0, 2) || Input.keys.p1.heavyPunch) { 
-            gameMode = 'VS';
-            initBattle();
-        }
-    } 
-    else if (currentState === STATES.BUILD) {
-        ctx.textAlign = 'center';
-        ctx.fillText("GARAGE: BUILD YOUR ROBOT", 1920/2, 200);
-        ctx.font = '24px Arial';
-        ctx.fillText("Use D-Pad to swap parts. (Prototype UI)", 1920/2, 300);
-        
-        ctx.fillStyle = '#4a90e2';
-        ctx.fillRect(1920/2 - 100, 400, 200, 400);
-        
-        ctx.fillStyle = 'white';
-        ctx.fillText("Press (Enter) or (Y) to BATTLE", 1920/2, 900);
-        
-        if (Input.getButton(0, 3) || Input.getButton(0, 9) || Input.keys.p1.start) {
-            Input.keys.p1.start = false; // consume input
-            initBattle();
+
+        // Out of bounds
+        if (pr.x < STAGE_LEFT || pr.x > STAGE_RIGHT) {
+            projectiles.splice(i, 1);
         }
     }
-    else if (currentState === STATES.BATTLE) {
-        // Health Bars
-        ctx.fillStyle = 'red';
-        ctx.fillRect(100, 50, 700, 50);
-        ctx.fillRect(1120, 50, 700, 50);
-        
-        ctx.fillStyle = 'lime';
-        ctx.fillRect(100, 50, Math.max(0, p1.health / p1.maxHealth) * 700, 50);
-        let p2HpWidth = Math.max(0, p2.health / p2.maxHealth) * 700;
-        ctx.fillRect(1120 + (700 - p2HpWidth), 50, p2HpWidth, 50);
-        
-        ctx.textAlign = 'center';
-        ctx.fillText("VS", 1920/2, 90);
+}
 
-        if (p1.health <= 0 || p2.health <= 0) {
-            ctx.font = '80px Arial';
-            ctx.fillText(p1.health <= 0 ? "PLAYER 2 WINS!" : "PLAYER 1 WINS!", 1920/2, 1080/2);
-            ctx.font = '40px Arial';
-            ctx.fillText("Press (B) or (L) to Return to Menu", 1920/2, 1080/2 + 100);
-            
-            if (Input.getButton(0, 1) || Input.keys.p1.kick) {
-                Input.keys.p1.kick = false;
-                currentState = STATES.MENU; 
+// --- HEADS UP DISPLAY (HUD) ---
+function drawHUD() {
+    // Stage Floor Line
+    ctx.strokeStyle = '#00f0ff';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(STAGE_LEFT, STAGE_GROUND_Y);
+    ctx.lineTo(STAGE_RIGHT, STAGE_GROUND_Y);
+    ctx.stroke();
+
+    // P1 Health Bar
+    ctx.fillStyle = '#222';
+    ctx.fillRect(100, 60, 600, 36);
+    ctx.fillStyle = '#ff2200';
+    ctx.fillRect(100, 60, 600 * (p1.hp / p1.maxHp), 36);
+    ctx.strokeStyle = '#fff';
+    ctx.strokeRect(100, 60, 600, 36);
+
+    // P1 Energy Bar
+    ctx.fillStyle = '#222';
+    ctx.fillRect(100, 102, 400, 16);
+    ctx.fillStyle = '#ffcc00';
+    ctx.fillRect(100, 102, 400 * (p1.energy / p1.maxEnergy), 16);
+
+    // P2 Health Bar
+    ctx.fillStyle = '#222';
+    ctx.fillRect(1220, 60, 600, 36);
+    ctx.fillStyle = '#00e5ff';
+    ctx.fillRect(1820 - (600 * (p2.hp / p2.maxHp)), 60, 600 * (p2.hp / p2.maxHp), 36);
+    ctx.strokeStyle = '#fff';
+    ctx.strokeRect(1220, 60, 600, 36);
+
+    // P2 Energy Bar
+    ctx.fillStyle = '#222';
+    ctx.fillRect(1420, 102, 400, 16);
+    ctx.fillStyle = '#ffcc00';
+    ctx.fillRect(1820 - (400 * (p2.energy / p2.maxEnergy)), 102, 400 * (p2.energy / p2.maxEnergy), 16);
+
+    // Round Timer
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 52px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(roundTimer.toString(), 960, 95);
+
+    // Player Names & Win Counters
+    ctx.font = '700 24px "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`P1 TITAN (WINS: ${p1Wins})`, 100, 48);
+    ctx.textAlign = 'right';
+    ctx.fillText(`P2 TITAN (WINS: ${p2Wins})`, 1820, 48);
+
+    // Announcement Banners
+    if (announceTimer > 0) {
+        announceTimer--;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(0, 440, 1920, 160);
+        ctx.fillStyle = '#ffcc00';
+        ctx.font = '900 80px "Segoe UI", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(announceText, 960, 545);
+    }
+}
+
+// --- MENU & STATE LOGIC ---
+function startRound() {
+    p1.reset(450);
+    p2.reset(1470);
+    projectiles = [];
+    particles = [];
+    roundTimer = 99;
+    roundTimerFrames = 0;
+    announceText = 'ROUND START!';
+    announceTimer = 90;
+    gameState = STATES.BATTLE;
+}
+
+function handleMenu() {
+    const inputP1 = Input.getState(0);
+    if (menuDebounce > 0) menuDebounce--;
+
+    if (menuDebounce === 0) {
+        if (inputP1.moveY > 0.5) {
+            menuIndex = (menuIndex + 1) % 2;
+            menuDebounce = 12;
+            playSound('light_hit');
+        } else if (inputP1.moveY < -0.5) {
+            menuIndex = (menuIndex + 1) % 2;
+            menuDebounce = 12;
+            playSound('light_hit');
+        }
+
+        if (inputP1.lightAtk || inputP1.startBtn) {
+            gameMode = menuIndex === 0 ? 'SINGLE' : '2P';
+            p2.isAI = gameMode === 'SINGLE';
+            p1Wins = 0;
+            p2Wins = 0;
+            startRound();
+            playSound('special');
+        }
+    }
+
+    // Render Menu Screen
+    ctx.clearRect(0, 0, 1920, 1080);
+    ctx.fillStyle = '#0d0e15';
+    ctx.fillRect(0, 0, 1920, 1080);
+
+    ctx.fillStyle = '#00f0ff';
+    ctx.font = '900 90px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('MECHA BRAWLER: STEEL TITANS', 960, 320);
+
+    ctx.font = '700 36px "Segoe UI", sans-serif';
+    const opts = ['1 PLAYER vs ARCADE AI', '2 PLAYERS LOCAL VERSUS'];
+    opts.forEach((opt, idx) => {
+        ctx.fillStyle = idx === menuIndex ? '#ffcc00' : '#888888';
+        ctx.fillText((idx === menuIndex ? '► ' : '') + opt, 960, 520 + (idx * 80));
+    });
+
+    ctx.fillStyle = '#555555';
+    ctx.font = '24px "Segoe UI", sans-serif';
+    ctx.fillText('Xbox Controller: Stick / D-Pad to Navigate • A/X/Start to Select', 960, 850);
+    ctx.fillText('PC Controls: P1 (WASD + J/K/L) | P2 (Arrows + Num 1/2/3)', 960, 900);
+}
+
+// --- MAIN GAME LOOP ---
+function gameLoop() {
+    if (gameState === STATES.MENU) {
+        handleMenu();
+    } else if (gameState === STATES.BATTLE || gameState === STATES.ROUND_OVER) {
+        // Timer Logic
+        if (gameState === STATES.BATTLE) {
+            roundTimerFrames++;
+            if (roundTimerFrames >= 60) {
+                roundTimerFrames = 0;
+                if (roundTimer > 0) roundTimer--;
+            }
+
+            // Entity Updates
+            p1.update(p2);
+            p2.update(p1);
+            resolveFighterCollisions();
+
+            // Check KO / Time Out
+            if (p1.hp <= 0 || p2.hp <= 0 || roundTimer <= 0) {
+                gameState = STATES.ROUND_OVER;
+                playSound('ko');
+
+                if (p1.hp > p2.hp) {
+                    p1Wins++;
+                    announceText = 'PLAYER 1 WINS!';
+                } else if (p2.hp > p1.hp) {
+                    p2Wins++;
+                    announceText = 'PLAYER 2 WINS!';
+                } else {
+                    announceText = 'DRAW!';
+                }
+                announceTimer = 180;
+            }
+        } else if (gameState === STATES.ROUND_OVER) {
+            if (announceTimer <= 0) {
+                if (p1Wins >= 2 || p2Wins >= 2) {
+                    gameState = STATES.MENU;
+                } else {
+                    startRound();
+                }
             }
         }
-    }
-}
 
-function update() {
-    Input.update();
-    
-    if (currentState === STATES.BATTLE && p1.health > 0 && p2.health > 0) {
-        // Face each other dynamically
-        p1.isPlayer2 = p1.x > p2.x;
-        p2.isPlayer2 = p2.x > p1.x;
-        
-        p1.update(0, p2);
-        
-        if (gameMode === 'VS') {
-            p2.update(1, p1); 
-        } else {
-            // Run Single Player AI
-            p2.updateAI(p1);
-            p2.update(1, p1); 
+        // Render Scene
+        ctx.clearRect(0, 0, 1920, 1080);
+
+        // Update Particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const pt = particles[i];
+            pt.x += pt.vx;
+            pt.y += pt.vy;
+            pt.life--;
+            ctx.fillStyle = pt.color;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+            ctx.fill();
+            if (pt.life <= 0) particles.splice(i, 1);
         }
-    }
-}
 
-function loop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    update();
-    
-    // Draw Environment
-    if (currentState === STATES.BATTLE) {
-        // Grid background
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
-        ctx.lineWidth = 2;
-        for(let i=0; i<1920; i+=100) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 900); ctx.stroke(); }
-        
-        // Floor
-        ctx.fillStyle = '#223';
-        ctx.fillRect(0, 900, 1920, 180); 
-        ctx.fillStyle = '#0ff';
-        ctx.fillRect(0, 900, 1920, 5);
-        
         p1.draw(ctx);
         p2.draw(ctx);
+        updateProjectiles();
+        drawHUD();
     }
-    
-    drawUI();
-    requestAnimationFrame(loop);
+
+    requestAnimationFrame(gameLoop);
 }
 
-// Full PC Keyboard Fallback mapping
-window.addEventListener('keydown', (e) => {
-    let k = e.key.toLowerCase();
-    if (k === 'a') Input.keys.p1.left = true;
-    if (k === 'd') Input.keys.p1.right = true;
-    if (k === 'w') Input.keys.p1.up = true;
-    if (k === 's') Input.keys.p1.down = true;
-    if (k === 'j') Input.keys.p1.lightPunch = true;
-    if (k === 'k') Input.keys.p1.heavyPunch = true;
-    if (k === 'l') Input.keys.p1.kick = true;
-    if (e.key === 'Enter') Input.keys.p1.start = true;
-});
-
-window.addEventListener('keyup', (e) => {
-    let k = e.key.toLowerCase();
-    if (k === 'a') Input.keys.p1.left = false;
-    if (k === 'd') Input.keys.p1.right = false;
-    if (k === 'w') Input.keys.p1.up = false;
-    if (k === 's') Input.keys.p1.down = false;
-    if (k === 'j') Input.keys.p1.lightPunch = false;
-    if (k === 'k') Input.keys.p1.heavyPunch = false;
-    if (k === 'l') Input.keys.p1.kick = false;
-    if (e.key === 'Enter') Input.keys.p1.start = false;
-});
-
-// Start game
-requestAnimationFrame(loop);
+requestAnimationFrame(gameLoop);
 </script>
 </body>
 </html>
