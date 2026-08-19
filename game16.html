@@ -164,6 +164,7 @@ const ARENA = { x: 80, y: 80, w: 1760, h: 920 };
 const WIN_SCORE = 7;
 const STATES = { MENU: 0, PLAYING: 1, ROUND_SCORED: 2, GAMEOVER: 3 };
 let gameState = STATES.MENU;
+let gameOverLocked = false; // require smash to be released before it can dismiss GAMEOVER
 let gameMode = 'VS_AI'; // 'VS_AI' or 'VS_PLAYER'
 let winner = null;
 let screenShake = 0;
@@ -488,6 +489,7 @@ function onScoreScored(scorerId) {
     if (scoreP1 >= WIN_SCORE || scoreP2 >= WIN_SCORE) {
         winner = scoreP1 >= WIN_SCORE ? 'PLAYER 1' : (gameMode === 'VS_PLAYER' ? 'PLAYER 2' : 'AI MASTER');
         gameState = STATES.GAMEOVER;
+        gameOverLocked = true;
     } else {
         gameState = STATES.ROUND_SCORED;
         scoredTimer = 75; // frames delay
@@ -604,7 +606,11 @@ function update() {
     }
 
     if (gameState === STATES.GAMEOVER) {
-        if (p1Input.smash) gameState = STATES.MENU;
+        if (gameOverLocked) {
+            if (!p1Input.smash) gameOverLocked = false;
+        } else if (p1Input.smash) {
+            gameState = STATES.MENU;
+        }
         return;
     }
 

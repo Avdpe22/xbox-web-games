@@ -167,6 +167,7 @@
         // GAME STATE
         // ============================================================
         let gameState = 'MENU';
+        let continueLocked = false; // require the select button to be released before it can advance past LEVEL_CLEAR/GAME_OVER
         let mode = null; 
         let menuIndex = 0;
         let menuAxisReady = true;
@@ -445,6 +446,7 @@
 
             if (players.every(p => p.hp <= 0)) {
                 gameState = 'GAME_OVER';
+                continueLocked = true;
                 return;
             }
 
@@ -616,6 +618,7 @@
             if (door.hp <= 0) {
                 score += 5000 * level;
                 gameState = 'LEVEL_CLEAR';
+                continueLocked = true;
             }
         }
 
@@ -818,7 +821,10 @@
                 drawTextCentered('Press Space/Enter/A for Next Level', 40, 20, 'white');
                 
                 let pads = getGamepads();
-                if (keys['Space'] || keys['Enter'] || (pads[0] && pads[0].buttons[0].pressed)) {
+                let selectPressed = keys['Space'] || keys['Enter'] || (pads[0] && pads[0].buttons[0].pressed);
+                if (continueLocked) {
+                    if (!selectPressed) continueLocked = false;
+                } else if (selectPressed) {
                     level++;
                     initMode(mode, true);
                 }
@@ -830,7 +836,10 @@
                 drawTextCentered('Press Space/Enter/A for Main Menu', 80, 20, '#aaaaaa');
 
                 let pads = getGamepads();
-                if (keys['Space'] || keys['Enter'] || (pads[0] && pads[0].buttons[0].pressed)) {
+                let selectPressed = keys['Space'] || keys['Enter'] || (pads[0] && pads[0].buttons[0].pressed);
+                if (continueLocked) {
+                    if (!selectPressed) continueLocked = false;
+                } else if (selectPressed) {
                     gameState = 'MENU';
                 }
             }

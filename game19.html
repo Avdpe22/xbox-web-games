@@ -633,6 +633,7 @@ function drawParticles(ctx) {
 
 let player = new Player();
 let mutants = [];
+let zoneClearTimer = 0;
 let projectiles = [];
 
 function resetGame() {
@@ -671,7 +672,8 @@ function update() {
     }
 
     if (gameState === STATES.ZONE_CLEAR) {
-        if (mutants.length === 0) { gameState = STATES.UPGRADE; menuSelection = 1; }
+        if (zoneClearTimer > 0) zoneClearTimer--;
+        if (zoneClearTimer === 0 && mutants.length === 0) { gameState = STATES.UPGRADE; menuSelection = 1; }
         return;
     }
 
@@ -709,6 +711,7 @@ function update() {
     if (player.x > levelWidth - 300) {
         if (pacified >= pacifiedRequired) {
             gameState = STATES.ZONE_CLEAR;
+            zoneClearTimer = 90; // hold the "AREA CONTAINED" screen so the player can read it
             mutants.forEach(m => createParticles(m.x, m.y, '#805ad5', 20)); // Clear screen
             mutants = [];
         } else {
@@ -937,6 +940,8 @@ function loop() {
             ctx.fillStyle = 'rgba(104, 211, 145, 0.2)'; ctx.fillRect(0, 0, 1280, 720);
             ctx.fillStyle = '#fff'; ctx.font = 'bold 72px Courier'; ctx.textAlign = 'center';
             ctx.fillText("AREA CONTAINED", 1280/2, 360);
+            ctx.font = 'bold 28px Courier';
+            ctx.fillText(`SLIMES PACIFIED: ${pacified}`, 1280/2, 420);
         }
     }
 

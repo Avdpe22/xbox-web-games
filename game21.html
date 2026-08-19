@@ -64,6 +64,15 @@
  */
 
 const canvas = document.getElementById('gameCanvas');
+canvas.tabIndex = 0;
+// Xbox Edge (console browser) only exposes the Gamepad API to the currently
+// focused document, and gains focus can be lost when loaded inside the hub's
+// iframe -- pull focus onto this game whenever we get a chance to.
+function ensureGameFocus() { window.focus(); canvas.focus({ preventScroll: true }); }
+ensureGameFocus();
+window.addEventListener('load', ensureGameFocus);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureGameFocus(); });
+window.addEventListener('gamepadconnected', ensureGameFocus);
 const ctx = canvas.getContext('2d');
 
 // --- SOUND SYNTHESIZER (Web Audio API) ---
@@ -160,7 +169,7 @@ const Input = {
         let vx = 0, vy = 0;
         let aimX = 0, aimY = 0;
         let has360Aim = false;
-        let shoot = false, jump = false, dash = false, confirm = false;
+        let shoot = false, jump = false, dash = false, confirm = false, confirmA = false, startBtn = false;
 
         if (pad) {
             initAudio();
@@ -184,6 +193,8 @@ const Input = {
             jump = pad.buttons[0]?.pressed || pad.buttons[6]?.pressed;  // A or LT
             dash = pad.buttons[5]?.pressed || pad.buttons[1]?.pressed;  // RB or B
             confirm = pad.buttons[0]?.pressed || pad.buttons[9]?.pressed; // A or Start
+            confirmA = pad.buttons[0]?.pressed; // A only
+            startBtn = pad.buttons[9]?.pressed; // Start only
         }
 
         // PC Keyboard Fallback
@@ -195,8 +206,13 @@ const Input = {
         if (this.keys['KeyK'] || this.keys['KeyW'] || this.keys['ArrowUp']) jump = true;
         if (this.keys['ShiftLeft'] || this.keys['KeyL']) dash = true;
         if (this.keys['Enter'] || this.keys['Space']) confirm = true;
+        if (this.keys['KeyJ'] || this.keys['Space']) confirmA = true;
+        if (this.keys['Enter']) startBtn = true;
 
-        return { vx, vy, aimX, aimY, has360Aim, shoot, jump, dash, confirm };
+        const start = startBtn && !this.prevStart;
+        this.prevStart = startBtn;
+
+        return { vx, vy, aimX, aimY, has360Aim, shoot, jump, dash, confirm, confirmA, start };
     }
 };
 
@@ -957,7 +973,7 @@ function update() {
                 shopDebounce = 12;
             }
 
-            if (input.confirm) {
+            if (input.confirmA) {
                 const selected = wepList[shopIndex];
                 if (selected.unlocked) {
                     player.weapon = selected;
@@ -973,12 +989,13 @@ function update() {
         }
 
         // Start Next Stage
-        if (this.keys && this.keys['Enter']) {
+        if (input.start) {
             currentLevel++;
             player.reset(150, 400);
             player.hp = Math.min(player.maxHp, player.hp + 40); // Stage heal
             generateLevel(currentLevel);
             gameState = STATES.PLAYING;
+            playSound('upgrade');
         }
         return;
     }
