@@ -15,23 +15,21 @@
     <script>
         const canvas = document.getElementById('gameCanvas');
         canvas.tabIndex = 0;
-        // Xbox Edge (console browser) only exposes the Gamepad API to the currently
-        // focused document, and gains focus can be lost when loaded inside the hub's
-        // iframe -- pull focus onto this game whenever we get a chance to.
+        
+        // Xbox Edge focus fix
         function ensureGameFocus() { window.focus(); canvas.focus({ preventScroll: true }); }
         ensureGameFocus();
         window.addEventListener('load', ensureGameFocus);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureGameFocus(); });
         window.addEventListener('gamepadconnected', ensureGameFocus);
+        
         const ctx = canvas.getContext('2d');
 
         let dpr = window.devicePixelRatio || 1;
         let logicalWidth = window.innerWidth;
         let logicalHeight = window.innerHeight;
         
-        let roadW = 0;
-        let roadL = 0;
-        let roadR = 0;
+        let roadW = 0, roadL = 0, roadR = 0;
         let sceneryTrees = [];
         let currentSealBottom = 0;
 
@@ -76,9 +74,6 @@
             }
         }
 
-        // ============================================================
-        // AUDIO SYSTEM
-        // ============================================================
         let audioCtx;
         let bgmInterval;
 
@@ -125,18 +120,18 @@
                 gain.gain.setValueAtTime(0.1, now);
                 gain.gain.linearRampToValueAtTime(0, now + 0.3);
                 osc.start(now); osc.stop(now + 0.3);
-            } else if (type === 'gate_fire') {
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(80, now);
-                osc.frequency.exponentialRampToValueAtTime(20, now + 0.6);
-                gain.gain.setValueAtTime(0.2, now);
-                gain.gain.linearRampToValueAtTime(0, now + 0.6);
-                osc.start(now); osc.stop(now + 0.6);
             } else if (type === 'hit') {
                 osc.type = 'sawtooth';
                 osc.frequency.setValueAtTime(150, now);
                 osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
                 gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'block') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(200, now + 0.1);
+                gain.gain.setValueAtTime(0.3, now);
                 gain.gain.linearRampToValueAtTime(0, now + 0.1);
                 osc.start(now); osc.stop(now + 0.1);
             }
@@ -163,11 +158,48 @@
             }, 300);
         }
 
-        // ============================================================
-        // GAME STATE
-        // ============================================================
+        let llmText = "";
+        let isFetchingLLM = false;
+
+        async function callGemini(prompt) {
+            const apiKey = ""; // API Key handled automatically by Canvas
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }]
+            };
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                return result.candidates?.[0]?.content?.parts?.[0]?.text || "The ancient texts are silent.";
+            } catch (e) {
+                console.error("Chronicler Error:", e);
+                return "The ancient texts are silent. (Link Severed)";
+            }
+        }
+
+        async function fetchLevelLore(level) {
+            isFetchingLLM = true;
+            llmText = "Consulting the Ancient Tomes...";
+            const prompt = `You are the Chronicler of the Dragon Gate Siege. The brave knights are about to attack Gate Level ${level}. Generate a dark, epic 1-sentence prophecy or title for this gate. Keep it under 15 words. Example: "The Obsidian Maw awaits, breathing shadows and ash."`;
+            let response = await callGemini(prompt);
+            llmText = response.replace(/^["']|["']$/g, ''); // Clean quotes
+            isFetchingLLM = false;
+        }
+
+        async function fetchGameOverDebrief(score, level) {
+            isFetchingLLM = true;
+            llmText = "The Chronicler is recording your fate...";
+            const prompt = `You are the Chronicler of the Dragon Gate Siege. The knights died at Level ${level} with a score of ${score}. Write a short, dramatic 2-sentence eulogy honoring their sacrifice or mocking their failure. Keep it under 30 words total.`;
+            llmText = await callGemini(prompt);
+            isFetchingLLM = false;
+        }
+
         let gameState = 'MENU';
-        let continueLocked = false; // require the select button to be released before it can advance past LEVEL_CLEAR/GAME_OVER
+        let continueLocked = false;
         let mode = null; 
         let menuIndex = 0;
         let menuAxisReady = true;
@@ -177,12 +209,9 @@
 
         const MENU_OPTIONS = [
             { id: '1p', title: 'SOLO CRUSADE', color: '#00aaff', subtitle: 'Storm the dragon gates alone.', hint: '1 Player' },
-            { id: '2p', title: 'CO-OP SIEGE', color: '#ffaa00', subtitle: 'Two knights, one objective: Break the door.', hint: '2 Players (Controllers recommended)' }
+            { id: '2p', title: 'CO-OP SIEGE', color: '#ffaa00', subtitle: 'Two knights, one objective: Break the door.', hint: '2 Players' }
         ];
 
-        // ============================================================
-        // ENTITIES & TUNING
-        // ============================================================
         const PLAYER_SPEED = 4.5;
         const FIRE_SPEED = 6;
         const BOLT_SPEED = 15;
@@ -218,7 +247,7 @@
             door.x = roadL + 20;
             door.h = 80;
             door.y = 20;
-            door.maxHp = 150 + (level * 50); // Low health, easily shattered once exposed
+            door.maxHp = 150 + (level * 50);
             door.hp = door.maxHp;
             door.attackTimer = 150; 
 
@@ -229,8 +258,7 @@
             dragonSlots = [];
             spawnTimer = 60; 
 
-            // Setup Dragon Grid
-            let rows = 2 + Math.min(3, Math.ceil(level / 2)); // 3 rows at Lv1, 4 at Lv3, etc.
+            let rows = 2 + Math.min(3, Math.ceil(level / 2));
             let cols = Math.max(3, Math.floor(door.w / 60));
             let slotW = door.w / cols;
 
@@ -258,36 +286,33 @@
                     p.x = logicalWidth / 2 + (p.id === 1 ? -20 : 20);
                     p.y = logicalHeight - 100;
                     p.hp = p.maxHp; 
+                    p.blockStamina = 100;
                 });
             }
 
-            gameState = 'PLAYING';
+            gameState = 'LEVEL_INTRO';
+            continueLocked = true;
+            fetchLevelLore(level);
         }
 
         function createPlayer(id, color, startX, startY) {
             return {
                 id: id, color: color, x: startX, y: startY, radius: 15,
                 hp: 500, maxHp: 500, cooldowns: { sword: 0, spear: 0, crossbow: 0 },
-                buttons: {} 
+                isBlocking: false, blockStamina: 100, buttons: {} 
             };
         }
 
         function createDragon(x, y) {
             let roll = Math.random();
             let type = 'whelp';
-            
             if (level >= 2 && roll > 0.85 - (level * 0.05)) type = 'drake';
             if (level >= 3 && roll > 0.95 - (level * 0.05)) type = 'armored';
 
             let hp, radius, fireRate, color, secColor;
-            
-            if (type === 'whelp') { 
-                hp = 80; radius = 22; fireRate = 220; color = '#8e0000'; secColor = '#ff4400';
-            } else if (type === 'drake') { 
-                hp = 60; radius = 18; fireRate = 180; color = '#005500'; secColor = '#00ff00';
-            } else { 
-                hp = 160; radius = 28; fireRate = 260; color = '#333'; secColor = '#ff8800';
-            }
+            if (type === 'whelp') { hp = 80; radius = 22; fireRate = 220; color = '#8e0000'; secColor = '#ff4400'; } 
+            else if (type === 'drake') { hp = 60; radius = 18; fireRate = 180; color = '#005500'; secColor = '#00ff00'; } 
+            else { hp = 160; radius = 28; fireRate = 260; color = '#333'; secColor = '#ff8800'; }
             
             hp += (level * 10); 
             return {
@@ -305,9 +330,6 @@
             }
         }
 
-        // ============================================================
-        // INPUT HANDLING
-        // ============================================================
         const keys = {};
         window.addEventListener('keydown', e => keys[e.code] = true);
         window.addEventListener('keyup', e => keys[e.code] = false);
@@ -361,8 +383,9 @@
                 let pad = pads[idx];
                 
                 let vx = 0, vy = 0;
-                let atkSword = false, atkSpear = false, atkCrossbow = false;
+                let atkSword = false, atkSpear = false, atkCrossbow = false, doBlock = false;
 
+                // Keyboard Fallback
                 if (idx === 0 && !pad) {
                     if (keys['ArrowLeft'] || keys['KeyA']) vx = -1;
                     if (keys['ArrowRight'] || keys['KeyD']) vx = 1;
@@ -371,20 +394,34 @@
                     if (keys['KeyJ']) atkSword = true;
                     if (keys['KeyK']) atkSpear = true;
                     if (keys['KeyL'] || keys['Space']) atkCrossbow = true;
+                    if (keys['ShiftLeft'] || keys['ShiftRight'] || keys['KeyI']) doBlock = true;
                 }
 
+                // Gamepad Mapping
                 if (pad) {
                     if (Math.abs(pad.axes[0]) > 0.2) vx = pad.axes[0];
                     if (Math.abs(pad.axes[1]) > 0.2) vy = pad.axes[1];
-                    if (pad.buttons[2].pressed) atkSword = true;
-                    if (pad.buttons[3].pressed) atkSpear = true;
-                    if (pad.buttons[5].pressed) atkCrossbow = true;
+                    if (pad.buttons[2].pressed) atkSword = true; // X
+                    if (pad.buttons[3].pressed) atkSpear = true; // Y
+                    if (pad.buttons[5]?.pressed || pad.buttons[7]?.pressed) atkCrossbow = true; // RB or RT
+                    if (pad.buttons[4]?.pressed || pad.buttons[6]?.pressed) doBlock = true; // LB or LT
+                }
+
+                // Shield Block Logic
+                if (doBlock && p.blockStamina > 0) {
+                    p.isBlocking = true;
+                    p.blockStamina -= 0.8;
+                    vx *= 0.35; // Slow movement while shielding
+                    vy *= 0.35;
+                } else {
+                    p.isBlocking = false;
+                    p.blockStamina = Math.min(100, p.blockStamina + 0.3);
                 }
 
                 p.x += vx * PLAYER_SPEED;
                 p.y += vy * PLAYER_SPEED;
 
-                // Bounds constrained to the ROAD and the SEAL
+                // Restrict bounds to road and seal line
                 p.x = Math.max(roadL + p.radius, Math.min(roadR - p.radius, p.x));
                 p.y = Math.max(currentSealBottom + p.radius + 10, Math.min(logicalHeight - p.radius, p.y)); 
 
@@ -392,7 +429,8 @@
                 if (p.cooldowns.spear > 0) p.cooldowns.spear--;
                 if (p.cooldowns.crossbow > 0) p.cooldowns.crossbow--;
 
-                if (atkSword && p.cooldowns.sword <= 0) {
+                // Attacks (Sword/Spear locked while blocking, Crossbow permitted!)
+                if (atkSword && p.cooldowns.sword <= 0 && !p.isBlocking) {
                     p.cooldowns.sword = CD_SWORD;
                     playSound('sword');
                     activeMeleeHitboxes.push({ 
@@ -400,7 +438,7 @@
                         damage: DMG_SWORD, life: 8, color: '#ffffff', owner: p 
                     });
                 }
-                if (atkSpear && p.cooldowns.spear <= 0) {
+                if (atkSpear && p.cooldowns.spear <= 0 && !p.isBlocking) {
                     p.cooldowns.spear = CD_SPEAR;
                     playSound('spear');
                     activeMeleeHitboxes.push({ 
@@ -413,15 +451,13 @@
                     playSound('crossbow');
                     projectiles.push({
                         x: p.x, y: p.y - 15, vx: 0, vy: -BOLT_SPEED,
-                        damage: DMG_CROSSBOW, isFire: false, size: 4
+                        damage: DMG_CROSSBOW, isFire: false, size: 4,
+                        pierceCount: 2, hitTargets: [] // Penetration logic!
                     });
                 }
             });
         }
 
-        // ============================================================
-        // GAME LOGIC UPDATES
-        // ============================================================
         function getNearestPlayer(dx, dy) {
             let nearest = null;
             let minDist = Infinity;
@@ -435,7 +471,6 @@
         }
 
         function updateLogic() {
-            // Calculate Current Seal Bottom before player input
             if (dragons.length > 0) {
                 currentSealBottom = Math.max(...dragons.map(d => d.y + d.radius)) + 15;
             } else {
@@ -445,38 +480,27 @@
             handlePlayerInput();
 
             if (players.every(p => p.hp <= 0)) {
-                gameState = 'GAME_OVER';
-                continueLocked = true;
+                if (gameState !== 'GAME_OVER') {
+                    gameState = 'GAME_OVER';
+                    continueLocked = true;
+                    fetchGameOverDebrief(score, level);
+                }
                 return;
             }
 
-            // GATE ATTACKS
             door.attackTimer--;
             if (door.attackTimer <= 0) {
-                playSound('gate_fire');
+                playSound('fire');
                 door.attackTimer = 180 - Math.min(60, level * 10);
                 
-                projectiles.push({ 
-                    x: door.x + door.w/2, 
-                    y: door.y + door.h, 
-                    vx: 0, 
-                    vy: FIRE_SPEED * 1.5, 
-                    damage: 25 + level*5, 
-                    isFire: true, 
-                    size: 30 
-                });
-                
+                projectiles.push({ x: door.x + door.w/2, y: door.y + door.h, vx: 0, vy: FIRE_SPEED * 1.5, damage: 25 + level*5, isFire: true, size: 30 });
                 projectiles.push({ x: door.x + 20, y: door.y + door.h, vx: -2, vy: FIRE_SPEED, damage: 15, isFire: true, size: 12 });
                 projectiles.push({ x: door.x + door.w - 20, y: door.y + door.h, vx: 2, vy: FIRE_SPEED, damage: 15, isFire: true, size: 12 });
-                
                 shakeTime = 8;
             }
 
-            // Dragon Spawning within the Seal
             let maxDragons = 4 + (level * 2); 
             spawnTimer--;
-            
-            // Only spawn in slots that are at or above the current seal line
             let eligibleSlots = dragonSlots.filter(s => !s.dragon && s.y <= currentSealBottom + 10);
 
             if (spawnTimer <= 0 && eligibleSlots.length > 0 && dragons.length < maxDragons) {
@@ -488,7 +512,6 @@
                 spawnTimer = Math.max(80, 180 - (level * 15)); 
             }
 
-            // Dragon Logic
             for (let i = dragons.length - 1; i >= 0; i--) {
                 let d = dragons[i];
                 if (d.hp <= 0) {
@@ -496,7 +519,6 @@
                     playSound('hit');
                     score += (d.type === 'armored' ? 300 : (d.type === 'drake' ? 200 : 100));
                     
-                    // Clear from slot
                     let slot = dragonSlots.find(s => s.dragon === d);
                     if (slot) slot.dragon = null;
 
@@ -523,12 +545,25 @@
                 }
             }
 
-            // Projectile Logic
+            // Projectile Physics (Fire, Crossbow, Shields, and Penetration)
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 let pr = projectiles[i];
+                let removed = false;
+
+                if (pr.isFire) {
+                    // Procedural Fire FX Wobble
+                    pr.wobble = (pr.wobble || 0) + 0.5;
+                    pr.x += Math.sin(pr.wobble) * 2;
+                    if (Math.random() < 0.6) {
+                        particles.push({
+                            x: pr.x + (Math.random()-0.5) * pr.size, y: pr.y + (Math.random()-0.5) * pr.size,
+                            vx: 0, vy: -2, life: 15, color: '#ff4400', size: Math.random() * 4 + 2
+                        });
+                    }
+                }
+                
                 pr.x += pr.vx;
                 pr.y += pr.vy;
-                let removed = false;
 
                 if (pr.y < 0 || pr.y > logicalHeight || pr.x < roadL || pr.x > roadR) {
                     projectiles.splice(i, 1);
@@ -538,31 +573,51 @@
                 if (pr.isFire) {
                     players.forEach(p => {
                         if (p.hp > 0 && Math.hypot(p.x - pr.x, p.y - pr.y) < p.radius + pr.size) {
-                            p.hp -= pr.damage;
-                            playSound('hit');
-                            createExplosion(p.x, p.y, '#ff8800', 0.8);
+                            let dmg = pr.damage;
+                            if (p.isBlocking && pr.vy > 0) {
+                                dmg *= 0.15; // Shield mitigates 85% damage!
+                                playSound('block');
+                                createExplosion(p.x, p.y - p.radius, '#00ffff', 0.5);
+                            } else {
+                                playSound('hit');
+                                createExplosion(p.x, p.y, '#ff8800', 0.8);
+                                shakeTime = 5;
+                            }
+                            p.hp -= dmg;
                             removed = true;
-                            shakeTime = 5;
                         }
                     });
                 } else {
-                    // Check against dragons first
-                    dragons.forEach(d => {
-                        if (!removed && Math.hypot(d.x - pr.x, d.y - pr.y) < d.radius + pr.size) {
-                            d.hp -= pr.damage;
-                            playSound('hit');
-                            createExplosion(pr.x, pr.y, '#ffcc00', 0.5);
+                    let hitSomething = false;
+                    for (let d of dragons) {
+                        if (Math.hypot(d.x - pr.x, d.y - pr.y) < d.radius + pr.size) {
+                            if (!pr.hitTargets.includes(d)) {
+                                pr.hitTargets.push(d);
+                                d.hp -= pr.damage;
+                                playSound('hit');
+                                createExplosion(pr.x, pr.y, '#ffcc00', 0.5);
+                                hitSomething = true;
+                                if (pr.pierceCount !== undefined) {
+                                    pr.pierceCount--;
+                                    if (pr.pierceCount <= 0) removed = true;
+                                } else {
+                                    removed = true;
+                                }
+                                break; 
+                            }
+                        }
+                    }
+                    
+                    if (!hitSomething && dragons.length > 0 && pr.y < currentSealBottom) {
+                        if (pr.pierceCount !== undefined) {
+                            // Pierce directly through the seal!
+                            if (Math.random() < 0.1) createExplosion(pr.x, currentSealBottom, '#00ffff', 0.1);
+                        } else {
+                            createExplosion(pr.x, currentSealBottom, '#00ffff', 0.5);
                             removed = true;
                         }
-                    });
-                    
-                    // If it bypassed dragons and hit the seal line
-                    if (!removed && dragons.length > 0 && pr.y < currentSealBottom) {
-                        createExplosion(pr.x, currentSealBottom, '#00ffff', 0.5);
-                        removed = true;
                     } 
-                    // If seal is down and it hit the door
-                    else if (!removed && dragons.length === 0 && pr.x > door.x && pr.x < door.x + door.w && pr.y > door.y && pr.y < door.y + door.h) {
+                    else if (!hitSomething && dragons.length === 0 && pr.x > door.x && pr.x < door.x + door.w && pr.y > door.y && pr.y < door.y + door.h) {
                         door.hp -= pr.damage;
                         playSound('hit');
                         createExplosion(pr.x, pr.y, '#aaaaaa', 0.5);
@@ -573,7 +628,6 @@
                 if (removed) projectiles.splice(i, 1);
             }
 
-            // Melee Hitbox Logic
             for (let i = activeMeleeHitboxes.length - 1; i >= 0; i--) {
                 let hb = activeMeleeHitboxes[i];
                 hb.life--;
@@ -593,16 +647,14 @@
                     }
                 });
 
-                // Hit Seal
                 if (!hitDragon && dragons.length > 0 && hb.y < currentSealBottom) {
                     createExplosion(hb.x + hb.w/2, currentSealBottom, '#00ffff', 0.2);
-                    if (hb.owner) hb.owner.y += 3.5; // Melee Recoil
+                    if (hb.owner) hb.owner.y += 3.5; 
                 } 
-                // Hit Gate
                 else if (dragons.length === 0 && hb.y < door.y + door.h && hb.x + hb.w > door.x && hb.x < door.x + door.w) {
                     door.hp -= hb.damage / 5; 
                     createExplosion(hb.x + hb.w/2, door.y + door.h, '#aaaaaa', 0.2);
-                    if (hb.owner) hb.owner.y += 3.5; // Melee Recoil
+                    if (hb.owner) hb.owner.y += 3.5; 
                 }
 
                 if (hb.life <= 0) activeMeleeHitboxes.splice(i, 1);
@@ -622,24 +674,42 @@
             }
         }
 
-        // ============================================================
-        // DRAWING
-        // ============================================================
         function drawTextCentered(text, yOffset, size, color) {
             ctx.fillStyle = color; ctx.font = `bold ${size}px Georgia`;
             ctx.textAlign = 'center'; ctx.fillText(text, logicalWidth / 2, logicalHeight / 2 + yOffset);
             ctx.textAlign = 'left';
         }
 
+        function drawTextWrappedCentered(text, yOffset, size, color, maxWidth) {
+            ctx.fillStyle = color; ctx.font = `italic ${size}px Georgia`;
+            ctx.textAlign = 'center';
+            let words = text.split(' ');
+            let line = '';
+            let currentY = logicalHeight / 2 + yOffset;
+            let lineHeight = size * 1.4;
+
+            for(let n = 0; n < words.length; n++) {
+                let testLine = line + words[n] + ' ';
+                let metrics = ctx.measureText(testLine);
+                if (metrics.width > maxWidth && n > 0) {
+                    ctx.fillText(line, logicalWidth / 2, currentY);
+                    line = words[n] + ' ';
+                    currentY += lineHeight;
+                } else {
+                    line = testLine;
+                }
+            }
+            ctx.fillText(line, logicalWidth / 2, currentY);
+            ctx.textAlign = 'left';
+        }
+
         function drawGame() {
             ctx.clearRect(0, 0, logicalWidth, logicalHeight);
 
-            // Draw Grass Sides
             ctx.fillStyle = '#1b3a1a';
             ctx.fillRect(0, 0, roadL, logicalHeight);
             ctx.fillRect(roadR, 0, logicalWidth - roadR, logicalHeight);
 
-            // Draw Scenery Trees
             sceneryTrees.forEach(t => {
                 ctx.fillStyle = t.color;
                 ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, Math.PI*2); ctx.fill();
@@ -647,7 +717,6 @@
                 ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, Math.PI, true); ctx.fill();
             });
 
-            // Draw Road
             ctx.fillStyle = '#2c2c30';
             ctx.fillRect(roadL, 0, roadW, logicalHeight);
             ctx.fillStyle = '#1e1e22';
@@ -662,7 +731,6 @@
                 shakeTime--;
             }
 
-            // Draw Dynamic Dragon Seal
             if (dragons.length > 0) {
                 ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
                 ctx.fillRect(door.x, door.y + door.h, door.w, currentSealBottom - (door.y + door.h));
@@ -675,7 +743,6 @@
                 ctx.stroke();
             }
 
-            // Draw Door
             ctx.fillStyle = '#37474f';
             ctx.fillRect(door.x, door.y, door.w, door.h);
             ctx.fillStyle = '#111';
@@ -683,7 +750,6 @@
                 ctx.fillRect(door.x + i, door.y, 4, door.h);
             }
             
-            // Draw Door Warning
             if (door.attackTimer < 40) {
                 ctx.fillStyle = `rgba(255, 100, 0, ${1 - (door.attackTimer/40)})`;
                 ctx.fillRect(door.x + door.w/2 - 20, door.y + door.h - 10, 40, 10);
@@ -694,7 +760,6 @@
             ctx.fillStyle = dragons.length > 0 ? '#555555' : '#ffaa00'; 
             ctx.fillRect(door.x, door.y - 10, door.w * doorHpPct, 6);
 
-            // Draw Dragons
             dragons.forEach(d => {
                 ctx.fillStyle = d.color;
                 ctx.beginPath(); ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2); ctx.fill();
@@ -710,7 +775,6 @@
                 ctx.fillStyle = '#00ff00'; ctx.fillRect(d.x - 20, d.y - d.radius - 10, 40 * hpPct, 4);
             });
 
-            // Draw Players
             players.forEach(p => {
                 if (p.hp <= 0) return;
                 ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -720,12 +784,20 @@
                 ctx.fillStyle = p.color; ctx.fillRect(p.x - 8, p.y - 8, 16, 16);
                 ctx.fillStyle = '#111'; ctx.fillRect(p.x - 10, p.y - 12, 20, 6);
 
+                if (p.isBlocking) {
+                    ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 4;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.radius + 12, Math.PI, 0); ctx.stroke();
+                }
+
                 let hpPct = Math.max(0, p.hp / p.maxHp);
                 ctx.fillStyle = 'red'; ctx.fillRect(p.x - 15, p.y + p.radius + 5, 30, 4);
                 ctx.fillStyle = '#00ff88'; ctx.fillRect(p.x - 15, p.y + p.radius + 5, 30 * hpPct, 4);
+
+                let blockPct = Math.max(0, p.blockStamina / 100);
+                ctx.fillStyle = '#0033cc'; ctx.fillRect(p.x - 15, p.y + p.radius + 11, 30, 4);
+                ctx.fillStyle = '#00aaff'; ctx.fillRect(p.x - 15, p.y + p.radius + 11, 30 * blockPct, 4);
             });
 
-            // Draw Hitboxes
             activeMeleeHitboxes.forEach(hb => {
                 ctx.fillStyle = hb.color; ctx.globalAlpha = hb.life / 10;
                 if (hb.w > hb.h) {
@@ -736,20 +808,20 @@
                 ctx.globalAlpha = 1.0;
             });
 
-            // Draw Projectiles
             projectiles.forEach(pr => {
-                ctx.fillStyle = pr.isFire ? '#ff6600' : '#eceff1';
-                ctx.beginPath(); ctx.arc(pr.x, pr.y, pr.size, 0, Math.PI * 2); ctx.fill();
                 if (pr.isFire) {
-                    ctx.fillStyle = '#ffff00';
-                    ctx.beginPath(); ctx.arc(pr.x, pr.y, pr.size/2, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#ff3300';
+                    ctx.beginPath(); ctx.arc(pr.x, pr.y, pr.size, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#ffaa00';
+                    ctx.beginPath(); ctx.arc(pr.x, pr.y + 2, pr.size * 0.7, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath(); ctx.arc(pr.x, pr.y + 4, pr.size * 0.3, 0, Math.PI * 2); ctx.fill();
                 } else {
-                    ctx.strokeStyle = '#aaaaaa'; ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x, pr.y + 15); ctx.stroke();
+                    ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x, pr.y + 18); ctx.stroke();
                 }
             });
 
-            // Draw Particles
             particles.forEach(pt => {
                 ctx.fillStyle = pt.color; ctx.globalAlpha = pt.life / 15;
                 ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2); ctx.fill();
@@ -758,7 +830,6 @@
 
             ctx.restore();
 
-            // HUD
             ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, logicalWidth, 40);
             ctx.fillStyle = 'white'; ctx.font = 'bold 20px Georgia';
             ctx.fillText(`Level: ${level}   Score: ${score}`, 20, 26);
@@ -772,12 +843,11 @@
             }
             
             ctx.font = '14px Georgia'; ctx.fillStyle = '#aaaaaa';
-            ctx.fillText(`P1: Move (WASD) | Sword (J) | Spear (K) | Crossbow (L)`, 20, logicalHeight - 20);
+            ctx.fillText(`Sword (J/X) | Spear (K/Y) | Crossbow (L/RT) | Block (Shift/LT)`, 20, logicalHeight - 20);
         }
 
         function drawMenu() {
             ctx.clearRect(0, 0, logicalWidth, logicalHeight);
-            
             ctx.fillStyle = '#111'; ctx.fillRect(0,0,logicalWidth,logicalHeight);
             ctx.fillStyle = '#2c2c30'; ctx.fillRect(roadL, 0, roadW, logicalHeight);
             
@@ -804,13 +874,24 @@
             ctx.textAlign = 'left';
         }
 
-        // ============================================================
-        // MAIN LOOP
-        // ============================================================
         function gameLoop() {
             if (gameState === 'MENU') {
                 handleMenuInput();
                 drawMenu();
+            } else if (gameState === 'LEVEL_INTRO') {
+                drawGame();
+                ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0,0,logicalWidth,logicalHeight);
+                drawTextCentered(`GATE LEVEL ${level}`, -60, 50, '#ffaa00');
+                drawTextWrappedCentered(llmText, 0, 26, '#00ffff', logicalWidth - 100);
+                drawTextCentered(isFetchingLLM ? 'Waiting for Prophecy...' : 'Press Space/Enter/A to Siege', 100, 20, '#aaaaaa');
+
+                let pads = getGamepads();
+                let selectPressed = keys['Space'] || keys['Enter'] || (pads[0] && pads[0].buttons[0].pressed);
+                if (continueLocked) {
+                    if (!selectPressed) continueLocked = false;
+                } else if (selectPressed && !isFetchingLLM) {
+                    gameState = 'PLAYING';
+                }
             } else if (gameState === 'PLAYING') {
                 updateLogic();
                 drawGame();
@@ -830,16 +911,17 @@
                 }
             } else if (gameState === 'GAME_OVER') {
                 drawGame();
-                ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,logicalWidth,logicalHeight);
-                drawTextCentered('THE KNIGHTS HAVE FALLEN', -20, 50, '#ff4444');
-                drawTextCentered(`Final Score: ${score}`, 30, 24, 'white');
-                drawTextCentered('Press Space/Enter/A for Main Menu', 80, 20, '#aaaaaa');
+                ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0,0,logicalWidth,logicalHeight);
+                drawTextCentered('THE KNIGHTS HAVE FALLEN', -120, 50, '#ff4444');
+                drawTextCentered(`Final Score: ${score}`, -60, 24, 'white');
+                drawTextWrappedCentered(llmText, -10, 22, '#ffaa00', logicalWidth - 100);
+                drawTextCentered(isFetchingLLM ? 'Recording your fate...' : 'Press Space/Enter/A for Main Menu', 120, 20, '#aaaaaa');
 
                 let pads = getGamepads();
                 let selectPressed = keys['Space'] || keys['Enter'] || (pads[0] && pads[0].buttons[0].pressed);
                 if (continueLocked) {
                     if (!selectPressed) continueLocked = false;
-                } else if (selectPressed) {
+                } else if (selectPressed && !isFetchingLLM) {
                     gameState = 'MENU';
                 }
             }
@@ -849,7 +931,6 @@
 
         applyCanvasSize();
         requestAnimationFrame(gameLoop);
-
         window.addEventListener('resize', applyCanvasSize);
     </script>
 </body>
