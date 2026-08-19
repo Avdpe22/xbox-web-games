@@ -14,21 +14,20 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            font-family: 'Impact', 'Segoe UI', sans-serif;
+            font-family: 'Impact', sans-serif;
         }
         #gameCanvas {
             background: radial-gradient(circle at center, #023818 0%, #01160a 100%);
             max-width: 100vw;
             max-height: 100vh;
             aspect-ratio: 16 / 9;
-            box-shadow: 0 0 50px rgba(0, 255, 100, 0.25);
-            outline: none;
+            box-shadow: 0 0 50px rgba(0, 255, 100, 0.2);
         }
     </style>
 </head>
 <body>
 
-<canvas id="gameCanvas" width="1920" height="1080" tabindex="0"></canvas>
+<canvas id="gameCanvas" width="1920" height="1080"></canvas>
 
 <script>
 /**
@@ -37,18 +36,17 @@
  */
 
 const canvas = document.getElementById('gameCanvas');
-
-function ensureGameFocus() {
-    window.focus();
-    if (canvas) canvas.focus({ preventScroll: true });
-}
+// Xbox Edge (console browser) only exposes the Gamepad API to the currently
+// focused document, and gains focus can be lost when loaded inside the hub's
+// iframe -- pull focus onto this game whenever we get a chance to.
+function ensureGameFocus() { window.focus(); canvas.focus({ preventScroll: true }); }
 ensureGameFocus();
 window.addEventListener('load', ensureGameFocus);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureGameFocus(); });
 window.addEventListener('gamepadconnected', ensureGameFocus);
-
 const ctx = canvas.getContext('2d');
 
+// --- AUDIO ENGINE ---
 let audioCtx = null;
 function initAudio() {
     if (audioCtx) return;
@@ -72,46 +70,32 @@ function playSound(type) {
         osc.start(now); osc.stop(now + 0.3);
     } else if (type === 'pass') {
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(450, now);
-        osc.frequency.exponentialRampToValueAtTime(110, now + 0.15);
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.15);
         gain.gain.setValueAtTime(0.3, now);
         gain.gain.linearRampToValueAtTime(0, now + 0.15);
         osc.start(now); osc.stop(now + 0.15);
     } else if (type === 'tackle') {
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(160, now);
-        osc.frequency.exponentialRampToValueAtTime(35, now + 0.22);
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.2);
         gain.gain.setValueAtTime(0.4, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.22);
-        osc.start(now); osc.stop(now + 0.22);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now); osc.stop(now + 0.2);
     } else if (type === 'collect') {
         osc.type = 'square';
-        osc.frequency.setValueAtTime(650, now);
-        osc.frequency.linearRampToValueAtTime(850, now + 0.08);
-        gain.gain.setValueAtTime(0.12, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.08);
-        osc.start(now); osc.stop(now + 0.08);
-    } else if (type === 'levelup') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.linearRampToValueAtTime(600, now + 0.2);
-        osc.frequency.linearRampToValueAtTime(900, now + 0.4);
-        gain.gain.setValueAtTime(0.35, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.45);
-        osc.start(now); osc.stop(now + 0.45);
-    } else if (type === 'juke') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(220, now);
-        osc.frequency.exponentialRampToValueAtTime(550, now + 0.1);
-        gain.gain.setValueAtTime(0.25, now);
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.linearRampToValueAtTime(800, now + 0.1);
+        gain.gain.setValueAtTime(0.1, now);
         gain.gain.linearRampToValueAtTime(0, now + 0.1);
         osc.start(now); osc.stop(now + 0.1);
     }
 }
 
+// --- INPUT MANAGEMENT ---
 const Input = {
     pads: {},
-    keys: { left: false, right: false, up: false, down: false, pass: false, stiffArm: false, juke: false, sprint: false, aimX: 0, aimY: -1 },
+    keys: { left: false, right: false, up: false, down: false, pass: false, stiffArm: false, juke: false, sprint: false },
     poll() {
         const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
         for (let i = 0; i < gamepads.length; i++) {
@@ -120,11 +104,10 @@ const Input = {
     },
     getState() {
         const pad = this.pads[0];
-        let vx = 0, vy = 0, aimX = this.keys.aimX, aimY = this.keys.aimY;
+        let vx = 0, vy = 0, aimX = 0, aimY = -1;
         let pass = false, stiffArm = false, juke = false, sprint = false;
 
         if (pad) {
-            initAudio();
             if (Math.abs(pad.axes[0]) > 0.2) vx = pad.axes[0];
             if (Math.abs(pad.axes[1]) > 0.2) vy = pad.axes[1];
             if (pad.buttons[14]?.pressed) vx = -1;
@@ -156,10 +139,11 @@ const Input = {
     }
 };
 
+// --- MAZE DEFINITION ---
 const TILE_SIZE = 80;
 const MAZE_W = 24;
 const MAZE_H = 13;
-
+// 0=Wall, 1=Dot, 2=Empty, 3=Trophy
 const mazeLayout = [
     "000000000000000000000000",
     "031111111100001111111130",
@@ -188,7 +172,7 @@ function buildMaze() {
         let row = [];
         for (let x = 0; x < MAZE_W; x++) {
             let type = parseInt(mazeLayout[y][x]);
-            row.push(type === 0 ? 1 : 0);
+            row.push(type === 0 ? 1 : 0); // 1 = solid wall
             if (type === 1 || type === 3) {
                 collectibles.push({ x: x * TILE_SIZE + TILE_SIZE/2, y: y * TILE_SIZE + TILE_SIZE/2, type: type, active: true });
                 if (type === 1) totalDots++;
@@ -198,62 +182,55 @@ function buildMaze() {
     }
 }
 
-function checkTileCollision(px, py, radius) {
-    let tileX = Math.floor(px / TILE_SIZE);
-    let tileY = Math.floor(py / TILE_SIZE);
-    for (let ty = tileY - 1; ty <= tileY + 1; ty++) {
-        for (let tx = tileX - 1; tx <= tileX + 1; tx++) {
-            if (ty >= 0 && ty < MAZE_H && tx >= 0 && tx < MAZE_W && grid[ty][tx] === 1) {
-                let rx = tx * TILE_SIZE;
-                let ry = ty * TILE_SIZE;
-                let testX = Math.max(rx, Math.min(px, rx + TILE_SIZE));
-                let testY = Math.max(ry, Math.min(py, ry + TILE_SIZE));
-                let dist = Math.hypot(px - testX, py - testY);
-                if (dist < radius) return true;
-            }
-        }
-    }
-    return false;
-}
+// --- ENTITIES ---
 
+// Procedural Art Helper (Decoupled from Hitbox)
 function drawFootballPlayer(ctx, x, y, angle, colorMain, colorSec, number, state, walkCycle) {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);
 
+    // Leg movement (IK simulation)
     const legSwing = Math.sin(walkCycle) * 12;
     ctx.fillStyle = '#ffffff';
-    ctx.beginPath(); ctx.ellipse(-10, legSwing, 6, 12, 0, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(10, -legSwing, 6, 12, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-10, legSwing, 6, 12, 0, 0, Math.PI*2); ctx.fill(); // Left leg
+    ctx.beginPath(); ctx.ellipse(10, -legSwing, 6, 12, 0, 0, Math.PI*2); ctx.fill(); // Right leg
 
+    // Shoulder Pads
     ctx.fillStyle = colorSec;
     ctx.beginPath(); ctx.ellipse(0, 0, 24, 14, 0, 0, Math.PI*2); ctx.fill();
     
+    // Jersey
     ctx.fillStyle = colorMain;
     ctx.beginPath(); ctx.ellipse(0, 0, 18, 12, 0, 0, Math.PI*2); ctx.fill();
 
+    // Helmet
     ctx.fillStyle = colorMain;
     ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 4;
     ctx.beginPath(); ctx.arc(0, 4, 14, 0, Math.PI*2); ctx.fill();
     ctx.shadowBlur = 0;
 
+    // Center Stripe
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(-2, -10, 4, 28);
 
+    // Facemask
     ctx.strokeStyle = '#aaaaaa';
     ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(-10, 15); ctx.lineTo(10, 15); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(-6, 18); ctx.lineTo(6, 18); ctx.stroke();
 
+    // Arms
     if (state === 'stiffarm') {
         ctx.fillStyle = '#ffccaa';
-        ctx.beginPath(); ctx.ellipse(15, 15, 6, 18, -Math.PI/4, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(15, 15, 6, 18, -Math.PI/4, 0, Math.PI*2); ctx.fill(); // Extended arm
     } else {
         ctx.fillStyle = colorSec;
         ctx.beginPath(); ctx.ellipse(-20, 0, 6, 10, 0, 0, Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.ellipse(20, 0, 6, 10, 0, 0, Math.PI*2); ctx.fill();
     }
 
+    // Number
     ctx.translate(0, -6);
     ctx.rotate(-angle);
     ctx.fillStyle = '#ffffff';
@@ -269,13 +246,13 @@ class Player {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.radius = 16;
-        this.baseSpeed = 5.2;
+        this.radius = 16; // Logical collision radius
+        this.baseSpeed = 5;
+        this.speed = this.baseSpeed;
         this.angle = 0;
         this.aimAngle = 0;
         
         this.stamina = 100;
-        this.staminaDelay = 0;
         this.stiffArmTimer = 0;
         this.passCooldown = 0;
         this.jukeTimer = 0;
@@ -284,47 +261,31 @@ class Player {
         this.walkCycle = 0;
     }
 
-    reset(x, y) {
-        this.x = x;
-        this.y = y;
-        this.stamina = 100;
-        this.staminaDelay = 0;
-        this.stiffArmTimer = 0;
-        this.passCooldown = 0;
-        this.jukeTimer = 0;
-        this.jukeCooldown = 0;
-    }
-
     update(input) {
         if (this.stiffArmTimer > 0) this.stiffArmTimer--;
         if (this.passCooldown > 0) this.passCooldown--;
         if (this.jukeCooldown > 0) this.jukeCooldown--;
         if (this.jukeTimer > 0) this.jukeTimer--;
 
-        let curSpeed = this.baseSpeed;
+        let curSpeed = this.speed;
 
+        // Juke (Dash)
         if (input.juke && this.jukeCooldown <= 0 && this.stamina >= 20) {
             this.jukeTimer = 10;
             this.jukeCooldown = 60;
             this.stamina -= 20;
-            this.staminaDelay = 60;
-            playSound('juke');
-            createParticles(this.x, this.y, '#ffffff', 10);
+            createParticles(this.x, this.y, '#ffffff', 8);
         }
 
+        // Sprint
         if (input.sprint && this.stamina > 0 && this.jukeTimer <= 0) {
             curSpeed *= 1.6;
-            this.stamina = Math.max(0, this.stamina - 1.2);
-            this.staminaDelay = 75;
-        } else {
-            if (this.staminaDelay > 0) {
-                this.staminaDelay--;
-            } else if (this.stamina < 100) {
-                this.stamina = Math.min(100, this.stamina + 0.6);
-            }
+            this.stamina -= 1;
+        } else if (!input.sprint && this.stamina < 100) {
+            this.stamina += 0.5;
         }
 
-        if (this.jukeTimer > 0) curSpeed *= 2.4;
+        if (this.jukeTimer > 0) curSpeed *= 2.5;
 
         let dx = input.vx * curSpeed;
         let dy = input.vy * curSpeed;
@@ -334,98 +295,113 @@ class Player {
             this.walkCycle += curSpeed * 0.05;
         }
 
+        // Aiming
         if (Math.hypot(input.aimX, input.aimY) > 0.2) {
             this.aimAngle = Math.atan2(input.aimY, input.aimX);
         } else {
-            this.aimAngle = this.angle;
+            this.aimAngle = this.angle; // Default aim to facing
         }
 
-        this.moveWithCollision(dx, dy);
+        // AABB / Circle Collision with walls
+        this.moveWithCollision(dx, 0);
+        this.moveWithCollision(0, dy);
 
+        // Abilities
         if (input.stiffArm && this.stiffArmTimer <= 0 && this.stamina >= 15) {
-            this.stiffArmTimer = 25;
+            this.stiffArmTimer = 25; // Active frames
             this.stamina -= 15;
-            this.staminaDelay = 60;
             playSound('tackle');
-            
-            const reach = 42;
+            // Check hitbox collision immediately
+            const reach = 40;
             const hx = this.x + Math.cos(this.aimAngle) * reach;
             const hy = this.y + Math.sin(this.aimAngle) * reach;
             
             enemies.forEach(e => {
-                if (e.stunTimer <= 0 && Math.hypot(e.x - hx, e.y - hy) < e.radius + 28) {
-                    e.stunTimer = 130;
-                    
-                    let knockX = Math.cos(this.aimAngle) * 70;
-                    let knockY = Math.sin(this.aimAngle) * 70;
-                    e.moveWithCollision(knockX, knockY);
-                    
-                    createParticles(e.x, e.y, '#ffaa00', 16);
-                    screenShake = 12;
+                if (e.stunTimer <= 0 && Math.hypot(e.x - hx, e.y - hy) < e.radius + 25) {
+                    e.stunTimer = 120;
+                    e.x += Math.cos(this.aimAngle) * 60; // Recoil knockback
+                    e.y += Math.sin(this.aimAngle) * 60;
+                    createParticles(e.x, e.y, '#ffaa00', 15);
+                    screenShake = 10;
                 }
             });
         }
 
         if (input.pass && this.passCooldown <= 0) {
-            this.passCooldown = 40;
+            this.passCooldown = 45;
             playSound('pass');
-            projectiles.push(new Football(this.x, this.y, Math.cos(this.aimAngle) * 19, Math.sin(this.aimAngle) * 19));
+            projectiles.push(new Football(this.x, this.y, Math.cos(this.aimAngle) * 18, Math.sin(this.aimAngle) * 18));
         }
 
+        // Collectibles
         collectibles.forEach(c => {
             if (c.active && Math.hypot(this.x - c.x, this.y - c.y) < this.radius + 15) {
                 c.active = false;
                 playSound('collect');
                 if (c.type === 1) score += 10;
-                if (c.type === 3) { score += 100; this.stamina = 100; }
+                if (c.type === 3) { score += 50; this.stamina = 100; }
                 dotsCollected++;
-                if (dotsCollected >= totalDots) {
-                    advanceLevel();
-                }
+                if (dotsCollected >= totalDots) gameState = STATES.VICTORY;
             }
         });
     }
 
     moveWithCollision(dx, dy) {
-        if (dx !== 0) {
-            let nextX = this.x + dx;
-            if (!checkTileCollision(nextX, this.y, this.radius)) {
-                this.x = nextX;
+        let nextX = this.x + dx;
+        let nextY = this.y + dy;
+        
+        let tileX = Math.floor(nextX / TILE_SIZE);
+        let tileY = Math.floor(nextY / TILE_SIZE);
+
+        // Simplified collision: check surrounding tiles
+        let collision = false;
+        for (let ty = tileY - 1; ty <= tileY + 1; ty++) {
+            for (let tx = tileX - 1; tx <= tileX + 1; tx++) {
+                if (ty >= 0 && ty < MAZE_H && tx >= 0 && tx < MAZE_W && grid[ty][tx] === 1) {
+                    let rx = tx * TILE_SIZE;
+                    let ry = ty * TILE_SIZE;
+                    // AABB vs Circle
+                    let testX = Math.max(rx, Math.min(nextX, rx + TILE_SIZE));
+                    let testY = Math.max(ry, Math.min(nextY, ry + TILE_SIZE));
+                    let dist = Math.hypot(nextX - testX, nextY - testY);
+                    if (dist < this.radius) collision = true;
+                }
             }
         }
-        if (dy !== 0) {
-            let nextY = this.y + dy;
-            if (!checkTileCollision(this.x, nextY, this.radius)) {
-                this.y = nextY;
-            }
+        
+        if (!collision) {
+            this.x = nextX;
+            this.y = nextY;
         }
     }
 
     draw(ctx) {
+        // Reticle
         if (this.stiffArmTimer <= 0) {
-            ctx.fillStyle = 'rgba(0, 255, 100, 0.4)';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             ctx.beginPath();
-            ctx.arc(this.x + Math.cos(this.aimAngle) * 65, this.y + Math.sin(this.aimAngle) * 65, 7, 0, Math.PI*2);
+            ctx.arc(this.x + Math.cos(this.aimAngle) * 60, this.y + Math.sin(this.aimAngle) * 60, 6, 0, Math.PI*2);
             ctx.fill();
         }
 
         drawFootballPlayer(ctx, this.x, this.y, this.angle, '#0044ff', '#ffffff', '12', this.stiffArmTimer > 0 ? 'stiffarm' : 'run', this.walkCycle);
 
-        if (this.stiffArmTimer > 12) {
+        // Stiff Arm Hitbox visual tell
+        if (this.stiffArmTimer > 15) {
             ctx.fillStyle = 'rgba(255, 150, 0, 0.5)';
             ctx.beginPath();
-            ctx.arc(this.x + Math.cos(this.aimAngle) * 42, this.y + Math.sin(this.aimAngle) * 42, 28, 0, Math.PI*2);
+            ctx.arc(this.x + Math.cos(this.aimAngle) * 40, this.y + Math.sin(this.aimAngle) * 40, 25, 0, Math.PI*2);
             ctx.fill();
         }
     }
 }
 
 class Enemy {
-    constructor(x, y, number, baseSpeed = 3.5) {
+    constructor(x, y, number) {
         this.x = x;
         this.y = y;
         this.radius = 18;
-        this.speed = baseSpeed;
+        this.speed = 3.5;
         this.angle = 0;
         this.walkCycle = Math.random() * Math.PI;
         this.number = number;
@@ -438,6 +414,7 @@ class Enemy {
             return;
         }
 
+        // Simple Line of Sight / Direct Chase
         let dx = target.x - this.x;
         let dy = target.y - this.y;
         let dist = Math.hypot(dx, dy);
@@ -449,37 +426,51 @@ class Enemy {
             this.angle = Math.atan2(vy, vx);
             this.walkCycle += this.speed * 0.05;
 
-            this.moveWithCollision(vx, vy);
+            this.moveWithCollision(vx, 0);
+            this.moveWithCollision(0, vy);
         }
 
+        // Check player collision
         if (dist < this.radius + target.radius && target.jukeTimer <= 0) {
-            if (gameState !== STATES.GAMEOVER) {
-                fetchAICommentary(`The quarterback was brutally tackled for a loss on Drive #${level}, ending the game with ${score} points. Give a dramatic, disappointed announcer reaction.`);
-            }
             gameState = STATES.GAMEOVER;
             playSound('whistle');
-            screenShake = 22;
+            screenShake = 20;
         }
     }
 
     moveWithCollision(dx, dy) {
-        if (dx !== 0) {
-            let nextX = this.x + dx;
-            if (!checkTileCollision(nextX, this.y, this.radius)) {
-                this.x = nextX;
+        // Same as player
+        let nextX = this.x + dx;
+        let nextY = this.y + dy;
+        let tileX = Math.floor(nextX / TILE_SIZE);
+        let tileY = Math.floor(nextY / TILE_SIZE);
+        let collision = false;
+        for (let ty = tileY - 1; ty <= tileY + 1; ty++) {
+            for (let tx = tileX - 1; tx <= tileX + 1; tx++) {
+                if (ty >= 0 && ty < MAZE_H && tx >= 0 && tx < MAZE_W && grid[ty][tx] === 1) {
+                    let rx = tx * TILE_SIZE;
+                    let ry = ty * TILE_SIZE;
+                    let testX = Math.max(rx, Math.min(nextX, rx + TILE_SIZE));
+                    let testY = Math.max(ry, Math.min(nextY, ry + TILE_SIZE));
+                    let dist = Math.hypot(nextX - testX, nextY - testY);
+                    if (dist < this.radius) collision = true;
+                }
             }
         }
-        if (dy !== 0) {
-            let nextY = this.y + dy;
-            if (!checkTileCollision(this.x, nextY, this.radius)) {
-                this.y = nextY;
-            }
+        
+        if (!collision) {
+            this.x = nextX;
+            this.y = nextY;
+        } else {
+            // Slide along walls
+            this.x += (Math.random() - 0.5) * 2;
+            this.y += (Math.random() - 0.5) * 2;
         }
     }
 
     draw(ctx) {
         if (this.stunTimer > 0) {
-            ctx.globalAlpha = 0.5 + Math.sin(Date.now() * 0.03) * 0.3;
+            ctx.globalAlpha = 0.5 + Math.sin(Date.now() * 0.02) * 0.3;
         }
         drawFootballPlayer(ctx, this.x, this.y, this.angle, '#aa0000', '#222222', this.number, 'run', this.walkCycle);
         ctx.globalAlpha = 1.0;
@@ -487,8 +478,7 @@ class Enemy {
         if (this.stunTimer > 0) {
             ctx.fillStyle = '#ffff00';
             ctx.font = 'bold 20px Impact';
-            ctx.textAlign = 'center';
-            ctx.fillText("*STUNNED*", this.x, this.y - 30);
+            ctx.fillText("*STUNNED*", this.x - 30, this.y - 30);
         }
     }
 }
@@ -507,21 +497,25 @@ class Football {
     update() {
         this.x += this.vx;
         this.y += this.vy;
-        this.rotation += 0.45;
+        this.rotation += 0.4;
         this.life--;
 
-        if (checkTileCollision(this.x, this.y, this.radius)) {
+        // Collision with walls
+        let tx = Math.floor(this.x / TILE_SIZE);
+        let ty = Math.floor(this.y / TILE_SIZE);
+        if (ty >= 0 && ty < MAZE_H && tx >= 0 && tx < MAZE_W && grid[ty][tx] === 1) {
             this.life = 0;
-            createParticles(this.x, this.y, '#664422', 6);
+            createParticles(this.x, this.y, '#664422', 5);
             return;
         }
 
+        // Collision with enemies
         enemies.forEach(e => {
             if (e.stunTimer <= 0 && Math.hypot(this.x - e.x, this.y - e.y) < e.radius + this.radius) {
                 e.stunTimer = 150;
                 this.life = 0;
                 playSound('tackle');
-                createParticles(e.x, e.y, '#ffffff', 12);
+                createParticles(e.x, e.y, '#ffffff', 10);
             }
         });
     }
@@ -538,13 +532,14 @@ class Football {
     }
 }
 
+// --- PARTICLES ---
 let particles = [];
 function createParticles(x, y, color, count) {
     for (let i = 0; i < count; i++) {
         particles.push({
             x, y,
-            vx: (Math.random() - 0.5) * 11,
-            vy: (Math.random() - 0.5) * 11,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10,
             life: 1.0,
             color,
             decay: Math.random() * 0.05 + 0.02
@@ -552,109 +547,41 @@ function createParticles(x, y, color, count) {
     }
 }
 
-let aiCommentary = "";
-let isGeneratingCommentary = false;
-const apiKey = ""; 
-const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-
-async function fetchAICommentary(promptText) {
-    if (isGeneratingCommentary) return;
-    isGeneratingCommentary = true;
-    aiCommentary = "ANNOUNCER: Waiting for booth review...";
-
-    const payload = {
-        contents: [{ parts: [{ text: promptText }] }],
-        systemInstruction: { parts: [{ text: "You are a high-energy, classic American football color commentator. Provide a single, short, punchy sentence of play-by-play commentary (max 15 words). No quotes, no intro text. Just the hype." }] }
-    };
-
-    try {
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const result = await response.json();
-        if (result.candidates && result.candidates[0] && result.candidates[0].content && result.candidates[0].content.parts) {
-            aiCommentary = "ANNOUNCER: " + result.candidates[0].content.parts[0].text.trim().replace(/"/g, '');
-        } else {
-            aiCommentary = "ANNOUNCER: What a play! Unbelievable!";
-        }
-    } catch (e) {
-        aiCommentary = "ANNOUNCER: We're having technical difficulties in the booth!";
-    }
-    isGeneratingCommentary = false;
-}
-
-const STATES = { MENU: 0, PLAYING: 1, GAMEOVER: 2 };
+// --- GAME STATE ---
+const STATES = { MENU: 0, PLAYING: 1, GAMEOVER: 2, VICTORY: 3 };
 let gameState = STATES.MENU;
 let score = 0;
-let level = 1;
 let dotsCollected = 0;
-let announceText = '';
-let announceTimer = 0;
-
 let player, enemies, projectiles, screenShake;
 
 function startGame() {
     initAudio();
-    level = 1;
+    buildMaze();
+    player = new Player(12 * TILE_SIZE + TILE_SIZE/2, 6 * TILE_SIZE + TILE_SIZE/2);
+    enemies = [
+        new Enemy(1 * TILE_SIZE + TILE_SIZE/2, 1 * TILE_SIZE + TILE_SIZE/2, '52'),
+        new Enemy(22 * TILE_SIZE + TILE_SIZE/2, 1 * TILE_SIZE + TILE_SIZE/2, '54'),
+        new Enemy(1 * TILE_SIZE + TILE_SIZE/2, 11 * TILE_SIZE + TILE_SIZE/2, '55'),
+        new Enemy(22 * TILE_SIZE + TILE_SIZE/2, 11 * TILE_SIZE + TILE_SIZE/2, '58')
+    ];
+    projectiles = [];
+    particles = [];
     score = 0;
-    aiCommentary = "ANNOUNCER: Welcome to the Gridiron Gauntlet! The defense is fired up today!";
-    setupLevel();
+    dotsCollected = 0;
+    screenShake = 0;
     playSound('whistle');
     gameState = STATES.PLAYING;
 }
 
-function setupLevel() {
-    buildMaze();
-    dotsCollected = 0;
-    const startX = 12 * TILE_SIZE + TILE_SIZE/2;
-    const startY = 6 * TILE_SIZE + TILE_SIZE/2;
-    
-    if (!player) {
-        player = new Player(startX, startY);
-    } else {
-        player.reset(startX, startY);
-    }
-
-    const enemyBaseSpeed = 3.4 + (level - 1) * 0.35;
-    
-    enemies = [
-        new Enemy(1 * TILE_SIZE + TILE_SIZE/2, 1 * TILE_SIZE + TILE_SIZE/2, '52', enemyBaseSpeed),
-        new Enemy(22 * TILE_SIZE + TILE_SIZE/2, 1 * TILE_SIZE + TILE_SIZE/2, '54', enemyBaseSpeed),
-        new Enemy(1 * TILE_SIZE + TILE_SIZE/2, 11 * TILE_SIZE + TILE_SIZE/2, '55', enemyBaseSpeed),
-        new Enemy(22 * TILE_SIZE + TILE_SIZE/2, 11 * TILE_SIZE + TILE_SIZE/2, '58', enemyBaseSpeed)
-    ];
-
-    if (level >= 3) {
-        enemies.push(new Enemy(12 * TILE_SIZE + TILE_SIZE/2, 1 * TILE_SIZE + TILE_SIZE/2, '90', enemyBaseSpeed * 1.1));
-    }
-
-    projectiles = [];
-    particles = [];
-    screenShake = 0;
-}
-
-function advanceLevel() {
-    level++;
-    score += 500;
-    announceText = `TOUCHDOWN! DRIVE #${level}`;
-    announceTimer = 110;
-    playSound('levelup');
-    fetchAICommentary(`The player just scored a touchdown to complete Drive #${level-1}! Give a hype announcer shout.`);
-    setupLevel();
-}
-
+// --- MAIN LOOP ---
 function update() {
     Input.poll();
     const input = Input.getState();
 
-    if (gameState === STATES.MENU || gameState === STATES.GAMEOVER) {
+    if (gameState === STATES.MENU || gameState === STATES.GAMEOVER || gameState === STATES.VICTORY) {
         if (input.pass) startGame();
         return;
     }
-
-    if (announceTimer > 0) announceTimer--;
 
     player.update(input);
     enemies.forEach(e => e.update(player));
@@ -673,15 +600,18 @@ function update() {
 }
 
 function drawMaze(ctx) {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    // Yard Lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
     ctx.lineWidth = 2;
     for(let i=0; i<MAZE_W; i+=2) {
         ctx.beginPath(); ctx.moveTo(i*TILE_SIZE, 0); ctx.lineTo(i*TILE_SIZE, MAZE_H*TILE_SIZE); ctx.stroke();
     }
 
+    ctx.fillStyle = '#ffffff';
     for (let y = 0; y < MAZE_H; y++) {
         for (let x = 0; x < MAZE_W; x++) {
             if (grid[y][x] === 1) {
+                // Procedural neon wall
                 ctx.fillStyle = '#0a2e16';
                 ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
                 ctx.strokeStyle = '#00ff66';
@@ -693,10 +623,10 @@ function drawMaze(ctx) {
 
     collectibles.forEach(c => {
         if (c.active) {
-            if (c.type === 1) {
+            if (c.type === 1) { // Dot (Football)
                 ctx.fillStyle = '#8b4513';
                 ctx.beginPath(); ctx.ellipse(c.x, c.y, 8, 4, 0, 0, Math.PI*2); ctx.fill();
-            } else if (c.type === 3) {
+            } else if (c.type === 3) { // Trophy
                 ctx.fillStyle = '#ffd700';
                 ctx.shadowColor = '#ffff00'; ctx.shadowBlur = 10;
                 ctx.beginPath(); ctx.moveTo(c.x - 10, c.y - 10); ctx.lineTo(c.x + 10, c.y - 10); 
@@ -713,35 +643,15 @@ function drawHUD(ctx) {
     ctx.textAlign = 'left';
     ctx.fillText(`SCORE: ${score}`, 30, 50);
 
-    ctx.textAlign = 'right';
-    ctx.fillText(`DRIVE: #${level}`, 1920 - 30, 50);
-
-    ctx.fillStyle = '#111111';
+    // Stamina Bar
+    ctx.fillStyle = '#222';
     ctx.fillRect(1920 / 2 - 150, 20, 300, 25);
-    ctx.fillStyle = player.staminaDelay > 0 ? '#ffaa00' : '#00f0ff';
+    ctx.fillStyle = '#00f0ff';
     ctx.fillRect(1920 / 2 - 150 + 2, 22, (player.stamina / 100) * 296, 21);
     ctx.fillStyle = '#ffffff';
     ctx.font = '20px Impact';
     ctx.textAlign = 'center';
-    ctx.fillText("STAMINA [LB / Y]", 1920 / 2, 40);
-
-    if (aiCommentary) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-        ctx.fillRect(0, 980, 1920, 100);
-        ctx.fillStyle = '#00ff66';
-        ctx.font = '36px Impact';
-        ctx.textAlign = 'center';
-        ctx.fillText(aiCommentary, 1920 / 2, 1040);
-    }
-
-    if (announceTimer > 0) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(0, 480, 1920, 120);
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 70px Impact';
-        ctx.textAlign = 'center';
-        ctx.fillText(announceText, 1920 / 2, 565);
-    }
+    ctx.fillText("STAMINA [LB/Y]", 1920 / 2, 40);
 }
 
 function loop() {
@@ -750,14 +660,15 @@ function loop() {
     ctx.save();
     if (screenShake > 0) {
         ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
-        screenShake *= 0.88;
+        screenShake *= 0.9;
         if (screenShake < 0.5) screenShake = 0;
     }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if (gameState === STATES.PLAYING || gameState === STATES.GAMEOVER) {
+    if (gameState === STATES.PLAYING || gameState === STATES.GAMEOVER || gameState === STATES.VICTORY) {
         drawMaze(ctx);
+        collectibles.forEach(c => { /* drawn in maze */ });
         projectiles.forEach(p => p.draw(ctx));
         enemies.forEach(e => e.draw(ctx));
         if (gameState !== STATES.GAMEOVER) player.draw(ctx);
@@ -775,35 +686,42 @@ function loop() {
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 90px Impact';
         ctx.textAlign = 'center';
-        ctx.fillText("GRIDIRON GAUNTLET", 1920 / 2, 380);
+        ctx.fillText("GRIDIRON GAUNTLET", 1920 / 2, 400);
         ctx.fillStyle = '#00ff66';
-        ctx.font = '45px Impact';
-        ctx.fillText("PLAYBOOK PURSUIT", 1920 / 2, 450);
+        ctx.font = '40px Impact';
+        ctx.fillText("PLAYBOOK PURSUIT", 1920 / 2, 460);
         ctx.fillStyle = '#ffffff';
         ctx.font = '30px Impact';
         ctx.fillText("PRESS (RT) OR (A) TO HIKE THE BALL", 1920 / 2, 600);
-        ctx.fillStyle = '#aaaaaa';
-        ctx.font = '22px Impact';
-        ctx.fillText("LB/Y: Sprint  |  RB/X: Juke Dash  |  LT/B: Stiff Arm  |  RT/A: Bullet Pass", 1920 / 2, 660);
     } else if (gameState === STATES.GAMEOVER) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fillRect(0, 0, 1920, 1080);
-        ctx.fillStyle = '#ff3333';
+        ctx.fillStyle = '#ff0000';
         ctx.font = 'bold 100px Impact';
         ctx.textAlign = 'center';
-        ctx.fillText("TACKLED FOR A LOSS", 1920 / 2, 430);
+        ctx.fillText("TACKLED FOR A LOSS", 1920 / 2, 450);
         ctx.fillStyle = '#ffffff';
         ctx.font = '40px Impact';
-        ctx.fillText(`FINAL SCORE: ${score}  •  DRIVES CLEARED: ${level - 1}`, 1920 / 2, 520);
-        ctx.fillText("PRESS (RT) OR (A) TO RESTART DRILL", 1920 / 2, 600);
+        ctx.fillText("PRESS (RT) OR (A) TO RESTART DRILL", 1920 / 2, 550);
+    } else if (gameState === STATES.VICTORY) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, 1920, 1080);
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 100px Impact';
+        ctx.textAlign = 'center';
+        ctx.fillText("TOUCHDOWN!", 1920 / 2, 450);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '40px Impact';
+        ctx.fillText(`FINAL SCORE: ${score}`, 1920 / 2, 530);
+        ctx.fillText("PRESS (RT) OR (A) TO PLAY AGAIN", 1920 / 2, 600);
     }
 
     ctx.restore();
     requestAnimationFrame(loop);
 }
 
+// Keyboard Fallback for testing without Xbox Controller
 window.addEventListener('keydown', e => {
-    initAudio();
     const k = e.key.toLowerCase();
     if (k === 'w' || e.key === 'ArrowUp') Input.keys.up = true;
     if (k === 's' || e.key === 'ArrowDown') Input.keys.down = true;
@@ -814,7 +732,6 @@ window.addEventListener('keydown', e => {
     if (k === 'e') Input.keys.juke = true;
     if (k === 'shift') Input.keys.sprint = true;
 });
-
 window.addEventListener('keyup', e => {
     const k = e.key.toLowerCase();
     if (k === 'w' || e.key === 'ArrowUp') Input.keys.up = false;
@@ -827,6 +744,7 @@ window.addEventListener('keyup', e => {
     if (k === 'shift') Input.keys.sprint = false;
 });
 
+// PC Mouse Aiming Fallback
 window.addEventListener('mousemove', e => {
     if (Input.pads[0]) return; 
     const rect = canvas.getBoundingClientRect();
@@ -845,6 +763,16 @@ window.addEventListener('mousemove', e => {
         }
     }
 });
+
+const originalGetState = Input.getState.bind(Input);
+Input.getState = function() {
+    let state = originalGetState();
+    if (!this.pads[0] && this.keys.aimX !== undefined) {
+        state.aimX = this.keys.aimX;
+        state.aimY = this.keys.aimY;
+    }
+    return state;
+};
 
 requestAnimationFrame(loop);
 </script>

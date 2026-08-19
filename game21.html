@@ -3,56 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GRIDIRON GAUNTLET: PLAYBOOK PURSUIT</title>
+    <title>AETHER-RIG: TITAN CLIMB</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
         body, html {
             width: 100%;
             height: 100%;
-            background-color: #01160a;
+            background-color: #030407;
             overflow: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-family: 'Impact', 'Segoe UI', sans-serif;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
         }
-        #gameCanvas {
-            background: radial-gradient(circle at center, #023818 0%, #01160a 100%);
+        #gameWrapper {
+            position: relative;
             max-width: 100vw;
             max-height: 100vh;
             aspect-ratio: 16 / 9;
-            box-shadow: 0 0 50px rgba(0, 255, 100, 0.25);
-            outline: none;
+            box-shadow: 0 0 60px rgba(255, 110, 0, 0.25), inset 0 0 100px rgba(0,0,0,0.8);
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            background-color: #090b12;
+            image-rendering: pixelated;
+            display: block;
+        }
+        #gameWrapper::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 24, 0) 50%, rgba(0, 0, 0, 0.35) 50%), linear-gradient(90deg, rgba(255, 100, 0, 0.03), rgba(0, 200, 255, 0.02), rgba(255, 0, 0, 0.03));
+            z-index: 2;
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
 
-<canvas id="gameCanvas" width="1920" height="1080" tabindex="0"></canvas>
+<div id="gameWrapper">
+    <canvas id="gameCanvas" width="1920" height="1080"></canvas>
+</div>
 
 <script>
-/**
- * GRIDIRON GAUNTLET: PLAYBOOK PURSUIT
- * Optimized for Xbox Series S Controller
- */
-
 const canvas = document.getElementById('gameCanvas');
-
-function ensureGameFocus() {
-    window.focus();
-    if (canvas) canvas.focus({ preventScroll: true });
-}
-ensureGameFocus();
-window.addEventListener('load', ensureGameFocus);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureGameFocus(); });
-window.addEventListener('gamepadconnected', ensureGameFocus);
-
 const ctx = canvas.getContext('2d');
 
+// --- GAMEPAD FOCUS FIX (FOR IFRAME / XBOX EDGE) ---
+function ensureGameFocus() {
+    window.focus();
+}
+window.addEventListener('load', ensureGameFocus);
+window.addEventListener('click', ensureGameFocus);
+window.addEventListener('keydown', ensureGameFocus);
+setInterval(ensureGameFocus, 1000);
+
+// --- PROCEDURAL WEB AUDIO SFX & MUSIC ---
 let audioCtx = null;
+let bgmInterval = null;
+
 function initAudio() {
     if (audioCtx) return;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    startIndustrialBGM();
+}
+
+function startIndustrialBGM() {
+    if (bgmInterval) clearInterval(bgmInterval);
+    let step = 0;
+    bgmInterval = setInterval(() => {
+        if (gameState !== STATES.PLAYING) return;
+        let now = audioCtx.currentTime;
+        let osc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        
+        osc.type = (step % 4 === 0) ? 'sawtooth' : 'square';
+        osc.frequency.setValueAtTime((step % 8 === 0) ? 65 : 130, now);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.15);
+        step++;
+    }, 230); // 130 BPM Industrial Pulse
 }
 
 function playSound(type) {
@@ -63,55 +100,54 @@ function playSound(type) {
     osc.connect(gain);
     gain.connect(audioCtx.destination);
 
-    if (type === 'whistle') {
+    if (type === 'jump') {
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(1200, now);
-        osc.frequency.linearRampToValueAtTime(1400, now + 0.3);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.3);
-        osc.start(now); osc.stop(now + 0.3);
-    } else if (type === 'pass') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(450, now);
-        osc.frequency.exponentialRampToValueAtTime(110, now + 0.15);
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.exponentialRampToValueAtTime(540, now + 0.15);
         gain.gain.setValueAtTime(0.3, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.15);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
         osc.start(now); osc.stop(now + 0.15);
-    } else if (type === 'tackle') {
+    } else if (type === 'swing') {
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(160, now);
-        osc.frequency.exponentialRampToValueAtTime(35, now + 0.22);
-        gain.gain.setValueAtTime(0.4, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.22);
-        osc.start(now); osc.stop(now + 0.22);
-    } else if (type === 'collect') {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(650, now);
-        osc.frequency.linearRampToValueAtTime(850, now + 0.08);
-        gain.gain.setValueAtTime(0.12, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.08);
-        osc.start(now); osc.stop(now + 0.08);
-    } else if (type === 'levelup') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.linearRampToValueAtTime(600, now + 0.2);
-        osc.frequency.linearRampToValueAtTime(900, now + 0.4);
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.linearRampToValueAtTime(120, now + 0.18);
         gain.gain.setValueAtTime(0.35, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.45);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.18);
+        osc.start(now); osc.stop(now + 0.18);
+    } else if (type === 'smash') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(120, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now); osc.stop(now + 0.3);
+    } else if (type === 'boss_slam') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(90, now);
+        osc.frequency.exponentialRampToValueAtTime(25, now + 0.45);
+        gain.gain.setValueAtTime(0.6, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.45);
         osc.start(now); osc.stop(now + 0.45);
-    } else if (type === 'juke') {
+    } else if (type === 'climb') {
         osc.type = 'sine';
+        osc.frequency.setValueAtTime(300 + Math.random() * 80, now);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.linearRampToValueAtTime(0.001, now + 0.05);
+        osc.start(now); osc.stop(now + 0.05);
+    } else if (type === 'node_destroy') {
+        osc.type = 'triangle';
         osc.frequency.setValueAtTime(220, now);
-        osc.frequency.exponentialRampToValueAtTime(550, now + 0.1);
-        gain.gain.setValueAtTime(0.25, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.1);
-        osc.start(now); osc.stop(now + 0.1);
+        osc.frequency.linearRampToValueAtTime(880, now + 0.3);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now); osc.stop(now + 0.3);
     }
 }
 
+// --- INPUT MANAGEMENT ---
 const Input = {
     pads: {},
-    keys: { left: false, right: false, up: false, down: false, pass: false, stiffArm: false, juke: false, sprint: false, aimX: 0, aimY: -1 },
+    keys: { left: false, right: false, up: false, down: false, jump: false, swing: false, wave: false, emp: false },
     poll() {
         const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
         for (let i = 0; i < gamepads.length; i++) {
@@ -120,627 +156,622 @@ const Input = {
     },
     getState() {
         const pad = this.pads[0];
-        let vx = 0, vy = 0, aimX = this.keys.aimX, aimY = this.keys.aimY;
-        let pass = false, stiffArm = false, juke = false, sprint = false;
+        let vx = 0, vy = 0;
+        let jump = false, swing = false, wave = false, emp = false;
 
         if (pad) {
-            initAudio();
+            // Analog stick movement
             if (Math.abs(pad.axes[0]) > 0.2) vx = pad.axes[0];
             if (Math.abs(pad.axes[1]) > 0.2) vy = pad.axes[1];
+            // D-Pad movement
             if (pad.buttons[14]?.pressed) vx = -1;
             if (pad.buttons[15]?.pressed) vx = 1;
             if (pad.buttons[12]?.pressed) vy = -1;
             if (pad.buttons[13]?.pressed) vy = 1;
 
-            if (Math.hypot(pad.axes[2], pad.axes[3]) > 0.3) {
-                aimX = pad.axes[2];
-                aimY = pad.axes[3];
-            }
-
-            pass = pad.buttons[7]?.pressed || pad.buttons[0]?.pressed;      // RT / A
-            stiffArm = pad.buttons[6]?.pressed || pad.buttons[1]?.pressed;  // LT / B
-            juke = pad.buttons[4]?.pressed || pad.buttons[2]?.pressed;      // RB / X
-            sprint = pad.buttons[5]?.pressed || pad.buttons[3]?.pressed;    // LB / Y
+            jump = pad.buttons[0]?.pressed || pad.buttons[6]?.pressed;  // A or LT
+            swing = pad.buttons[2]?.pressed || pad.buttons[7]?.pressed; // X or RT
+            wave = pad.buttons[1]?.pressed || pad.buttons[4]?.pressed;  // B or LB
+            emp = pad.buttons[3]?.pressed || pad.buttons[5]?.pressed;   // Y or RB
         }
 
         if (this.keys.left) vx = -1;
         if (this.keys.right) vx = 1;
         if (this.keys.up) vy = -1;
         if (this.keys.down) vy = 1;
-        if (this.keys.pass) pass = true;
-        if (this.keys.stiffArm) stiffArm = true;
-        if (this.keys.juke) juke = true;
-        if (this.keys.sprint) sprint = true;
+        if (this.keys.jump) jump = true;
+        if (this.keys.swing) swing = true;
+        if (this.keys.wave) wave = true;
+        if (this.keys.emp) emp = true;
 
-        return { vx, vy, aimX, aimY, pass, stiffArm, juke, sprint };
+        return { vx, vy, jump, swing, wave, emp };
     }
 };
 
-const TILE_SIZE = 80;
-const MAZE_W = 24;
-const MAZE_H = 13;
-
-const mazeLayout = [
-    "000000000000000000000000",
-    "031111111100001111111130",
-    "010001000100001000100010",
-    "010001000111111000100010",
-    "011111000100001000111110",
-    "010001111111111111100010",
-    "010001000022220000100010",
-    "011111000022220000111110",
-    "010001111111111111100010",
-    "010001000010010000100010",
-    "010001000010010000100010",
-    "031111111111111111111130",
-    "000000000000000000000000"
+// --- LEVEL ENVIRONMENT: GIRDERS & LADDERS ---
+const PLATFORMS = [
+    { x: 120, y: 990, w: 1680, h: 28, angle: 0 },         // Tier 0 (Ground)
+    { x: 160, y: 820, w: 1540, h: 24, angle: 0.02 },      // Tier 1 (Slanted right-to-left)
+    { x: 220, y: 640, w: 1540, h: 24, angle: -0.02 },     // Tier 2 (Slanted left-to-right)
+    { x: 160, y: 460, w: 1540, h: 24, angle: 0.02 },      // Tier 3 (Mid deck)
+    { x: 280, y: 290, w: 1360, h: 24, angle: 0 },         // Tier 4 (Upper gantries)
+    { x: 620, y: 160, w: 680, h: 28, angle: 0 }           // Tier 5 (Apex Titan Perch)
 ];
 
-let grid = [];
-let collectibles = [];
-let totalDots = 0;
+const LADDERS = [
+    { x: 380, topY: 820, bottomY: 990, w: 56 },
+    { x: 1450, topY: 820, bottomY: 990, w: 56 },
+    { x: 700, topY: 640, bottomY: 820, w: 56 },
+    { x: 1250, topY: 640, bottomY: 820, w: 56 },
+    { x: 420, topY: 460, bottomY: 640, w: 56 },
+    { x: 1500, topY: 460, bottomY: 640, w: 56 },
+    { x: 740, topY: 290, bottomY: 460, w: 56 },
+    { x: 1180, topY: 290, bottomY: 460, w: 56 },
+    { x: 932, topY: 160, bottomY: 290, w: 56 }
+];
 
-function buildMaze() {
-    grid = [];
-    collectibles = [];
-    totalDots = 0;
-    for (let y = 0; y < MAZE_H; y++) {
-        let row = [];
-        for (let x = 0; x < MAZE_W; x++) {
-            let type = parseInt(mazeLayout[y][x]);
-            row.push(type === 0 ? 1 : 0);
-            if (type === 1 || type === 3) {
-                collectibles.push({ x: x * TILE_SIZE + TILE_SIZE/2, y: y * TILE_SIZE + TILE_SIZE/2, type: type, active: true });
-                if (type === 1) totalDots++;
-            }
-        }
-        grid.push(row);
-    }
+let powerNodes = [];
+function initPowerNodes() {
+    powerNodes = [
+        { x: 670, y: 140, hp: 3, destroyed: false },
+        { x: 800, y: 140, hp: 3, destroyed: false },
+        { x: 1120, y: 140, hp: 3, destroyed: false },
+        { x: 1250, y: 140, hp: 3, destroyed: false }
+    ];
 }
 
-function checkTileCollision(px, py, radius) {
-    let tileX = Math.floor(px / TILE_SIZE);
-    let tileY = Math.floor(py / TILE_SIZE);
-    for (let ty = tileY - 1; ty <= tileY + 1; ty++) {
-        for (let tx = tileX - 1; tx <= tileX + 1; tx++) {
-            if (ty >= 0 && ty < MAZE_H && tx >= 0 && tx < MAZE_W && grid[ty][tx] === 1) {
-                let rx = tx * TILE_SIZE;
-                let ry = ty * TILE_SIZE;
-                let testX = Math.max(rx, Math.min(px, rx + TILE_SIZE));
-                let testY = Math.max(ry, Math.min(py, ry + TILE_SIZE));
-                let dist = Math.hypot(px - testX, py - testY);
-                if (dist < radius) return true;
-            }
-        }
-    }
-    return false;
-}
-
-function drawFootballPlayer(ctx, x, y, angle, colorMain, colorSec, number, state, walkCycle) {
+// --- PROCEDURAL CHARACTER RENDERING PIPELINE ---
+function drawRigRunner(ctx, x, y, facing, isClimbing, isSwinging, swingProgress, walkCycle, hitFlash) {
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(angle);
+    if (facing < 0) ctx.scale(-1, 1);
 
-    const legSwing = Math.sin(walkCycle) * 12;
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath(); ctx.ellipse(-10, legSwing, 6, 12, 0, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(10, -legSwing, 6, 12, 0, 0, Math.PI*2); ctx.fill();
-
-    ctx.fillStyle = colorSec;
-    ctx.beginPath(); ctx.ellipse(0, 0, 24, 14, 0, 0, Math.PI*2); ctx.fill();
-    
-    ctx.fillStyle = colorMain;
-    ctx.beginPath(); ctx.ellipse(0, 0, 18, 12, 0, 0, Math.PI*2); ctx.fill();
-
-    ctx.fillStyle = colorMain;
-    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 4;
-    ctx.beginPath(); ctx.arc(0, 4, 14, 0, Math.PI*2); ctx.fill();
-    ctx.shadowBlur = 0;
-
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(-2, -10, 4, 28);
-
-    ctx.strokeStyle = '#aaaaaa';
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-10, 15); ctx.lineTo(10, 15); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-6, 18); ctx.lineTo(6, 18); ctx.stroke();
-
-    if (state === 'stiffarm') {
-        ctx.fillStyle = '#ffccaa';
-        ctx.beginPath(); ctx.ellipse(15, 15, 6, 18, -Math.PI/4, 0, Math.PI*2); ctx.fill();
-    } else {
-        ctx.fillStyle = colorSec;
-        ctx.beginPath(); ctx.ellipse(-20, 0, 6, 10, 0, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(20, 0, 6, 10, 0, 0, Math.PI*2); ctx.fill();
+    if (hitFlash > 0 && Math.floor(Date.now() / 50) % 2 === 0) {
+        ctx.fillStyle = '#ffffff';
     }
 
-    ctx.translate(0, -6);
-    ctx.rotate(-angle);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 14px Impact';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(number, 0, 0);
+    // Jetpack
+    ctx.fillStyle = '#ff5500';
+    ctx.fillRect(-18, -38, 8, 24);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(-16, -14, 6, 8);
+    if (Math.sin(Date.now() * 0.05) > 0) {
+        ctx.fillStyle = '#00f0ff';
+        ctx.fillRect(-16, -6, 4, 10 + Math.random() * 8);
+    }
+
+    // Legs (IK Walk / Ladder)
+    const legOffset = isClimbing ? Math.sin(walkCycle * 2) * 14 : Math.sin(walkCycle) * 12;
+    ctx.fillStyle = '#2b3345';
+    ctx.fillRect(-10, -18 + legOffset, 8, 20); // Left
+    ctx.fillRect(2, -18 - legOffset, 8, 20);  // Right
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(-12, 0 + legOffset, 12, 6);
+    ctx.fillRect(0, 0 - legOffset, 12, 6);
+
+    // Torso
+    ctx.fillStyle = '#1e2330';
+    ctx.beginPath();
+    ctx.roundRect(-14, -42, 28, 26, 4);
+    ctx.fill();
+    ctx.fillStyle = '#ff8800';
+    ctx.fillRect(-12, -38, 4, 20);
+    ctx.fillRect(8, -38, 4, 20);
+    ctx.fillStyle = '#00f0ff';
+    ctx.beginPath(); ctx.arc(0, -30, 4, 0, Math.PI * 2); ctx.fill();
+
+    // Helmet & Visor
+    ctx.fillStyle = '#3a4454';
+    ctx.beginPath(); ctx.arc(0, -50, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#00ffff';
+    ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 10;
+    ctx.fillRect(2, -53, 10, 5);
+    ctx.shadowBlur = 0;
+
+    // Arm & Kinetic Wrench
+    ctx.save();
+    ctx.translate(2, -34);
+    if (isSwinging) {
+        ctx.rotate(-Math.PI / 4 + swingProgress * (Math.PI * 1.1));
+    } else if (isClimbing) {
+        ctx.rotate(Math.sin(walkCycle * 2) * 0.8);
+    } else {
+        ctx.rotate(0.2);
+    }
+
+    ctx.fillStyle = '#ff8800';
+    ctx.fillRect(0, -4, 16, 8);
+    ctx.fillStyle = '#6e7a8a';
+    ctx.fillRect(14, -6, 26, 12);
+    ctx.fillStyle = '#00ffff';
+    ctx.shadowColor = '#00ffff'; ctx.shadowBlur = isSwinging ? 25 : 8;
+    ctx.fillRect(26, -14, 18, 6);
+    ctx.fillRect(26, 8, 18, 6);
+    ctx.shadowBlur = 0;
+    ctx.restore();
 
     ctx.restore();
 }
 
-class Player {
-    constructor(x, y) {
-        this.x = x;
-        this.y = y;
-        this.radius = 16;
-        this.baseSpeed = 5.2;
-        this.angle = 0;
-        this.aimAngle = 0;
-        
-        this.stamina = 100;
-        this.staminaDelay = 0;
-        this.stiffArmTimer = 0;
-        this.passCooldown = 0;
-        this.jukeTimer = 0;
-        this.jukeCooldown = 0;
-        
-        this.walkCycle = 0;
+// Titan GORR-9 Boss Rendering
+function drawTitanGorr(ctx, x, y, poundTimer) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    const slam = poundTimer > 0 ? Math.sin(poundTimer * 0.3) * 16 : 0;
+
+    // Chassis Legs
+    ctx.strokeStyle = '#ff5500';
+    ctx.lineWidth = 8;
+    for (let i = -2; i <= 2; i++) {
+        if (i === 0) continue;
+        const lx = i * 40;
+        ctx.beginPath();
+        ctx.moveTo(lx, 20); ctx.lineTo(lx * 1.3, 60); ctx.lineTo(lx * 1.5, 90 + slam);
+        ctx.stroke();
     }
 
-    reset(x, y) {
-        this.x = x;
-        this.y = y;
-        this.stamina = 100;
-        this.staminaDelay = 0;
-        this.stiffArmTimer = 0;
-        this.passCooldown = 0;
-        this.jukeTimer = 0;
-        this.jukeCooldown = 0;
+    // Main Core
+    ctx.fillStyle = '#1c1d24'; ctx.strokeStyle = '#ff3300'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.roundRect(-90, -70, 180, 100, 16); ctx.fill(); ctx.stroke();
+
+    // Details
+    ctx.fillStyle = '#ffcc00';
+    ctx.fillRect(-70, -60, 20, 10); ctx.fillRect(50, -60, 20, 10);
+    ctx.fillStyle = '#ff0044'; ctx.shadowColor = '#ff0044'; ctx.shadowBlur = 20;
+    ctx.fillRect(-50 + Math.sin(Date.now() * 0.005) * 20, -35, 40, 12);
+    ctx.shadowBlur = 0;
+
+    // Steam Stacks
+    ctx.fillStyle = '#3a3d4d';
+    ctx.fillRect(-70, -110, 24, 45); ctx.fillRect(46, -110, 24, 45);
+
+    // Crane Arm
+    ctx.save();
+    ctx.translate(70, -20);
+    ctx.rotate(poundTimer > 0 ? Math.PI / 3 : -Math.PI / 6);
+    ctx.fillStyle = '#ff5500'; ctx.fillRect(0, -18, 70, 36);
+    ctx.fillStyle = '#111'; ctx.fillRect(50, -24, 30, 48);
+    ctx.restore();
+
+    ctx.restore();
+}
+
+function drawMagmaBarrel(ctx, x, y, rotation) {
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(rotation);
+    ctx.fillStyle = '#222'; ctx.strokeStyle = '#ff4400'; ctx.lineWidth = 4;
+    ctx.shadowColor = '#ff4400'; ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillRect(-18, -4, 36, 8); ctx.fillRect(-4, -18, 8, 36);
+    ctx.shadowBlur = 0; ctx.restore();
+}
+
+function drawSparkWasp(ctx, x, y, cycle) {
+    ctx.save(); ctx.translate(x, y);
+    ctx.fillStyle = '#00f0ff'; ctx.shadowColor = '#00f0ff'; ctx.shadowBlur = 15;
+    ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+    const wingFlap = Math.sin(cycle * 30) * 14;
+    ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(-24, wingFlap);
+    ctx.moveTo(12, 0); ctx.lineTo(24, -wingFlap); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.restore();
+}
+
+// --- ENTITIES & LOGICAL STATES ---
+class Player {
+    constructor() { this.reset(); }
+    reset() {
+        this.x = 240; this.y = 990; this.w = 34; this.h = 58;
+        this.vx = 0; this.vy = 0; this.speed = 6.2; this.jumpPower = -16.5;
+        this.gravity = 0.85; this.grounded = true; this.facing = 1;
+        this.isClimbing = false; this.currentLadder = null; this.walkCycle = 0;
+        this.isSwinging = false; this.swingTimer = 0; this.swingCooldown = 0;
+        this.waveCooldown = 0; this.overdriveMeter = 0;
+        this.hitFlash = 0; this.lives = 3;
     }
 
     update(input) {
-        if (this.stiffArmTimer > 0) this.stiffArmTimer--;
-        if (this.passCooldown > 0) this.passCooldown--;
-        if (this.jukeCooldown > 0) this.jukeCooldown--;
-        if (this.jukeTimer > 0) this.jukeTimer--;
+        if (this.hitFlash > 0) this.hitFlash--;
+        if (this.swingCooldown > 0) this.swingCooldown--;
+        if (this.waveCooldown > 0) this.waveCooldown--;
 
-        let curSpeed = this.baseSpeed;
-
-        if (input.juke && this.jukeCooldown <= 0 && this.stamina >= 20) {
-            this.jukeTimer = 10;
-            this.jukeCooldown = 60;
-            this.stamina -= 20;
-            this.staminaDelay = 60;
-            playSound('juke');
-            createParticles(this.x, this.y, '#ffffff', 10);
-        }
-
-        if (input.sprint && this.stamina > 0 && this.jukeTimer <= 0) {
-            curSpeed *= 1.6;
-            this.stamina = Math.max(0, this.stamina - 1.2);
-            this.staminaDelay = 75;
-        } else {
-            if (this.staminaDelay > 0) {
-                this.staminaDelay--;
-            } else if (this.stamina < 100) {
-                this.stamina = Math.min(100, this.stamina + 0.6);
+        // Ladder Detection
+        let touchingLadder = null;
+        for (let ladder of LADDERS) {
+            if (Math.abs(this.x - ladder.x) < 32 && this.y >= ladder.topY - 10 && this.y <= ladder.bottomY + 10) {
+                touchingLadder = ladder; break;
             }
         }
 
-        if (this.jukeTimer > 0) curSpeed *= 2.4;
-
-        let dx = input.vx * curSpeed;
-        let dy = input.vy * curSpeed;
-
-        if (dx !== 0 || dy !== 0) {
-            this.angle = Math.atan2(dy, dx);
-            this.walkCycle += curSpeed * 0.05;
+        // Ladder Mount & Traverse
+        if (touchingLadder && Math.abs(input.vy) > 0.3) {
+            this.isClimbing = true; this.currentLadder = touchingLadder;
+            this.x = touchingLadder.x; this.grounded = false;
         }
 
-        if (Math.hypot(input.aimX, input.aimY) > 0.2) {
-            this.aimAngle = Math.atan2(input.aimY, input.aimX);
-        } else {
-            this.aimAngle = this.angle;
+        if (this.isClimbing) {
+            this.vx = 0; this.vy = input.vy * 4.5; this.y += this.vy;
+            if (Math.abs(this.vy) > 0.1 && Math.floor(this.y) % 18 === 0) playSound('climb');
+            this.walkCycle += Math.abs(this.vy) * 0.1;
+
+            if (this.y < this.currentLadder.topY) {
+                this.y = this.currentLadder.topY; this.isClimbing = false; this.grounded = true;
+            } else if (this.y > this.currentLadder.bottomY) {
+                this.y = this.currentLadder.bottomY; this.isClimbing = false; this.grounded = true;
+            }
+            if (input.jump) {
+                this.isClimbing = false; this.vy = this.jumpPower * 0.85; 
+                this.vx = input.vx * this.speed; playSound('jump');
+            }
+            return;
         }
 
-        this.moveWithCollision(dx, dy);
+        // Horizontal Movement
+        this.vx = input.vx * this.speed; this.x += this.vx;
+        if (Math.abs(this.vx) > 0.1) {
+            this.facing = this.vx > 0 ? 1 : -1;
+            this.walkCycle += 0.2;
+        }
+        this.x = Math.max(140, Math.min(1780, this.x)); // Clamp to screen
 
-        if (input.stiffArm && this.stiffArmTimer <= 0 && this.stamina >= 15) {
-            this.stiffArmTimer = 25;
-            this.stamina -= 15;
-            this.staminaDelay = 60;
-            playSound('tackle');
-            
-            const reach = 42;
-            const hx = this.x + Math.cos(this.aimAngle) * reach;
-            const hy = this.y + Math.sin(this.aimAngle) * reach;
-            
-            enemies.forEach(e => {
-                if (e.stunTimer <= 0 && Math.hypot(e.x - hx, e.y - hy) < e.radius + 28) {
-                    e.stunTimer = 130;
-                    
-                    let knockX = Math.cos(this.aimAngle) * 70;
-                    let knockY = Math.sin(this.aimAngle) * 70;
-                    e.moveWithCollision(knockX, knockY);
-                    
-                    createParticles(e.x, e.y, '#ffaa00', 16);
-                    screenShake = 12;
+        // Jump & Gravity
+        if (input.jump && this.grounded) {
+            this.vy = this.jumpPower; this.grounded = false;
+            playSound('jump'); createParticles(this.x, this.y, '#ff8800', 10);
+        }
+
+        this.vy += this.gravity;
+        this.y += this.vy;
+
+        // Platform & Girder Collision
+        this.grounded = false;
+        for (let plat of PLATFORMS) {
+            if (this.x >= plat.x - 20 && this.x <= plat.x + plat.w + 20) {
+                const progress = (this.x - plat.x) / plat.w;
+                const surfaceY = plat.y + (plat.angle * plat.w * (progress - 0.5));
+                if (this.vy >= 0 && this.y >= surfaceY - 8 && this.y - this.vy <= surfaceY + 20) {
+                    this.y = surfaceY; this.vy = 0; this.grounded = true; break;
+                }
+            }
+        }
+
+        // 1. Kinetic Wrench Smash [(X) / RT]
+        if (input.swing && this.swingCooldown <= 0 && !this.isSwinging) {
+            this.isSwinging = true; this.swingTimer = 16; this.swingCooldown = 28;
+            playSound('swing'); screenShake = 6;
+            const strikeX = this.x + this.facing * 48; const strikeY = this.y - 30;
+
+            for (let i = barrels.length - 1; i >= 0; i--) {
+                if (Math.hypot(barrels[i].x - strikeX, barrels[i].y - strikeY) < 65) {
+                    barrels.splice(i, 1); score += 500; this.overdriveMeter = Math.min(100, this.overdriveMeter + 20);
+                    playSound('smash'); screenShake = 18; createParticles(strikeX, strikeY, '#00ffff', 25);
+                }
+            }
+            for (let i = wasps.length - 1; i >= 0; i--) {
+                if (Math.hypot(wasps[i].x - strikeX, wasps[i].y - strikeY) < 65) {
+                    wasps.splice(i, 1); score += 800; this.overdriveMeter = Math.min(100, this.overdriveMeter + 30);
+                    playSound('smash'); screenShake = 16; createParticles(strikeX, strikeY, '#ffff00', 30);
+                }
+            }
+            powerNodes.forEach(node => {
+                if (!node.destroyed && Math.hypot(node.x - strikeX, node.y - strikeY) < 70) {
+                    node.hp--; createParticles(node.x, node.y, '#00f0ff', 20);
+                    playSound('node_destroy'); screenShake = 15; score += 1000;
+                    if (node.hp <= 0) { node.destroyed = true; createParticles(node.x, node.y, '#ff4400', 45); }
                 }
             });
         }
-
-        if (input.pass && this.passCooldown <= 0) {
-            this.passCooldown = 40;
-            playSound('pass');
-            projectiles.push(new Football(this.x, this.y, Math.cos(this.aimAngle) * 19, Math.sin(this.aimAngle) * 19));
+        if (this.isSwinging) {
+            this.swingTimer--;
+            if (this.swingTimer <= 0) this.isSwinging = false;
         }
 
-        collectibles.forEach(c => {
-            if (c.active && Math.hypot(this.x - c.x, this.y - c.y) < this.radius + 15) {
-                c.active = false;
-                playSound('collect');
-                if (c.type === 1) score += 10;
-                if (c.type === 3) { score += 100; this.stamina = 100; }
-                dotsCollected++;
-                if (dotsCollected >= totalDots) {
-                    advanceLevel();
-                }
-            }
-        });
-    }
-
-    moveWithCollision(dx, dy) {
-        if (dx !== 0) {
-            let nextX = this.x + dx;
-            if (!checkTileCollision(nextX, this.y, this.radius)) {
-                this.x = nextX;
-            }
+        // 2. Magnetic Shockwave [(B) / LB]
+        if (input.wave && this.waveCooldown <= 0) {
+            this.waveCooldown = 90; screenShake = 14; playSound('boss_slam');
+            createShockwave(this.x, this.y - 10, '#00f0ff');
+            barrels.forEach(b => {
+                if (Math.hypot(b.x - this.x, b.y - this.y) < 260) { b.vx = (b.x < this.x ? -10 : 10); b.vy = -8; }
+            });
         }
-        if (dy !== 0) {
-            let nextY = this.y + dy;
-            if (!checkTileCollision(this.x, nextY, this.radius)) {
-                this.y = nextY;
-            }
+
+        // 3. EMP Overdrive Screen Clear [(Y) / RB]
+        if (input.emp && this.overdriveMeter >= 100) {
+            this.overdriveMeter = 0; screenShake = 35; playSound('node_destroy');
+            createShockwave(1920 / 2, 540, '#ff00ff', 900);
+            barrels = []; wasps = []; score += 3000;
         }
     }
 
     draw(ctx) {
-        if (this.stiffArmTimer <= 0) {
-            ctx.fillStyle = 'rgba(0, 255, 100, 0.4)';
-            ctx.beginPath();
-            ctx.arc(this.x + Math.cos(this.aimAngle) * 65, this.y + Math.sin(this.aimAngle) * 65, 7, 0, Math.PI*2);
-            ctx.fill();
-        }
-
-        drawFootballPlayer(ctx, this.x, this.y, this.angle, '#0044ff', '#ffffff', '12', this.stiffArmTimer > 0 ? 'stiffarm' : 'run', this.walkCycle);
-
-        if (this.stiffArmTimer > 12) {
-            ctx.fillStyle = 'rgba(255, 150, 0, 0.5)';
-            ctx.beginPath();
-            ctx.arc(this.x + Math.cos(this.aimAngle) * 42, this.y + Math.sin(this.aimAngle) * 42, 28, 0, Math.PI*2);
-            ctx.fill();
-        }
+        const swingProgress = this.isSwinging ? (16 - this.swingTimer) / 16 : 0;
+        drawRigRunner(ctx, this.x, this.y, this.facing, this.isClimbing, this.isSwinging, swingProgress, this.walkCycle, this.hitFlash);
     }
 }
 
-class Enemy {
-    constructor(x, y, number, baseSpeed = 3.5) {
+// Barrels Rolled by Titan Gorr
+class Barrel {
+    constructor(x, y) {
         this.x = x;
         this.y = y;
+        // Randomize starting direction to spread hazards
+        this.vx = Math.random() > 0.5 ? 4.2 : -4.2;
+        this.vy = 0;
         this.radius = 18;
-        this.speed = baseSpeed;
-        this.angle = 0;
-        this.walkCycle = Math.random() * Math.PI;
-        this.number = number;
-        this.stunTimer = 0;
-    }
-
-    update(target) {
-        if (this.stunTimer > 0) {
-            this.stunTimer--;
-            return;
-        }
-
-        let dx = target.x - this.x;
-        let dy = target.y - this.y;
-        let dist = Math.hypot(dx, dy);
-        
-        if (dist > 0) {
-            let vx = (dx / dist) * this.speed;
-            let vy = (dy / dist) * this.speed;
-            
-            this.angle = Math.atan2(vy, vx);
-            this.walkCycle += this.speed * 0.05;
-
-            this.moveWithCollision(vx, vy);
-        }
-
-        if (dist < this.radius + target.radius && target.jukeTimer <= 0) {
-            if (gameState !== STATES.GAMEOVER) {
-                fetchAICommentary(`The quarterback was brutally tackled for a loss on Drive #${level}, ending the game with ${score} points. Give a dramatic, disappointed announcer reaction.`);
-            }
-            gameState = STATES.GAMEOVER;
-            playSound('whistle');
-            screenShake = 22;
-        }
-    }
-
-    moveWithCollision(dx, dy) {
-        if (dx !== 0) {
-            let nextX = this.x + dx;
-            if (!checkTileCollision(nextX, this.y, this.radius)) {
-                this.x = nextX;
-            }
-        }
-        if (dy !== 0) {
-            let nextY = this.y + dy;
-            if (!checkTileCollision(this.x, nextY, this.radius)) {
-                this.y = nextY;
-            }
-        }
-    }
-
-    draw(ctx) {
-        if (this.stunTimer > 0) {
-            ctx.globalAlpha = 0.5 + Math.sin(Date.now() * 0.03) * 0.3;
-        }
-        drawFootballPlayer(ctx, this.x, this.y, this.angle, '#aa0000', '#222222', this.number, 'run', this.walkCycle);
-        ctx.globalAlpha = 1.0;
-        
-        if (this.stunTimer > 0) {
-            ctx.fillStyle = '#ffff00';
-            ctx.font = 'bold 20px Impact';
-            ctx.textAlign = 'center';
-            ctx.fillText("*STUNNED*", this.x, this.y - 30);
-        }
-    }
-}
-
-class Football {
-    constructor(x, y, vx, vy) {
-        this.x = x;
-        this.y = y;
-        this.vx = vx;
-        this.vy = vy;
-        this.radius = 8;
-        this.life = 60;
         this.rotation = 0;
+        this.dropCooldown = 0; // Prevent getting stuck dropping multiple times
     }
 
     update() {
+        this.vy += 0.85; // Gravity
         this.x += this.vx;
         this.y += this.vy;
-        this.rotation += 0.45;
-        this.life--;
+        this.rotation += this.vx * 0.08;
+        if (this.dropCooldown > 0) this.dropCooldown--;
 
-        if (checkTileCollision(this.x, this.y, this.radius)) {
-            this.life = 0;
-            createParticles(this.x, this.y, '#664422', 6);
-            return;
+        // Screen edge bounds bounce (in case it rolls off the very edge of the map)
+        if (this.x < 20) this.vx = Math.abs(this.vx);
+        if (this.x > 1900) this.vx = -Math.abs(this.vx);
+
+        let onPlatform = false;
+        // Platform traversal & bounce down ladders/edges
+        for (let plat of PLATFORMS) {
+            if (this.x >= plat.x - 10 && this.x <= plat.x + plat.w + 10) {
+                const progress = (this.x - plat.x) / plat.w;
+                const surfaceY = plat.y + (plat.angle * plat.w * (progress - 0.5));
+
+                if (this.vy >= 0 && this.y >= surfaceY - this.radius && this.y - this.vy <= surfaceY + 20) {
+                    
+                    // If it just fell from a higher tier, redirect momentum based on the slope it lands on
+                    if (this.vy > 5) {
+                        if (plat.angle > 0.01) this.vx = Math.abs(this.vx); // Roll Right
+                        else if (plat.angle < -0.01) this.vx = -Math.abs(this.vx); // Roll Left
+                        else this.vx = -this.vx; // Reverse on flat landing
+                    }
+
+                    this.y = surfaceY - this.radius;
+                    this.vy = 0;
+                    onPlatform = true;
+                    break;
+                }
+            }
         }
 
-        enemies.forEach(e => {
-            if (e.stunTimer <= 0 && Math.hypot(this.x - e.x, this.y - e.y) < e.radius + this.radius) {
-                e.stunTimer = 150;
-                this.life = 0;
-                playSound('tackle');
-                createParticles(e.x, e.y, '#ffffff', 12);
+        // Randomly fall down ladders (Classic Arcade Mechanic)
+        if (onPlatform && this.dropCooldown <= 0) {
+            for (let ladder of LADDERS) {
+                if (Math.abs(this.x - ladder.x) < 15 && Math.abs(this.y - (ladder.topY - this.radius)) < 15) {
+                    if (Math.random() < 0.25) { // 25% chance to drop down a ladder
+                        this.x = ladder.x;  // Snap to center of ladder
+                        this.y += 10;       // Nudge off platform into freefall
+                        this.vy = 2;        // Apply fall velocity
+                        this.dropCooldown = 60;
+                    }
+                    break;
+                }
             }
-        });
+        }
     }
 
     draw(ctx) {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.rotation);
-        ctx.fillStyle = '#8b4513';
-        ctx.beginPath(); ctx.ellipse(0, 0, 12, 6, 0, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(-6, -2, 12, 4);
-        ctx.restore();
+        drawMagmaBarrel(ctx, this.x, this.y, this.rotation);
     }
+}
+
+// Autonomous Spark Wasp Enemy
+class SparkWasp {
+    constructor(x, y) {
+        this.x = x; this.y = y; this.speed = 2.8; this.cycle = Math.random() * Math.PI;
+    }
+    update(player) {
+        this.cycle += 0.1;
+        const dist = Math.hypot(player.x - this.x, (player.y - 25) - this.y);
+        if (dist > 0) {
+            this.x += ((player.x - this.x) / dist) * this.speed;
+            this.y += (((player.y - 25) - this.y) / dist) * (this.speed * 0.6) + Math.sin(this.cycle) * 1.5;
+        }
+    }
+    draw(ctx) { drawSparkWasp(ctx, this.x, this.y, this.cycle); }
+}
+
+let shockwaves = [];
+function createShockwave(x, y, color, maxR = 240) {
+    shockwaves.push({ x, y, r: 10, maxR, color, alpha: 1.0 });
 }
 
 let particles = [];
-function createParticles(x, y, color, count) {
+function createParticles(x, y, color, count = 15) {
     for (let i = 0; i < count; i++) {
-        particles.push({
-            x, y,
-            vx: (Math.random() - 0.5) * 11,
-            vy: (Math.random() - 0.5) * 11,
-            life: 1.0,
-            color,
-            decay: Math.random() * 0.05 + 0.02
-        });
+        const angle = Math.random() * Math.PI * 2; const speed = Math.random() * 10 + 2;
+        particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, color, life: 1.0, decay: Math.random() * 0.05 + 0.02 });
     }
 }
 
-let aiCommentary = "";
-let isGeneratingCommentary = false;
-const apiKey = ""; 
-const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-
-async function fetchAICommentary(promptText) {
-    if (isGeneratingCommentary) return;
-    isGeneratingCommentary = true;
-    aiCommentary = "ANNOUNCER: Waiting for booth review...";
-
-    const payload = {
-        contents: [{ parts: [{ text: promptText }] }],
-        systemInstruction: { parts: [{ text: "You are a high-energy, classic American football color commentator. Provide a single, short, punchy sentence of play-by-play commentary (max 15 words). No quotes, no intro text. Just the hype." }] }
-    };
-
-    try {
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const result = await response.json();
-        if (result.candidates && result.candidates[0] && result.candidates[0].content && result.candidates[0].content.parts) {
-            aiCommentary = "ANNOUNCER: " + result.candidates[0].content.parts[0].text.trim().replace(/"/g, '');
-        } else {
-            aiCommentary = "ANNOUNCER: What a play! Unbelievable!";
-        }
-    } catch (e) {
-        aiCommentary = "ANNOUNCER: We're having technical difficulties in the booth!";
-    }
-    isGeneratingCommentary = false;
-}
-
-const STATES = { MENU: 0, PLAYING: 1, GAMEOVER: 2 };
+// --- GLOBAL GAME STATE ---
+const STATES = { MENU: 0, PLAYING: 1, GAMEOVER: 2, VICTORY: 3 };
 let gameState = STATES.MENU;
 let score = 0;
-let level = 1;
-let dotsCollected = 0;
-let announceText = '';
-let announceTimer = 0;
+let screenShake = 0;
+let debriefingText = "";
 
-let player, enemies, projectiles, screenShake;
+let player = new Player();
+let barrels = [];
+let wasps = [];
+let titanPoundTimer = 0;
+let titanSpawnTimer = 0;
 
-function startGame() {
+function generateDebrief(isVictory) {
+    if (isVictory) {
+        const msgs = ["Exceptional work, Runner. The Titan perches are offline.", "GORR-9 is dismantled. Report for immediate extraction and payday.", "Mission control confirms target neutralized. Outstanding efficiency."];
+        debriefingText = msgs[Math.floor(Math.random() * msgs.length)];
+    } else {
+        const msgs = ["Runner KIA. Recovery drone deployed. Better luck to the next clone.", "Mission failure. You let the Titan crush you.", "Vitals flatlined. The rig has claimed another."];
+        debriefingText = msgs[Math.floor(Math.random() * msgs.length)];
+    }
+}
+
+function startNewGame() {
     initAudio();
-    level = 1;
     score = 0;
-    aiCommentary = "ANNOUNCER: Welcome to the Gridiron Gauntlet! The defense is fired up today!";
-    setupLevel();
-    playSound('whistle');
+    player.reset();
+    initPowerNodes();
+    barrels = [];
+    wasps = [];
+    titanPoundTimer = 0;
+    titanSpawnTimer = 0;
+    debriefingText = "";
     gameState = STATES.PLAYING;
 }
 
-function setupLevel() {
-    buildMaze();
-    dotsCollected = 0;
-    const startX = 12 * TILE_SIZE + TILE_SIZE/2;
-    const startY = 6 * TILE_SIZE + TILE_SIZE/2;
-    
-    if (!player) {
-        player = new Player(startX, startY);
-    } else {
-        player.reset(startX, startY);
-    }
+// --- RENDERING ARENA & HUD ---
+function drawGirders(ctx) {
+    ctx.strokeStyle = '#121724'; ctx.lineWidth = 12; ctx.beginPath();
+    ctx.moveTo(300, 1080); ctx.lineTo(600, 0); ctx.moveTo(1620, 1080); ctx.lineTo(1320, 0); ctx.stroke();
 
-    const enemyBaseSpeed = 3.4 + (level - 1) * 0.35;
-    
-    enemies = [
-        new Enemy(1 * TILE_SIZE + TILE_SIZE/2, 1 * TILE_SIZE + TILE_SIZE/2, '52', enemyBaseSpeed),
-        new Enemy(22 * TILE_SIZE + TILE_SIZE/2, 1 * TILE_SIZE + TILE_SIZE/2, '54', enemyBaseSpeed),
-        new Enemy(1 * TILE_SIZE + TILE_SIZE/2, 11 * TILE_SIZE + TILE_SIZE/2, '55', enemyBaseSpeed),
-        new Enemy(22 * TILE_SIZE + TILE_SIZE/2, 11 * TILE_SIZE + TILE_SIZE/2, '58', enemyBaseSpeed)
-    ];
-
-    if (level >= 3) {
-        enemies.push(new Enemy(12 * TILE_SIZE + TILE_SIZE/2, 1 * TILE_SIZE + TILE_SIZE/2, '90', enemyBaseSpeed * 1.1));
-    }
-
-    projectiles = [];
-    particles = [];
-    screenShake = 0;
-}
-
-function advanceLevel() {
-    level++;
-    score += 500;
-    announceText = `TOUCHDOWN! DRIVE #${level}`;
-    announceTimer = 110;
-    playSound('levelup');
-    fetchAICommentary(`The player just scored a touchdown to complete Drive #${level-1}! Give a hype announcer shout.`);
-    setupLevel();
-}
-
-function update() {
-    Input.poll();
-    const input = Input.getState();
-
-    if (gameState === STATES.MENU || gameState === STATES.GAMEOVER) {
-        if (input.pass) startGame();
-        return;
-    }
-
-    if (announceTimer > 0) announceTimer--;
-
-    player.update(input);
-    enemies.forEach(e => e.update(player));
-    
-    for (let i = projectiles.length - 1; i >= 0; i--) {
-        projectiles[i].update();
-        if (projectiles[i].life <= 0) projectiles.splice(i, 1);
-    }
-
-    for (let i = particles.length - 1; i >= 0; i--) {
-        particles[i].x += particles[i].vx;
-        particles[i].y += particles[i].vy;
-        particles[i].life -= particles[i].decay;
-        if (particles[i].life <= 0) particles.splice(i, 1);
-    }
-}
-
-function drawMaze(ctx) {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 2;
-    for(let i=0; i<MAZE_W; i+=2) {
-        ctx.beginPath(); ctx.moveTo(i*TILE_SIZE, 0); ctx.lineTo(i*TILE_SIZE, MAZE_H*TILE_SIZE); ctx.stroke();
-    }
-
-    for (let y = 0; y < MAZE_H; y++) {
-        for (let x = 0; x < MAZE_W; x++) {
-            if (grid[y][x] === 1) {
-                ctx.fillStyle = '#0a2e16';
-                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                ctx.strokeStyle = '#00ff66';
-                ctx.lineWidth = 3;
-                ctx.strokeRect(x * TILE_SIZE + 2, y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
-            }
+    LADDERS.forEach(ladder => {
+        ctx.fillStyle = '#202838';
+        ctx.fillRect(ladder.x - ladder.w / 2, ladder.topY, 8, ladder.bottomY - ladder.topY);
+        ctx.fillRect(ladder.x + ladder.w / 2 - 8, ladder.topY, 8, ladder.bottomY - ladder.topY);
+        ctx.strokeStyle = '#00f0ff'; ctx.shadowColor = '#00f0ff'; ctx.shadowBlur = 4; ctx.lineWidth = 4;
+        for (let ry = ladder.topY + 18; ry < ladder.bottomY; ry += 24) {
+            ctx.beginPath(); ctx.moveTo(ladder.x - ladder.w / 2, ry); ctx.lineTo(ladder.x + ladder.w / 2, ry); ctx.stroke();
         }
-    }
+        ctx.shadowBlur = 0;
+    });
 
-    collectibles.forEach(c => {
-        if (c.active) {
-            if (c.type === 1) {
-                ctx.fillStyle = '#8b4513';
-                ctx.beginPath(); ctx.ellipse(c.x, c.y, 8, 4, 0, 0, Math.PI*2); ctx.fill();
-            } else if (c.type === 3) {
-                ctx.fillStyle = '#ffd700';
-                ctx.shadowColor = '#ffff00'; ctx.shadowBlur = 10;
-                ctx.beginPath(); ctx.moveTo(c.x - 10, c.y - 10); ctx.lineTo(c.x + 10, c.y - 10); 
-                ctx.lineTo(c.x, c.y + 15); ctx.fill();
-                ctx.shadowBlur = 0;
-            }
+    PLATFORMS.forEach(plat => {
+        ctx.save(); ctx.translate(plat.x + plat.w / 2, plat.y); ctx.rotate(plat.angle);
+        ctx.fillStyle = '#ff6600'; ctx.fillRect(-plat.w / 2, 0, plat.w, plat.h);
+        ctx.strokeStyle = '#1a1e2b'; ctx.lineWidth = 4;
+        for (let gx = -plat.w / 2 + 10; gx < plat.w / 2 - 10; gx += 36) ctx.strokeRect(gx, 4, 30, plat.h - 8);
+        ctx.restore();
+    });
+
+    powerNodes.forEach(node => {
+        if (!node.destroyed) {
+            ctx.fillStyle = '#00ffff'; ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 20;
+            ctx.fillRect(node.x - 18, node.y - 30, 36, 30);
+            ctx.fillStyle = '#ff0055'; ctx.fillRect(node.x - 14, node.y - 26, 28 * (node.hp / 3), 22);
+            ctx.shadowBlur = 0;
+        } else {
+            ctx.fillStyle = '#333'; ctx.fillRect(node.x - 18, node.y - 10, 36, 10);
         }
     });
 }
 
 function drawHUD(ctx) {
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 36px Impact';
-    ctx.textAlign = 'left';
-    ctx.fillText(`SCORE: ${score}`, 30, 50);
-
+    ctx.save();
+    ctx.fillStyle = '#ffffff'; ctx.font = '900 38px "Segoe UI", sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(`SCORE: ${score.toLocaleString()}`, 140, 70);
     ctx.textAlign = 'right';
-    ctx.fillText(`DRIVE: #${level}`, 1920 - 30, 50);
+    ctx.fillText(`RIG RUNNERS: ${player.lives}`, 1780, 70);
 
-    ctx.fillStyle = '#111111';
-    ctx.fillRect(1920 / 2 - 150, 20, 300, 25);
-    ctx.fillStyle = player.staminaDelay > 0 ? '#ffaa00' : '#00f0ff';
-    ctx.fillRect(1920 / 2 - 150 + 2, 22, (player.stamina / 100) * 296, 21);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '20px Impact';
+    const barW = 440;
+    ctx.fillStyle = '#111827'; ctx.fillRect(1920 / 2 - barW / 2, 45, barW, 24);
+    ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2; ctx.strokeRect(1920 / 2 - barW / 2, 45, barW, 24);
+    ctx.fillStyle = player.overdriveMeter >= 100 ? '#ff00ff' : '#00f0ff';
+    ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 15;
+    ctx.fillRect(1920 / 2 - barW / 2 + 2, 47, (player.overdriveMeter / 100) * (barW - 4), 20);
+    
+    ctx.textAlign = 'center'; ctx.font = '800 16px "Segoe UI", sans-serif'; ctx.fillStyle = '#ffffff';
+    ctx.fillText(player.overdriveMeter >= 100 ? "OVERDRIVE EMP READY [RB / Y]" : "KINETIC ENERGY CHARGE", 1920 / 2, 63);
+    ctx.restore();
+}
+
+function drawMenu() {
+    ctx.fillStyle = 'rgba(4, 6, 12, 0.85)'; ctx.fillRect(0, 0, 1920, 1080);
     ctx.textAlign = 'center';
-    ctx.fillText("STAMINA [LB / Y]", 1920 / 2, 40);
+    ctx.fillStyle = '#ff6600'; ctx.font = '900 88px "Segoe UI", sans-serif';
+    ctx.shadowColor = '#ff6600'; ctx.shadowBlur = 30; ctx.fillText("AETHER-RIG: TITAN CLIMB", 1920 / 2, 380); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#00f0ff'; ctx.font = '700 32px "Segoe UI", sans-serif'; ctx.fillText("NEXT-GEN SINGLE-SCREEN LADDER PLATFORMER", 1920 / 2, 450);
+    ctx.fillStyle = '#ffffff'; ctx.font = '700 36px "Segoe UI", sans-serif'; ctx.fillText("PRESS (A) OR (SPACE) TO COMMENCE ASCENT", 1920 / 2, 620);
+    ctx.font = '500 22px "Segoe UI", sans-serif'; ctx.fillStyle = '#94a3b8';
+    ctx.fillText("XBOX CONTROLLER: Left Stick = Move & Climb | (A)/LT = Jump | (X)/RT = Plasma Wrench Strike", 1920 / 2, 880);
+    ctx.fillText("(B)/LB = Magnetic Shockwave | (Y)/RB = Overdrive EMP Blast", 1920 / 2, 920);
+}
 
-    if (aiCommentary) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-        ctx.fillRect(0, 980, 1920, 100);
-        ctx.fillStyle = '#00ff66';
-        ctx.font = '36px Impact';
-        ctx.textAlign = 'center';
-        ctx.fillText(aiCommentary, 1920 / 2, 1040);
+function drawGameOver() {
+    ctx.fillStyle = 'rgba(4, 6, 12, 0.9)'; ctx.fillRect(0, 0, 1920, 1080);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = gameState === STATES.VICTORY ? '#00f0ff' : '#ff0044';
+    ctx.font = '900 86px "Segoe UI", sans-serif';
+    ctx.fillText(gameState === STATES.VICTORY ? "TITAN PERCH DISMANTLED!" : "RUNNER TERMINATED", 1920 / 2, 440);
+    
+    ctx.font = '700 36px "Segoe UI", sans-serif'; ctx.fillStyle = '#ffffff';
+    ctx.fillText(`Final Extraction Score: ${score.toLocaleString()}`, 1920 / 2, 530);
+
+    ctx.fillStyle = '#94a3b8'; ctx.font = 'italic 28px "Segoe UI", sans-serif';
+    ctx.fillText(`Dr. Lin: "${debriefingText}"`, 1920 / 2, 600);
+
+    ctx.fillStyle = '#00f0ff'; ctx.font = '600 30px "Segoe UI", sans-serif';
+    ctx.fillText("Press (A) or (Space) to Climb Again", 1920 / 2, 700);
+}
+
+// --- MAIN LOOP ---
+function update() {
+    Input.poll();
+    const input = Input.getState();
+
+    if (gameState === STATES.MENU) {
+        if (input.jump || input.swing) startNewGame();
+        return;
     }
 
-    if (announceTimer > 0) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(0, 480, 1920, 120);
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 70px Impact';
-        ctx.textAlign = 'center';
-        ctx.fillText(announceText, 1920 / 2, 565);
+    if (gameState === STATES.GAMEOVER || gameState === STATES.VICTORY) {
+        if (input.jump || input.swing) gameState = STATES.MENU;
+        return;
+    }
+
+    player.update(input);
+
+    // Titan Hazards
+    titanSpawnTimer++;
+    if (titanSpawnTimer > 110) {
+        titanSpawnTimer = 0; titanPoundTimer = 25; playSound('boss_slam'); screenShake = 12;
+        barrels.push(new Barrel(760, 160));
+    }
+    if (titanPoundTimer > 0) titanPoundTimer--;
+
+    if (Math.random() < 0.006 && wasps.length < 3) {
+        wasps.push(new SparkWasp(Math.random() > 0.5 ? 180 : 1740, 300));
+    }
+
+    // Process Hazards
+    for (let i = barrels.length - 1; i >= 0; i--) {
+        const b = barrels[i]; b.update();
+        if (Math.hypot(b.x - player.x, b.y - (player.y - 25)) < b.radius + 18 && player.hitFlash <= 0) {
+            player.lives--; player.hitFlash = 60; screenShake = 22; playSound('smash');
+            createParticles(player.x, player.y - 20, '#ff0044', 30); barrels.splice(i, 1);
+            if (player.lives <= 0) { gameState = STATES.GAMEOVER; generateDebrief(false); }
+            continue;
+        }
+        if (b.y > 1050) barrels.splice(i, 1);
+    }
+
+    for (let i = wasps.length - 1; i >= 0; i--) {
+        const w = wasps[i]; w.update(player);
+        if (Math.hypot(w.x - player.x, w.y - (player.y - 25)) < 26 && player.hitFlash <= 0) {
+            player.lives--; player.hitFlash = 60; screenShake = 22; playSound('smash');
+            createParticles(player.x, player.y - 20, '#ff0044', 30); wasps.splice(i, 1);
+            if (player.lives <= 0) { gameState = STATES.GAMEOVER; generateDebrief(false); }
+        }
+    }
+
+    // Process Visuals
+    for (let i = shockwaves.length - 1; i >= 0; i--) {
+        const sw = shockwaves[i]; sw.r += 16; sw.alpha = 1.0 - (sw.r / sw.maxR);
+        if (sw.r >= sw.maxR) shockwaves.splice(i, 1);
+    }
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= p.decay;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    // Victory Check
+    if (powerNodes.every(n => n.destroyed) && gameState !== STATES.VICTORY) {
+        gameState = STATES.VICTORY; generateDebrief(true);
     }
 }
 
@@ -751,68 +782,49 @@ function loop() {
     if (screenShake > 0) {
         ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
         screenShake *= 0.88;
-        if (screenShake < 0.5) screenShake = 0;
     }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if (gameState === STATES.PLAYING || gameState === STATES.GAMEOVER) {
-        drawMaze(ctx);
-        projectiles.forEach(p => p.draw(ctx));
-        enemies.forEach(e => e.draw(ctx));
-        if (gameState !== STATES.GAMEOVER) player.draw(ctx);
-        
-        particles.forEach(pt => {
-            ctx.fillStyle = pt.color; ctx.globalAlpha = pt.life;
-            ctx.fillRect(pt.x, pt.y, 6, 6);
+    if (gameState === STATES.PLAYING || gameState === STATES.GAMEOVER || gameState === STATES.VICTORY) {
+        drawGirders(ctx);
+        drawTitanGorr(ctx, 960, 110, titanPoundTimer);
+
+        barrels.forEach(b => b.draw(ctx));
+        wasps.forEach(w => w.draw(ctx));
+        player.draw(ctx);
+
+        shockwaves.forEach(sw => {
+            ctx.save(); ctx.strokeStyle = sw.color; ctx.globalAlpha = sw.alpha; ctx.lineWidth = 6;
+            ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+        });
+
+        particles.forEach(p => {
+            ctx.fillStyle = p.color; ctx.globalAlpha = p.life; ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
         });
         ctx.globalAlpha = 1.0;
-        
+
         drawHUD(ctx);
     }
 
-    if (gameState === STATES.MENU) {
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 90px Impact';
-        ctx.textAlign = 'center';
-        ctx.fillText("GRIDIRON GAUNTLET", 1920 / 2, 380);
-        ctx.fillStyle = '#00ff66';
-        ctx.font = '45px Impact';
-        ctx.fillText("PLAYBOOK PURSUIT", 1920 / 2, 450);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '30px Impact';
-        ctx.fillText("PRESS (RT) OR (A) TO HIKE THE BALL", 1920 / 2, 600);
-        ctx.fillStyle = '#aaaaaa';
-        ctx.font = '22px Impact';
-        ctx.fillText("LB/Y: Sprint  |  RB/X: Juke Dash  |  LT/B: Stiff Arm  |  RT/A: Bullet Pass", 1920 / 2, 660);
-    } else if (gameState === STATES.GAMEOVER) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-        ctx.fillRect(0, 0, 1920, 1080);
-        ctx.fillStyle = '#ff3333';
-        ctx.font = 'bold 100px Impact';
-        ctx.textAlign = 'center';
-        ctx.fillText("TACKLED FOR A LOSS", 1920 / 2, 430);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '40px Impact';
-        ctx.fillText(`FINAL SCORE: ${score}  •  DRIVES CLEARED: ${level - 1}`, 1920 / 2, 520);
-        ctx.fillText("PRESS (RT) OR (A) TO RESTART DRILL", 1920 / 2, 600);
-    }
+    if (gameState === STATES.MENU) drawMenu();
+    if (gameState === STATES.GAMEOVER || gameState === STATES.VICTORY) drawGameOver();
 
     ctx.restore();
     requestAnimationFrame(loop);
 }
 
+// --- KEYBOARD LISTENERS (PC FALLBACK) ---
 window.addEventListener('keydown', e => {
-    initAudio();
     const k = e.key.toLowerCase();
     if (k === 'w' || e.key === 'ArrowUp') Input.keys.up = true;
     if (k === 's' || e.key === 'ArrowDown') Input.keys.down = true;
     if (k === 'a' || e.key === 'ArrowLeft') Input.keys.left = true;
     if (k === 'd' || e.key === 'ArrowRight') Input.keys.right = true;
-    if (e.code === 'Space') Input.keys.pass = true;
-    if (k === 'q') Input.keys.stiffArm = true;
-    if (k === 'e') Input.keys.juke = true;
-    if (k === 'shift') Input.keys.sprint = true;
+    if (e.code === 'Space') Input.keys.jump = true;
+    if (k === 'j' || k === 'k') Input.keys.swing = true;
+    if (k === 'l' || e.key === 'Shift') Input.keys.wave = true;
+    if (k === 'i' || e.key === 'Enter') Input.keys.emp = true;
 });
 
 window.addEventListener('keyup', e => {
@@ -821,29 +833,10 @@ window.addEventListener('keyup', e => {
     if (k === 's' || e.key === 'ArrowDown') Input.keys.down = false;
     if (k === 'a' || e.key === 'ArrowLeft') Input.keys.left = false;
     if (k === 'd' || e.key === 'ArrowRight') Input.keys.right = false;
-    if (e.code === 'Space') Input.keys.pass = false;
-    if (k === 'q') Input.keys.stiffArm = false;
-    if (k === 'e') Input.keys.juke = false;
-    if (k === 'shift') Input.keys.sprint = false;
-});
-
-window.addEventListener('mousemove', e => {
-    if (Input.pads[0]) return; 
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const mouseX = (e.clientX - rect.left) * scaleX;
-    const mouseY = (e.clientY - rect.top) * scaleY;
-    
-    if (player) {
-        const dx = mouseX - player.x;
-        const dy = mouseY - player.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist > 0) {
-            Input.keys.aimX = dx / dist;
-            Input.keys.aimY = dy / dist;
-        }
-    }
+    if (e.code === 'Space') Input.keys.jump = false;
+    if (k === 'j' || k === 'k') Input.keys.swing = false;
+    if (k === 'l' || e.key === 'Shift') Input.keys.wave = false;
+    if (k === 'i' || e.key === 'Enter') Input.keys.emp = false;
 });
 
 requestAnimationFrame(loop);
