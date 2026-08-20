@@ -3,671 +3,972 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tadpole Swarm: Versus Mode (Ultimate Swarm Swap)</title>
+    <title>Iron & Flesh: Annihilation</title>
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; background: #0a0a0f; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        canvas { display: block; }
+        body, html { 
+            margin: 0; padding: 0; overflow: hidden; 
+            background: #050505; color: white; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            user-select: none;
+        }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        #crt-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 3px 100%;
+            z-index: 10; opacity: 0.4;
+        }
+        
+        /* Terminal UI for Gemini API */
+        #terminal-container {
+            position: absolute;
+            bottom: 5%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            max-width: 900px;
+            background: rgba(10, 20, 10, 0.85);
+            border: 2px solid #0f0;
+            border-radius: 8px;
+            padding: 20px;
+            color: #0f0;
+            font-family: 'Courier New', Courier, monospace;
+            text-shadow: 0 0 5px #0f0;
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.3), inset 0 0 10px rgba(0, 255, 0, 0.2);
+            z-index: 20;
+            display: none;
+            pointer-events: none;
+        }
+        #terminal-container::before {
+            content: "SECURE COMM LINK // INTEL";
+            position: absolute;
+            top: -12px;
+            left: 20px;
+            background: #050505;
+            padding: 0 10px;
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        .blinking-cursor {
+            display: inline-block;
+            width: 10px;
+            height: 1.2em;
+            background-color: #0f0;
+            vertical-align: text-bottom;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
-    
+    <div id="crt-overlay"></div>
+    <div id="terminal-container">
+        <span id="terminal-text"></span><span class="blinking-cursor"></span>
+    </div>
+
     <script>
+        const apiKey = ""; // Gemini API Key injected by environment
         const canvas = document.getElementById('gameCanvas');
+        const terminalEl = document.getElementById('terminal-container');
+        const terminalTextEl = document.getElementById('terminal-text');
         canvas.tabIndex = 0;
-        // Xbox Edge (console browser) only exposes the Gamepad API to the currently
-        // focused document, and gains focus can be lost when loaded inside the hub's
-        // iframe -- pull focus onto this game whenever we get a chance to.
+        
+        // CRITICAL XBOX EDGE FIX: Force focus to canvas to enable Gamepad API
         function ensureGameFocus() { window.focus(); canvas.focus({ preventScroll: true }); }
         ensureGameFocus();
         window.addEventListener('load', ensureGameFocus);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureGameFocus(); });
         window.addEventListener('gamepadconnected', ensureGameFocus);
+        
         const ctx = canvas.getContext('2d');
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-
-        let gameState = 'START'; 
-        let winner = '';
-
-        // Game Variables
-        let nestMaxHealth = 6000; 
-        let nestHealth = nestMaxHealth;
-        let playerBaseMaxHealth = 500;
-        let playerHealth = playerBaseMaxHealth;
+        let width, height;
+        let scale = 1;
         
-        // Separate Energy Pools
-        let p1Energy = 100;
-        let p2Energy = 100;
-        
-        // Map Structures
-        const tadpoleNest = { x: canvas.width - 150, y: 0, width: 150, height: canvas.height };
-        const playerBase = { x: 0, y: 0, width: 60, height: canvas.height };
-        
-        const enemies = [];
-        const units = [];
-        const projectiles = [];
-        const particles = [];
-
-        // Player Tracking for Versus
-        const players = [
-            { 
-                id: 0, // Defender (Human)
-                crosshair: { x: canvas.width / 4, y: canvas.height / 2, radius: 10, speed: 10, color: '#00aaff' }, 
-                buttons: { A: false, LB: false, LT: false, RB: false, RT: false } 
-            },
-            { 
-                id: 1, // Attacker (Swarm)
-                crosshair: { x: canvas.width - 200, y: canvas.height / 2, radius: 10, speed: 10, color: '#ff0055' }, 
-                buttons: { A: false, LB: false, LT: false, RB: false, RT: false } 
-            }
-        ];
-
-        // --- WEB AUDIO API (SYNTHESIZER) ---
-        let audioCtx;
-        let lastHitSoundTime = 0;
-
-        function initAudio() {
-            if (audioCtx) return;
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            audioCtx = new AudioContext();
-            startSynthwaveTrack();
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width * window.devicePixelRatio;
+            canvas.height = height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            scale = Math.min(width / 1920, height / 1080); 
         }
+        window.addEventListener('resize', resize);
+        resize();
 
-        function playDeploySound(isSwarm = false) {
-            if (!audioCtx) return;
-            let now = audioCtx.currentTime;
-            let osc = audioCtx.createOscillator();
-            let gain = audioCtx.createGain();
-            
-            osc.type = isSwarm ? 'triangle' : 'square';
-            osc.frequency.setValueAtTime(isSwarm ? 150 : 300, now);
-            osc.frequency.exponentialRampToValueAtTime(isSwarm ? 50 : 600, now + 0.15);
-            
-            gain.gain.setValueAtTime(0.08, now);
-            gain.gain.linearRampToValueAtTime(0, now + 0.15);
-            
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start(now);
-            osc.stop(now + 0.15);
-        }
+        // --- GEMINI API INTEGRATION ---
+        let terminalState = { visible: false, text: "", isLoading: false };
 
-        function playHitSound() {
-            if (!audioCtx) return;
-            let now = audioCtx.currentTime;
-            if (now - lastHitSoundTime < 0.08) return; 
-            lastHitSoundTime = now;
+        async function fetchGeminiWithBackoff(prompt, retries = 5) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: "You are a military AI generating immersive, gritty in-universe communications for a war between Humans and Chrome Robots." }] }
+            };
+            const delays = [1000, 2000, 4000, 8000, 16000];
 
-            let osc = audioCtx.createOscillator();
-            let gain = audioCtx.createGain();
-            
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(800, now);
-            osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
-            
-            gain.gain.setValueAtTime(0.03, now); 
-            gain.gain.linearRampToValueAtTime(0, now + 0.1);
-            
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start(now);
-            osc.stop(now + 0.1);
-        }
-
-        function startSynthwaveTrack() {
-            const bassNotes = [65.41, 65.41, 130.81, 98.00, 65.41, 155.56, 130.81, 98.00];
-            let step = 0;
-
-            setInterval(() => {
-                if (gameState !== 'PLAYING') return; 
-
-                let now = audioCtx.currentTime;
-                let osc = audioCtx.createOscillator();
-                let gain = audioCtx.createGain();
-                let filter = audioCtx.createBiquadFilter();
-
-                osc.type = 'sawtooth';
-                osc.frequency.value = bassNotes[step % bassNotes.length];
-                
-                filter.type = 'lowpass';
-                filter.frequency.setValueAtTime(600, now);
-                filter.frequency.exponentialRampToValueAtTime(80, now + 0.15);
-
-                gain.gain.setValueAtTime(0.06, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-
-                osc.connect(filter);
-                filter.connect(gain);
-                gain.connect(audioCtx.destination);
-
-                osc.start(now);
-                osc.stop(now + 0.15);
-                step++;
-            }, 180); 
-        }
-
-        function getActiveGamepads() {
-            const gamepads = navigator.getGamepads();
-            let activePads = [];
-            for (let i = 0; i < gamepads.length; i++) {
-                if (gamepads[i] && gamepads[i].mapping === 'standard') {
-                    activePads.push(gamepads[i]);
-                    if (activePads.length === 2) break; 
+            for (let i = 0; i <= retries; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const data = await response.json();
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Transmission garbled. Cannot decrypt.";
+                } catch (e) {
+                    if (i === retries) return "Error: Command uplink severed. Could not establish connection.";
+                    await new Promise(r => setTimeout(r, delays[i]));
                 }
             }
-            return activePads;
         }
+
+        async function triggerGeminiIntel(type) {
+            if (terminalState.isLoading) return;
+            
+            terminalState.visible = true;
+            terminalState.isLoading = true;
+            terminalState.text = "ESTABLISHING SECURE CONNECTION... DECRYPTING SIGNAL...";
+            updateTerminalDOM();
+
+            let prompt = "";
+            if (type === 'PROPAGANDA') {
+                const faction = Math.random() > 0.5 ? "Human Army" : "Chrome Robot Faction";
+                prompt = `Write a short, gritty, 2-sentence military propaganda speech for the ${faction} in a futuristic war. Make it sound like an intercepted radio broadcast.`;
+            } else if (type === 'AAR') {
+                const victor = winner === 1 ? "Human Army" : "Chrome Robot Faction";
+                const loser = winner === 1 ? "Chrome Robot Faction" : "Human Army";
+                const hp = winner === 1 ? Math.floor(p1Base.hp) : Math.floor(p2Base.hp);
+                prompt = `Write a gritty, 3-sentence military After-Action Report (AAR). The ${victor} just annihilated the ${loser}'s base. The victor's base had ${hp} health remaining out of 1000. Use heavy military jargon.`;
+            }
+
+            const responseText = await fetchGeminiWithBackoff(prompt);
+            terminalState.text = responseText;
+            terminalState.isLoading = false;
+            updateTerminalDOM();
+        }
+
+        function updateTerminalDOM() {
+            if (terminalState.visible) {
+                terminalEl.style.display = 'block';
+                terminalTextEl.innerText = terminalState.text;
+            } else {
+                terminalEl.style.display = 'none';
+            }
+        }
+
+        // --- GAMEPAD & INPUT ---
+        const Input = {
+            p1: { x: 400, y: 540, fire: false, heli: false, intel: false, fireJustPressed: false, heliJustPressed: false, intelJustPressed: false },
+            p2: { x: 1520, y: 540, fire: false, heli: false, fireJustPressed: false, heliJustPressed: false },
+            keys: {
+                w: false, a: false, s: false, d: false, space: false, shift: false, c: false,
+                up: false, left: false, down: false, right: false, enter: false, rshift: false
+            }
+        };
+
+        window.addEventListener('keydown', e => {
+            const k = e.key.toLowerCase();
+            if (k === 'w') Input.keys.w = true; if (k === 'a') Input.keys.a = true;
+            if (k === 's') Input.keys.s = true; if (k === 'd') Input.keys.d = true;
+            if (e.code === 'Space') Input.keys.space = true; if (e.code === 'ShiftLeft') Input.keys.shift = true;
+            if (k === 'c') Input.keys.c = true;
+            if (e.key === 'ArrowUp') Input.keys.up = true; if (e.key === 'ArrowLeft') Input.keys.left = true;
+            if (e.key === 'ArrowDown') Input.keys.down = true; if (e.key === 'ArrowRight') Input.keys.right = true;
+            if (e.code === 'Enter') Input.keys.enter = true; if (e.code === 'ShiftRight') Input.keys.rshift = true;
+        });
+        window.addEventListener('keyup', e => {
+            const k = e.key.toLowerCase();
+            if (k === 'w') Input.keys.w = false; if (k === 'a') Input.keys.a = false;
+            if (k === 's') Input.keys.s = false; if (k === 'd') Input.keys.d = false;
+            if (e.code === 'Space') Input.keys.space = false; if (e.code === 'ShiftLeft') Input.keys.shift = false;
+            if (k === 'c') Input.keys.c = false;
+            if (e.key === 'ArrowUp') Input.keys.up = false; if (e.key === 'ArrowLeft') Input.keys.left = false;
+            if (e.key === 'ArrowDown') Input.keys.down = false; if (e.key === 'ArrowRight') Input.keys.right = false;
+            if (e.code === 'Enter') Input.keys.enter = false; if (e.code === 'ShiftRight') Input.keys.rshift = false;
+        });
+
+        function pollInput() {
+            const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+            
+            // P1 Update
+            let p1Fire = Input.keys.space;
+            let p1Heli = Input.keys.shift;
+            let p1Intel = Input.keys.c;
+            let p1dx = (Input.keys.d ? 1 : 0) - (Input.keys.a ? 1 : 0);
+            let p1dy = (Input.keys.s ? 1 : 0) - (Input.keys.w ? 1 : 0);
+
+            if (pads[0]) {
+                if (Math.abs(pads[0].axes[0]) > 0.15) p1dx = pads[0].axes[0];
+                if (Math.abs(pads[0].axes[1]) > 0.15) p1dy = pads[0].axes[1];
+                if (pads[0].buttons[0].pressed || pads[0].buttons[7].pressed) p1Fire = true;
+                if (pads[0].buttons[2].pressed || pads[0].buttons[6].pressed) p1Heli = true;
+                if (pads[0].buttons[3].pressed) p1Intel = true; // Y button
+            }
+            
+            Input.p1.x = Math.max(100, Math.min(1920 - 100, Input.p1.x + p1dx * 12));
+            Input.p1.y = Math.max(50, Math.min(1080 - 50, Input.p1.y + p1dy * 12));
+            
+            Input.p1.fireJustPressed = p1Fire && !Input.p1.fire;
+            Input.p1.heliJustPressed = p1Heli && !Input.p1.heli;
+            Input.p1.intelJustPressed = p1Intel && !Input.p1.intel;
+            
+            Input.p1.fire = p1Fire;
+            Input.p1.heli = p1Heli;
+            Input.p1.intel = p1Intel;
+
+            // P2 Update
+            let p2Fire = Input.keys.enter;
+            let p2Heli = Input.keys.rshift;
+            let p2dx = (Input.keys.right ? 1 : 0) - (Input.keys.left ? 1 : 0);
+            let p2dy = (Input.keys.down ? 1 : 0) - (Input.keys.up ? 1 : 0);
+
+            if (pads[1]) {
+                if (Math.abs(pads[1].axes[0]) > 0.15) p2dx = pads[1].axes[0];
+                if (Math.abs(pads[1].axes[1]) > 0.15) p2dy = pads[1].axes[1];
+                if (pads[1].buttons[0].pressed || pads[1].buttons[7].pressed) p2Fire = true;
+                if (pads[1].buttons[2].pressed || pads[1].buttons[6].pressed) p2Heli = true;
+            } else if (gameState === 'PVE') {
+                // AI Logic for P2 overrides input later
+            } else {
+                Input.p2.x = Math.max(100, Math.min(1920 - 100, Input.p2.x + p2dx * 12));
+                Input.p2.y = Math.max(50, Math.min(1080 - 50, Input.p2.y + p2dy * 12));
+            }
+            
+            Input.p2.fireJustPressed = p2Fire && !Input.p2.fire;
+            Input.p2.heliJustPressed = p2Heli && !Input.p2.heli;
+            Input.p2.fire = p2Fire;
+            Input.p2.heli = p2Heli;
+        }
+
+        // --- MATH & FX ---
+        let particles = [];
+        let screenShake = 0;
+        
+        function addExplosion(x, y, radius, isSmall=false) {
+            screenShake = isSmall ? 5 : 15;
+            for(let i=0; i<(isSmall?15:40); i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * (isSmall?10:20),
+                    vy: (Math.random() - 0.5) * (isSmall?10:20),
+                    life: 1.0, decay: Math.random() * 0.02 + 0.01,
+                    color: Math.random() > 0.5 ? '#ff4400' : (Math.random() > 0.5 ? '#ffff00' : '#444'),
+                    size: Math.random() * (isSmall?5:12) + 3
+                });
+            }
+            if(!isSmall) craters.push({x, y: 950, size: radius * 0.8, life: 1});
+        }
+
+        let craters = [];
+
+        // --- GAME ENTITIES ---
+        class Troop {
+            constructor(x, y, isRobot, isAirdrop = false) {
+                this.x = x; this.y = y;
+                this.isRobot = isRobot;
+                this.hp = 100;
+                this.state = isAirdrop ? 'RAPPELLING' : 'WALKING';
+                this.facing = isRobot ? -1 : 1;
+                this.walkCycle = Math.random() * Math.PI * 2;
+                this.shootCooldown = 0;
+            }
+            update(dt) {
+                if (this.state === 'RAPPELLING') {
+                    this.y += 300 * dt;
+                    if (this.y >= 950) {
+                        this.y = 950;
+                        this.state = 'WALKING';
+                    }
+                    return;
+                }
+                
+                this.walkCycle += 10 * dt;
+                
+                // Find target
+                let target = null;
+                let minDist = 300;
+                
+                for (let t of troops) {
+                    if (t.isRobot !== this.isRobot && t.state !== 'RAPPELLING') {
+                        let d = Math.abs(t.x - this.x);
+                        if (d < minDist && ((this.facing > 0 && t.x > this.x) || (this.facing < 0 && t.x < this.x))) {
+                            minDist = d;
+                            target = t;
+                        }
+                    }
+                }
+                
+                if (target) {
+                    this.state = 'SHOOTING';
+                    this.shootCooldown -= dt;
+                    if (this.shootCooldown <= 0) {
+                        this.shootCooldown = 0.5 + Math.random() * 0.5;
+                        target.hp -= 25;
+                        // Muzzle flash particle
+                        particles.push({
+                            x: this.x + 20 * this.facing, y: this.y - 25,
+                            vx: this.facing * 5, vy: -2, life: 1, decay: 0.1, color: '#ffffaa', size: 3
+                        });
+                    }
+                } else {
+                    this.state = 'WALKING';
+                    this.x += 60 * dt * this.facing;
+                    
+                    // Base damage
+                    if (this.isRobot && this.x <= 200) {
+                        p1Base.hp -= 20 * dt;
+                        this.x = 200;
+                    } else if (!this.isRobot && this.x >= 1720) {
+                        p2Base.hp -= 20 * dt;
+                        this.x = 1720;
+                    }
+                }
+            }
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.scale(this.facing, 1);
+                
+                let wOffset = this.state === 'WALKING' ? Math.sin(this.walkCycle) : 0;
+                
+                if (this.isRobot) {
+                    // Robot Man (Chrome/Red)
+                    ctx.fillStyle = '#667';
+                    ctx.strokeStyle = '#223';
+                    ctx.lineWidth = 2;
+                    
+                    // Back Leg
+                    ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(-10 * wOffset, 0); ctx.stroke(); ctx.fill();
+                    // Front Leg
+                    ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(10 * wOffset, 0); ctx.stroke(); ctx.fill();
+                    
+                    // Torso
+                    ctx.fillStyle = '#889';
+                    ctx.fillRect(-6, -30, 12, 16);
+                    
+                    // Head
+                    ctx.fillStyle = '#445';
+                    ctx.beginPath(); ctx.arc(0, -35, 6, 0, Math.PI*2); ctx.fill();
+                    // Visor
+                    ctx.fillStyle = '#f00';
+                    ctx.shadowBlur = 10; ctx.shadowColor = '#f00';
+                    ctx.fillRect(0, -37, 5, 2);
+                    ctx.shadowBlur = 0;
+
+                    // Gun Arm
+                    ctx.strokeStyle = '#555';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath(); ctx.moveTo(-2, -26); ctx.lineTo(12, -22); ctx.stroke();
+                    ctx.fillStyle = '#111'; ctx.fillRect(10, -25, 18, 4);
+
+                } else {
+                    // Army Man (Olive/Tan)
+                    ctx.fillStyle = '#4A5D23';
+                    
+                    // Back Leg
+                    ctx.strokeStyle = '#3A4D13'; ctx.lineWidth = 4;
+                    ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(-12 * wOffset, 0); ctx.stroke();
+                    // Front Leg
+                    ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(12 * wOffset, 0); ctx.stroke();
+                    
+                    // Torso
+                    ctx.fillRect(-7, -30, 14, 16);
+                    
+                    // Head
+                    ctx.fillStyle = '#E5C298';
+                    ctx.beginPath(); ctx.arc(0, -35, 5, 0, Math.PI*2); ctx.fill();
+                    // Helmet
+                    ctx.fillStyle = '#2A3D03';
+                    ctx.beginPath(); ctx.arc(0, -36, 6, Math.PI, 0); ctx.fill();
+                    ctx.fillRect(-7, -36, 14, 3);
+                    
+                    // Gun Arm
+                    ctx.strokeStyle = '#4A5D23'; ctx.lineWidth = 4;
+                    ctx.beginPath(); ctx.moveTo(-2, -26); ctx.lineTo(10, -22); ctx.stroke();
+                    // Rifle
+                    ctx.fillStyle = '#222';
+                    ctx.fillRect(5, -24, 20, 3);
+                    ctx.fillRect(12, -21, 3, 4); // mag
+                }
+                
+                // Health bar if damaged
+                if (this.hp < 100) {
+                    ctx.fillStyle = 'red'; ctx.fillRect(-10, -50, 20, 3);
+                    ctx.fillStyle = '#0f0'; ctx.fillRect(-10, -50, 20 * (this.hp/100), 3);
+                }
+                
+                ctx.restore();
+            }
+        }
+
+        class Helicopter {
+            constructor(side, targetX) {
+                this.side = side;
+                this.isRobot = side === 2;
+                this.x = side === 1 ? -200 : 2120;
+                this.y = 200 + Math.random() * 100;
+                this.targetX = targetX;
+                this.state = 'INBOUND';
+                this.hoverTimer = 2.0;
+                this.rotorAngle = 0;
+            }
+            update(dt) {
+                this.rotorAngle += 20 * dt;
+                
+                if (this.state === 'INBOUND') {
+                    let dir = this.targetX > this.x ? 1 : -1;
+                    this.x += dir * 400 * dt;
+                    if (Math.abs(this.x - this.targetX) < 10) {
+                        this.x = this.targetX;
+                        this.state = 'HOVERING';
+                    }
+                } else if (this.state === 'HOVERING') {
+                    this.hoverTimer -= dt;
+                    if (this.hoverTimer < 1.0 && this.hoverTimer + dt >= 1.0) {
+                        // Drop troop
+                        troops.push(new Troop(this.x, this.y + 40, this.isRobot, true));
+                    }
+                    if (this.hoverTimer <= 0) {
+                        this.state = 'OUTBOUND';
+                    }
+                } else if (this.state === 'OUTBOUND') {
+                    let dir = this.side === 1 ? -1 : 1;
+                    this.x += dir * 400 * dt;
+                }
+                
+                // Downwash dust
+                if (this.state === 'HOVERING') {
+                    particles.push({
+                        x: this.x + (Math.random()-0.5)*100, y: 940,
+                        vx: (Math.random()-0.5)*30, vy: -5 - Math.random()*10,
+                        life: 1, decay: 0.05, color: '#554433', size: Math.random()*20+10
+                    });
+                }
+            }
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                
+                // Pitch based on movement
+                let pitch = 0;
+                if (this.state === 'INBOUND') pitch = this.side === 1 ? 0.2 : -0.2;
+                if (this.state === 'OUTBOUND') pitch = this.side === 1 ? -0.2 : 0.2;
+                ctx.rotate(pitch);
+                
+                let facing = this.side === 1 ? 1 : -1;
+                ctx.scale(facing, 1);
+                
+                if (this.isRobot) {
+                    // Robot Drone Chopper
+                    ctx.fillStyle = '#2b2b2b';
+                    ctx.beginPath(); ctx.moveTo(40, 0); ctx.lineTo(-40, -10); ctx.lineTo(-60, 0); ctx.lineTo(-40, 20); ctx.lineTo(30, 20); ctx.fill();
+                    
+                    // Glowing Engine
+                    ctx.fillStyle = '#f00'; ctx.shadowBlur = 15; ctx.shadowColor = '#f00';
+                    ctx.fillRect(-50, 0, 10, 5); ctx.shadowBlur = 0;
+                    
+                    // Rotors
+                    ctx.fillStyle = 'rgba(200, 200, 255, 0.5)';
+                    ctx.beginPath(); ctx.ellipse(20, -15, 40 * Math.abs(Math.sin(this.rotorAngle)), 2, 0, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.ellipse(-30, -15, 40 * Math.abs(Math.sin(this.rotorAngle)), 2, 0, 0, Math.PI*2); ctx.fill();
+                    
+                } else {
+                    // Human Chopper
+                    ctx.fillStyle = '#3A4D13';
+                    // Body
+                    ctx.beginPath(); ctx.ellipse(0, 0, 45, 20, 0, 0, Math.PI*2); ctx.fill();
+                    // Tail
+                    ctx.beginPath(); ctx.moveTo(-30, 0); ctx.lineTo(-90, -10); ctx.lineTo(-90, 5); ctx.lineTo(-30, 10); ctx.fill();
+                    // Tail fin
+                    ctx.beginPath(); ctx.moveTo(-85, -10); ctx.lineTo(-95, -30); ctx.lineTo(-80, -30); ctx.fill();
+                    
+                    // Cockpit glass
+                    ctx.fillStyle = '#447799';
+                    ctx.beginPath(); ctx.moveTo(20, -10); ctx.lineTo(40, 0); ctx.lineTo(40, 10); ctx.lineTo(10, 10); ctx.fill();
+                    
+                    // Skids
+                    ctx.strokeStyle = '#111'; ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.moveTo(-20, 15); ctx.lineTo(-20, 30); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(20, 15); ctx.lineTo(20, 30); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-40, 30); ctx.lineTo(40, 30); ctx.stroke();
+                    
+                    // Main Rotor
+                    ctx.fillStyle = 'rgba(50, 50, 50, 0.6)';
+                    ctx.beginPath(); ctx.ellipse(0, -22, 70 * Math.abs(Math.sin(this.rotorAngle)), 3, 0, 0, Math.PI*2); ctx.fill();
+                    ctx.fillRect(-2, -22, 4, 10); // Mast
+                    
+                    // Tail Rotor
+                    ctx.beginPath(); ctx.ellipse(-90, -20, 15 * Math.abs(Math.sin(this.rotorAngle)), 2, Math.PI/2, 0, Math.PI*2); ctx.fill();
+                }
+                
+                // Rope
+                if (this.state === 'HOVERING' && this.hoverTimer > 0) {
+                    ctx.strokeStyle = '#666'; ctx.lineWidth = 2;
+                    let ropeLen = (2.0 - this.hoverTimer) * 400;
+                    if (ropeLen > 750) ropeLen = 750;
+                    ctx.beginPath(); ctx.moveTo(0, 20); ctx.lineTo(0, 20 + ropeLen); ctx.stroke();
+                }
+                
+                ctx.restore();
+            }
+        }
+
+        class Missile {
+            constructor(startX, startY, targetX, targetY, isRobot) {
+                this.x = startX; this.y = startY;
+                this.targetX = targetX; this.targetY = targetY;
+                this.isRobot = isRobot;
+                
+                let dx = targetX - startX;
+                let dy = targetY - startY;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                this.vx = (dx / dist) * 800;
+                this.vy = (dy / dist) * 800;
+            }
+            update(dt) {
+                this.x += this.vx * dt;
+                this.y += this.vy * dt;
+                
+                // Trail
+                particles.push({
+                    x: this.x, y: this.y,
+                    vx: -this.vx*0.1 + (Math.random()-0.5)*10, vy: -this.vy*0.1 + (Math.random()-0.5)*10,
+                    life: 1, decay: 0.05, color: this.isRobot ? '#ff0000' : '#ffaa00', size: 6
+                });
+                
+                let dx = this.targetX - this.x;
+                let dy = this.targetY - this.y;
+                if (dx*this.vx <= 0 && dy*this.vy <= 0) { // Passed target
+                    addExplosion(this.targetX, this.targetY, 120);
+                    // Damage logic
+                    for (let t of troops) {
+                        let dist = Math.sqrt((t.x - this.targetX)**2 + (t.y - this.targetY)**2);
+                        if (dist < 120) t.hp -= 200; // Insta kill
+                    }
+                    if (Math.abs(this.targetX - 100) < 150 && this.targetY > 800) p1Base.hp -= 100;
+                    if (Math.abs(this.targetX - 1820) < 150 && this.targetY > 800) p2Base.hp -= 100;
+                    return true; // Destroyed
+                }
+                return false;
+            }
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(Math.atan2(this.vy, this.vx));
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(-15, -3, 30, 6);
+                ctx.fillStyle = this.isRobot ? '#f00' : '#fa0';
+                ctx.fillRect(10, -3, 5, 6); // tip
+                ctx.restore();
+            }
+        }
+
+        let troops = [];
+        let helicopters = [];
+        let missiles = [];
+        
+        const p1Base = { hp: 1000, maxHp: 1000, tankCooldown: 0, heliCooldown: 0, spawnTimer: 0 };
+        const p2Base = { hp: 1000, maxHp: 1000, tankCooldown: 0, heliCooldown: 0, spawnTimer: 0 };
+        
+        let gameState = 'MENU'; // MENU, PVE, PVP, GAMEOVER
+        let winner = 0;
+        let lastTime = 0;
 
         function resetGame() {
-            nestHealth = nestMaxHealth;
-            playerHealth = playerBaseMaxHealth;
-            p1Energy = 100;
-            p2Energy = 100;
-            enemies.length = 0;
-            units.length = 0;
-            projectiles.length = 0;
-            particles.length = 0;
-            winner = '';
+            troops = []; helicopters = []; missiles = []; particles = []; craters = [];
+            p1Base.hp = 1000; p1Base.tankCooldown = 0; p1Base.heliCooldown = 0; p1Base.spawnTimer = 0;
+            p2Base.hp = 1000; p2Base.tankCooldown = 0; p2Base.heliCooldown = 0; p2Base.spawnTimer = 0;
+            Input.p1.x = 400; Input.p1.y = 540;
+            Input.p2.x = 1520; Input.p2.y = 540;
+            terminalState.visible = false;
+            updateTerminalDOM();
+        }
+
+        // --- DRAWING FUNCTIONS ---
+        function drawBackground() {
+            // Sky
+            let grad = ctx.createLinearGradient(0, 0, 0, 1080);
+            grad.addColorStop(0, '#0a0b10');
+            grad.addColorStop(0.7, '#2a1b15');
+            grad.addColorStop(1, '#000');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 1920, 1080);
             
-            players[0].crosshair.x = canvas.width / 4;
-            players[0].crosshair.y = canvas.height / 2;
-            players[1].crosshair.x = canvas.width - 200;
-            players[1].crosshair.y = canvas.height / 2;
+            // Distant Mountains
+            ctx.fillStyle = '#111';
+            ctx.beginPath();
+            ctx.moveTo(0, 950);
+            for(let i=0; i<=1920; i+=100) ctx.lineTo(i, 700 - Math.sin(i*0.01)*50 - Math.cos(i*0.023)*30);
+            ctx.lineTo(1920, 950); ctx.fill();
 
-            gameState = 'PLAYING';
-        }
-
-        // --- P1: HUMAN UNIT FACTORIES ---
-        function spawnSoldier(x, y) {
-            units.push({ 
-                type: 'soldier', x: x, y: y, hp: 10, maxHp: 10, speed: 0.8, 
-                range: 250, prefDist: 200 + Math.random() * 80,
-                damage: 4, fireRate: 15, fireCooldown: 0, color: '#4CAF50', size: 5, animTimer: 0 
-            });
-        }
-
-        function spawnTank(x, y) {
-            units.push({ 
-                type: 'tank', x: x, y: y, hp: 100, maxHp: 100, speed: 0.4, 
-                range: 350, prefDist: 300 + Math.random() * 50,
-                damage: 18, fireRate: 45, fireCooldown: 0, color: '#2E7D32', size: 12, animTimer: 0
-            });
-        }
-
-        function spawnBunker(x, y) {
-            units.push({ 
-                type: 'bunker', x: x, y: y, hp: 300, maxHp: 300, speed: 0, 
-                range: 300, prefDist: 0, damage: 8, fireRate: 6, fireCooldown: 0, color: '#757575', size: 16 
-            });
-        }
-
-        // --- P2: MUTANT SPAWNER (REBALANCED) ---
-        function spawnSpecificEnemy(type, y) {
-            let enemy = { x: tadpoleNest.x - 10, y: y, wobble: Math.random() * Math.PI * 2, attackCooldown: 0, jumpTimer: 0 };
+            // Ground
+            ctx.fillStyle = '#1c1815';
+            ctx.fillRect(0, 950, 1920, 130);
+            ctx.fillStyle = '#2c251f';
+            ctx.fillRect(0, 955, 1920, 125);
             
-            if (type === 'frog') {
-                // Nerfed from 400 to 200 HP (6.6 HP/Energy)
-                enemy.type = 'frog'; enemy.hp = 200; enemy.radius = 18; enemy.speed = 0; enemy.maxSpeed = 4.5;
-            } else if (type === 'froglet') {
-                // Nerfed from 50 to 20 HP 
-                enemy.type = 'froglet'; enemy.hp = 20; enemy.radius = 7; enemy.speed = 3.5; 
-            } else if (type === 'shielded') {
-                // Nerfed from 100 to 60 HP (6.0 HP/Energy)
-                enemy.type = 'shielded'; enemy.hp = 60; enemy.radius = 6; enemy.speed = 1.0;
+            // Craters
+            for (let c of craters) {
+                ctx.fillStyle = `rgba(10, 8, 5, ${c.life})`;
+                ctx.beginPath(); ctx.ellipse(c.x, c.y, c.size, c.size*0.3, 0, 0, Math.PI*2); ctx.fill();
+                c.life -= 0.0005;
+            }
+            craters = craters.filter(c => c.life > 0);
+        }
+
+        function drawTank(x, y, facing, isRobot, aimX, aimY) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(facing, 1);
+            
+            // Aim angle
+            let actualAimX = facing === 1 ? aimX : (x - (aimX - x));
+            let dx = actualAimX - x;
+            let dy = aimY - y;
+            let angle = Math.atan2(dy, dx);
+            if (angle > 0) angle = 0; // Don't aim into ground
+            
+            if (isRobot) {
+                // Robot Tank
+                ctx.save(); ctx.translate(0, -30); ctx.rotate(angle);
+                ctx.fillStyle = '#445'; ctx.fillRect(0, -10, 100, 20); // Barrel
+                ctx.fillStyle = '#556'; ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#f00'; ctx.shadowBlur = 10; ctx.shadowColor = '#f00'; ctx.beginPath(); ctx.arc(10, -5, 5, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+                ctx.restore();
+                
+                ctx.fillStyle = '#223';
+                ctx.beginPath(); ctx.moveTo(-60, -20); ctx.lineTo(60, -10); ctx.lineTo(40, 10); ctx.lineTo(-40, 10); ctx.fill();
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
+                ctx.beginPath(); ctx.ellipse(0, 15, 50, 5, 0, 0, Math.PI*2); ctx.fill();
             } else {
-                // Nerfed from 45 to 12 HP (6.0 HP/Energy)
-                enemy.type = 'basic'; enemy.hp = 12; enemy.radius = 6; enemy.speed = 0.8 + Math.random();
+                // Human Tank
+                ctx.save(); ctx.translate(10, -35); ctx.rotate(angle);
+                ctx.fillStyle = '#2A3D03'; ctx.fillRect(0, -6, 110, 12);
+                ctx.fillStyle = '#3A4D13'; ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI, true); ctx.fill(); ctx.fillRect(-30, 0, 60, 10);
+                ctx.restore();
+                
+                ctx.fillStyle = '#4A5D23';
+                ctx.beginPath(); ctx.moveTo(-70, -25); ctx.lineTo(60, -25); ctx.lineTo(80, -5); ctx.lineTo(-80, -5); ctx.fill();
+                
+                ctx.fillStyle = '#111';
+                ctx.beginPath(); ctx.roundRect(-80, -5, 160, 25, 10); ctx.fill();
+                ctx.fillStyle = '#333';
+                for(let i=-60; i<=60; i+=25) { ctx.beginPath(); ctx.arc(i, 7, 8, 0, Math.PI*2); ctx.fill(); }
             }
-            enemies.push(enemy);
+            ctx.restore();
         }
 
-        function createExplosion(x, y, color, sizeMultiplier = 1) {
-            for(let i=0; i<6; i++){
-                particles.push({
-                    x: x, y: y, vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5,
-                    life: 12, color: color, size: (Math.random() * 3 + 1) * sizeMultiplier
-                });
-            }
-        }
-
-        function drawTextCentered(text, yOffset, size, color) {
-            ctx.fillStyle = color; ctx.font = `bold ${size}px Arial`;
-            ctx.textAlign = 'center'; ctx.fillText(text, canvas.width / 2, canvas.height / 2 + yOffset);
-            ctx.textAlign = 'left';
-        }
-
-        function gameLoop() {
-            const pads = getActiveGamepads();
+        function drawBase(x, y, isRobot, hp, maxHp) {
+            ctx.save();
+            ctx.translate(x, y);
             
-            players.forEach((player, index) => {
-                const pad = pads[index];
-                if (!pad) return; 
-
-                // Start / Restart [A]
-                if (pad.buttons[0].pressed && !player.buttons.A) {
-                    initAudio(); 
-                    if (gameState === 'START' || gameState === 'GAME_OVER') resetGame();
-                    player.buttons.A = true;
-                } else if (!pad.buttons[0].pressed) {
-                    player.buttons.A = false;
-                }
-
-                if (gameState === 'PLAYING') {
-                    const lx = pad.axes[0]; 
-                    const ly = pad.axes[1]; 
-                    const deadzone = 0.2;
-
-                    if (Math.abs(lx) > deadzone) player.crosshair.x += lx * player.crosshair.speed;
-                    if (Math.abs(ly) > deadzone) player.crosshair.y += ly * player.crosshair.speed;
-
-                    player.crosshair.y = Math.max(10, Math.min(canvas.height - 10, player.crosshair.y));
-
-                    // --- PLAYER 1 (COMMAND) LOGIC ---
-                    if (index === 0) {
-                        player.crosshair.x = Math.max(playerBase.width + 10, Math.min(canvas.width / 2 - 50, player.crosshair.x));
-
-                        // [LB] Deploy Paratroopers (Cost 25)
-                        if (pad.buttons[4].pressed && !player.buttons.LB) {
-                            if (p1Energy >= 25) {
-                                p1Energy -= 25;
-                                spawnSoldier(player.crosshair.x, player.crosshair.y - 15);
-                                spawnSoldier(player.crosshair.x - 12, player.crosshair.y + 12);
-                                spawnSoldier(player.crosshair.x + 12, player.crosshair.y + 12);
-                                playDeploySound();
-                            }
-                            player.buttons.LB = true;
-                        } else if (!pad.buttons[4].pressed) player.buttons.LB = false;
-
-                        // [LT] Tank Platoon (Cost 60)
-                        if (pad.buttons[6].pressed && !player.buttons.LT) {
-                            if (p1Energy >= 60) {
-                                p1Energy -= 60;
-                                spawnTank(player.crosshair.x, player.crosshair.y);
-                                for(let i=0; i<4; i++) spawnSoldier(player.crosshair.x - 25 - (Math.random()*15), player.crosshair.y - 25 + (i*18));
-                                playDeploySound();
-                            }
-                            player.buttons.LT = true;
-                        } else if (!pad.buttons[6].pressed) player.buttons.LT = false;
-
-                        // [RB] Heavy Bunker (Cost 90)
-                        if (pad.buttons[5].pressed && !player.buttons.RB) {
-                            if (p1Energy >= 90) {
-                                p1Energy -= 90;
-                                spawnBunker(player.crosshair.x, player.crosshair.y);
-                                playDeploySound();
-                            }
-                            player.buttons.RB = true;
-                        } else if (!pad.buttons[5].pressed) player.buttons.RB = false;
-                    }
-                    
-                    // --- PLAYER 2 (SWARM) LOGIC ---
-                    else if (index === 1) {
-                        player.crosshair.x = Math.max(tadpoleNest.x - 100, Math.min(canvas.width - 10, player.crosshair.x));
-
-                        // [LB] Basic Tadpole x5 (Cost 10)
-                        if (pad.buttons[4].pressed && !player.buttons.LB) {
-                            if (p2Energy >= 10) { 
-                                p2Energy -= 10; 
-                                for(let i=0; i<5; i++) spawnSpecificEnemy('basic', player.crosshair.y + (Math.random()*60-30));
-                                playDeploySound(true); 
-                            }
-                            player.buttons.LB = true;
-                        } else if (!pad.buttons[4].pressed) player.buttons.LB = false;
-
-                        // [LT] Shielded Mutant x2 (Cost 20)
-                        if (pad.buttons[6].pressed && !player.buttons.LT) {
-                            if (p2Energy >= 20) { 
-                                p2Energy -= 20; 
-                                for(let i=0; i<2; i++) spawnSpecificEnemy('shielded', player.crosshair.y + (Math.random()*60-30));
-                                playDeploySound(true); 
-                            }
-                            player.buttons.LT = true;
-                        } else if (!pad.buttons[6].pressed) player.buttons.LT = false;
-
-                        // [RB] Giant Boss Frog x1 (Cost 30)
-                        if (pad.buttons[5].pressed && !player.buttons.RB) {
-                            if (p2Energy >= 30) { 
-                                p2Energy -= 30; 
-                                spawnSpecificEnemy('frog', player.crosshair.y + (Math.random()*40-20));
-                                playDeploySound(true); 
-                            }
-                            player.buttons.RB = true;
-                        } else if (!pad.buttons[5].pressed) player.buttons.RB = false;
-
-                        // [RT] Speed Froglet x5 (Cost Buffed from 90 to 40)
-                        if (pad.buttons[7].pressed && !player.buttons.RT) {
-                            if (p2Energy >= 40) { 
-                                p2Energy -= 40; 
-                                for(let i=0; i<5; i++) spawnSpecificEnemy('froglet', player.crosshair.y + (Math.random()*60-30));
-                                playDeploySound(true); 
-                            }
-                            player.buttons.RT = true;
-                        } else if (!pad.buttons[7].pressed) player.buttons.RT = false;
-                    }
-                }
-            });
-
-            // --- UPDATE LOGIC ---
-            if (gameState === 'PLAYING') {
-                p1Energy = Math.min(100, p1Energy + 0.22); 
-                p2Energy = Math.min(100, p2Energy + 0.22); 
-
-                // 1. Update Units (P1)
-                for (let i = units.length - 1; i >= 0; i--) {
-                    let u = units[i];
-                    if (u.fireCooldown > 0) u.fireCooldown--;
-
-                    let target = null;
-                    let closestDist = u.range;
-
-                    for (let e of enemies) {
-                        let dist = Math.hypot(u.x - e.x, u.y - e.y);
-                        if (dist < closestDist) { closestDist = dist; target = e; }
-                    }
-
-                    if (!target && (tadpoleNest.x - u.x) < u.range) target = tadpoleNest;
-
-                    let isMoving = false;
-
-                    if (target) {
-                        if (u.fireCooldown <= 0) {
-                            let targetY = target === tadpoleNest ? u.y + (Math.random()*20-10) : target.y;
-                            let angle = Math.atan2(targetY - u.y, (target === tadpoleNest ? tadpoleNest.x : target.x) - u.x);
-                            
-                            projectiles.push({
-                                x: u.x + (u.type === 'tank' ? u.size : 5), y: u.y,
-                                vx: Math.cos(angle) * 20, vy: Math.sin(angle) * 20,
-                                damage: u.damage, isExplosive: u.type === 'tank'
-                            });
-                            u.fireCooldown = u.fireRate;
-                        }
-                    } else if (u.speed > 0 && (tadpoleNest.x - u.x) > u.prefDist) {
-                        u.x += u.speed; isMoving = true;
-                    }
-
-                    if (isMoving) u.animTimer += (u.type === 'soldier' ? 0.4 : 0.2);
-                    else u.animTimer = 0; 
-
-                    if (u.hp <= 0) {
-                        createExplosion(u.x, u.y, '#ff8800', 1.5);
-                        units.splice(i, 1);
-                    }
-                }
-
-                // 2. Update Projectiles
-                for (let i = projectiles.length - 1; i >= 0; i--) {
-                    let p = projectiles[i];
-                    p.x += p.vx; p.y += p.vy;
-
-                    let hit = false;
-                    if (p.x > tadpoleNest.x) {
-                        nestHealth -= p.damage;
-                        createExplosion(p.x, p.y, '#88ffaa', 1.0);
-                        playHitSound();
-                        hit = true;
-                    } else {
-                        for (let j = enemies.length - 1; j >= 0; j--) {
-                            let e = enemies[j];
-                            if (Math.hypot(p.x - e.x, p.y - e.y) < e.radius + 3) {
-                                e.hp -= p.damage;
-                                hit = true;
-                                if (p.isExplosive) createExplosion(p.x, p.y, '#ff4400', 1.5);
-                                else createExplosion(p.x, p.y, e.type === 'shielded' && e.hp > 0 ? '#00ffff' : '#88ff88', 0.5);
-                                
-                                playHitSound();
-                                if (e.hp <= 0) enemies.splice(j, 1);
-                                break;
-                            }
-                        }
-                    }
-                    if (hit || p.x > canvas.width || p.x < 0 || p.y < 0 || p.y > canvas.height) projectiles.splice(i, 1);
-                }
-                
-                // 3. Update Enemies (P2)
-                for (let i = enemies.length - 1; i >= 0; i--) {
-                    let e = enemies[i];
-                    let aggroUnit = null;
-                    let closestDist = e.type === 'froglet' ? 350 : 250; 
-                    let eatingUnit = null;
-
-                    for (let u of units) {
-                        let dist = Math.hypot(u.x - e.x, u.y - e.y);
-                        if (dist < e.radius + u.size + 2) { eatingUnit = u; break; }
-                        if (dist < closestDist) { closestDist = dist; aggroUnit = u; }
-                    }
-
-                    if (e.type === 'frog') {
-                        e.jumpTimer++;
-                        if (e.jumpTimer > 90) {
-                            e.speed = e.maxSpeed; 
-                            if (e.jumpTimer > 110) e.jumpTimer = 0; 
-                        } else e.speed *= 0.85; 
-                    }
-
-                    if (eatingUnit) {
-                        if (e.attackCooldown <= 0) {
-                            eatingUnit.hp -= (e.type === 'frog' ? 25 : (e.type === 'froglet' ? 4 : 2));
-                            e.attackCooldown = e.type === 'frog' ? 30 : 8;
-                            createExplosion(e.x - 5, e.y, '#ff0000', 0.5);
-                        } else e.attackCooldown--;
-                    } else if (aggroUnit) {
-                        let angle = Math.atan2(aggroUnit.y - e.y, aggroUnit.x - e.x);
-                        e.x += Math.cos(angle) * e.speed; e.y += Math.sin(angle) * e.speed;
-                        if (e.type !== 'frog') {
-                            e.x += Math.cos(e.wobble) * 0.5; e.y += Math.sin(e.wobble) * 0.5; e.wobble += 0.3;
-                        }
-                    } else {
-                        e.x -= e.speed;
-                        if (e.type !== 'frog') { e.y += Math.sin(e.wobble) * 1.5; e.wobble += 0.2; }
-                    }
-                    
-                    if (e.x < playerBase.width) {
-                        enemies.splice(i, 1);
-                        playerHealth -= (e.type === 'frog' ? 50 : (e.type === 'shielded' ? 10 : 5)); 
-                        if (playerHealth <= 0) {
-                            playerHealth = 0;
-                            winner = 'PLAYER 2 (SWARM)';
-                            gameState = 'GAME_OVER';
-                        }
-                    }
-                }
-
-                // 4. Update Particles
-                for (let i = particles.length - 1; i >= 0; i--) {
-                    particles[i].x += particles[i].vx; particles[i].y += particles[i].vy;
-                    particles[i].life--;
-                    if (particles[i].life <= 0) particles.splice(i, 1);
-                }
-
-                if (nestHealth <= 0) {
-                    winner = 'PLAYER 1 (COMMAND)';
-                    gameState = 'GAME_OVER';
-                }
+            if (isRobot) {
+                ctx.fillStyle = '#111'; ctx.fillRect(-80, -150, 160, 150);
+                ctx.fillStyle = '#333'; ctx.fillRect(-60, -200, 120, 50);
+                ctx.fillStyle = '#f00'; ctx.shadowBlur = 20; ctx.shadowColor = '#f00';
+                ctx.beginPath(); ctx.arc(0, -100, 30, 0, Math.PI*2); ctx.fill();
+                ctx.shadowBlur = 0;
+            } else {
+                ctx.fillStyle = '#3A4D13'; ctx.fillRect(-80, -120, 160, 120);
+                ctx.fillStyle = '#2A3D03';
+                ctx.beginPath(); ctx.moveTo(-100, -120); ctx.lineTo(100, -120); ctx.lineTo(70, -180); ctx.lineTo(-70, -180); ctx.fill();
+                ctx.strokeStyle = '#888'; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(0, -180); ctx.lineTo(0, -250); ctx.stroke();
+                ctx.fillStyle = '#44f'; ctx.fillRect(0, -250, 40, 25);
             }
-
-            // --- DRAWING ---
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            if (gameState === 'START') {
-                drawTextCentered("TADPOLE SWARM: VERSUS MODE", -60, 50, "#ff00aa");
-                drawTextCentered("P1 (Left) Defends the Base. P2 (Right) Controls the Swarm.", 0, 24, "white");
-                drawTextCentered(pads.length === 2 ? "Press [A] to Start" : `Connect 2 Xbox Controllers to Play (${pads.length}/2 Connected)`, 60, 20, pads.length === 2 ? "#00aaff" : "yellow");
-            } 
-            else if (gameState === 'GAME_OVER') {
-                drawTextCentered(`${winner} WINS!`, -40, 60, winner.includes('SWARM') ? '#ff4444' : '#44ff44');
-                drawTextCentered("Press [A] to Rematch", 40, 20, "#00aaff");
-            }
-            else if (gameState === 'PLAYING') {
-                // Center Line
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'; ctx.beginPath(); ctx.moveTo(canvas.width/2, 0); ctx.lineTo(canvas.width/2, canvas.height); ctx.stroke();
-
-                // Draw Player Base
-                ctx.fillStyle = '#223'; ctx.fillRect(playerBase.x, playerBase.y, playerBase.width, playerBase.height);
-                ctx.fillStyle = '#445'; for(let i=0; i<canvas.height; i+=40) ctx.fillRect(playerBase.width - 10, i, 10, 20); 
-                ctx.fillStyle = `rgba(255, 0, 0, ${1 - (playerHealth/playerBaseMaxHealth)})`; ctx.fillRect(playerBase.width, 0, 20, canvas.height);
-
-                // Draw Mutant Nest
-                ctx.fillStyle = '#0a2e15'; ctx.fillRect(tadpoleNest.x, tadpoleNest.y, tadpoleNest.width, tadpoleNest.height);
-                for(let i=0; i<15; i++) {
-                    ctx.fillStyle = `rgba(10, 60, 20, ${0.3 + Math.sin(Date.now()*0.001 + i)*0.2})`;
-                    ctx.beginPath(); ctx.arc(tadpoleNest.x + (i%3)*50, i*80, 60, 0, Math.PI*2); ctx.fill();
-                }
-
-                // Draw Units 
-                for (let u of units) {
-                    if(u.type === 'soldier') {
-                        let legOffset = Math.sin(u.animTimer) * 4;
-                        ctx.fillStyle = '#1b5e20';
-                        ctx.beginPath(); ctx.ellipse(u.x - 1 + legOffset, u.y - 4, 3, 2, 0, 0, Math.PI*2); ctx.fill(); 
-                        ctx.beginPath(); ctx.ellipse(u.x - 1 - legOffset, u.y + 4, 3, 2, 0, 0, Math.PI*2); ctx.fill(); 
-                        ctx.fillStyle = u.color;
-                        ctx.beginPath(); ctx.ellipse(u.x, u.y, 4, 6, 0, 0, Math.PI*2); ctx.fill();
-                        ctx.fillStyle = '#111'; ctx.fillRect(u.x, u.y - 1, 12, 2); 
-                        ctx.fillStyle = '#2e7d32'; ctx.beginPath(); ctx.arc(u.x, u.y, 4, 0, Math.PI*2); ctx.fill();
-                        if (u.fireCooldown > u.fireRate - 3) {
-                            ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(u.x + 13, u.y, 3, 0, Math.PI*2); ctx.fill();
-                        }
-                    } else if (u.type === 'tank') {
-                        let treadOffset = (u.animTimer * 5) % 8; 
-                        ctx.fillStyle = '#111'; ctx.fillRect(u.x - u.size - 2, u.y - u.size, u.size*2 + 4, u.size*2);
-                        ctx.fillStyle = '#333';
-                        for(let t = 0; t < u.size*2; t+=4) ctx.fillRect(u.x - u.size + t - treadOffset, u.y - u.size, 2, u.size*2);
-                        ctx.fillStyle = u.color; ctx.fillRect(u.x - u.size, u.y - u.size + 2, u.size*2, u.size*2 - 4);
-                        ctx.fillStyle = '#1b5e20'; ctx.beginPath(); ctx.arc(u.x, u.y, u.size-3, 0, Math.PI*2); ctx.fill();
-                        ctx.fillStyle = '#111'; ctx.fillRect(u.x, u.y - 1.5, u.size + 12, 4);
-                        if (u.fireCooldown > u.fireRate - 4) {
-                            ctx.fillStyle = '#ff6600'; ctx.beginPath(); ctx.arc(u.x + u.size + 14, u.y, 6, 0, Math.PI*2); ctx.fill();
-                        }
-                    } else if (u.type === 'bunker') {
-                        ctx.fillStyle = '#757575';
-                        ctx.beginPath(); ctx.arc(u.x, u.y, u.size, Math.PI/2, Math.PI*1.5, true); ctx.fill();
-                        ctx.fillRect(u.x, u.y - u.size, u.size+5, u.size*2);
-                        ctx.fillStyle = '#111'; ctx.fillRect(u.x+5, u.y-2, 10, 4); 
-                        if (u.fireCooldown > u.fireRate - 2) {
-                            ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(u.x + 16, u.y, 4, 0, Math.PI*2); ctx.fill();
-                        }
-                    }
-                    if(u.hp < u.maxHp) {
-                        ctx.fillStyle = 'red'; ctx.fillRect(u.x - u.size, u.y - u.size - 6, u.size*2, 2);
-                        ctx.fillStyle = 'green'; ctx.fillRect(u.x - u.size, u.y - u.size - 6, (u.size*2) * (u.hp/u.maxHp), 2);
-                    }
-                }
-
-                // Draw Projectiles
-                for (let p of projectiles) {
-                    ctx.strokeStyle = p.isExplosive ? '#ffaa00' : '#ffff55'; ctx.lineWidth = p.isExplosive ? 3 : 1.5;
-                    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.7, p.y - p.vy * 0.7); ctx.stroke();
-                }
-
-                // Draw Enemies
-                for (let e of enemies) {
-                    if (e.type === 'shielded') {
-                        ctx.fillStyle = `rgba(0, 255, 255, ${0.1 + (e.hp/60)*0.2})`;
-                        ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 4, 0, Math.PI*2); ctx.fill();
-                        ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 1; ctx.stroke();
-                    }
-                    if (e.type === 'froglet' || e.type === 'frog') {
-                        ctx.strokeStyle = '#007733'; ctx.lineWidth = e.type === 'frog' ? 4 : 2;
-                        let legExt = e.type === 'frog' && e.jumpTimer > 90 ? 15 : 5; 
-                        ctx.beginPath(); 
-                        ctx.moveTo(e.x, e.y - e.radius); ctx.lineTo(e.x + legExt, e.y - e.radius - 5);
-                        ctx.moveTo(e.x, e.y + e.radius); ctx.lineTo(e.x + legExt, e.y + e.radius + 5);
-                        ctx.stroke();
-                    } else {
-                        ctx.strokeStyle = '#00aa55'; ctx.lineWidth = 2;
-                        ctx.beginPath(); ctx.moveTo(e.x, e.y);
-                        ctx.lineTo(e.x + e.radius + 4, e.y + Math.sin(e.wobble) * 4);
-                        ctx.lineTo(e.x + e.radius + 8, e.y + Math.sin(e.wobble - 1) * 6); ctx.stroke();
-                    }
-                    ctx.fillStyle = e.type === 'frog' ? '#006622' : '#00ff88';
-                    ctx.beginPath(); ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2); ctx.fill();
-                    let eyeOffset = e.type === 'frog' ? 4 : 2;
-                    ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(e.x - eyeOffset, e.y - eyeOffset, eyeOffset, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(e.x - (eyeOffset+0.5), e.y - eyeOffset, eyeOffset/2, 0, Math.PI * 2); ctx.fill();
-                    
-                    if(e.type === 'frog') {
-                        ctx.fillStyle = 'red'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, e.radius*2, 3);
-                        ctx.fillStyle = 'green'; ctx.fillRect(e.x - e.radius, e.y - e.radius - 8, (e.radius*2) * (e.hp/200), 3); 
-                    }
-                }
-
-                // Particles
-                for (let p of particles) {
-                    ctx.fillStyle = p.color; ctx.globalAlpha = p.life / 12;
-                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
-                }
-                ctx.globalAlpha = 1.0;
-
-                // Draw Crosshairs
-                players.forEach(player => {
-                    if (pads[player.id]) {
-                        ctx.strokeStyle = player.crosshair.color; 
-                        ctx.lineWidth = 2;
-                        ctx.beginPath(); 
-                        ctx.arc(player.crosshair.x, player.crosshair.y, player.crosshair.radius, 0, Math.PI * 2);
-                        ctx.moveTo(player.crosshair.x - player.crosshair.radius - 4, player.crosshair.y); 
-                        ctx.lineTo(player.crosshair.x + player.crosshair.radius + 4, player.crosshair.y);
-                        ctx.moveTo(player.crosshair.x, player.crosshair.y - player.crosshair.radius - 4); 
-                        ctx.lineTo(player.crosshair.x, player.crosshair.y + player.crosshair.radius + 4);
-                        ctx.stroke();
-                    }
-                });
-
-                // --- UI FOR P1 (COMMAND) ---
-                ctx.fillStyle = 'white'; ctx.font = 'bold 20px Arial';
-                ctx.fillText(`P1 (COMMAND)`, 80, 30);
-                
-                ctx.fillStyle = playerHealth > (playerBaseMaxHealth*0.3) ? '#44ff44' : '#ff4444'; 
-                ctx.fillText(`Base HP: ${Math.max(0, playerHealth)}/${playerBaseMaxHealth}`, 80, 55);
-
-                ctx.fillStyle = 'white'; ctx.font = '14px Arial'; ctx.fillText("Energy:", 80, 85);
-                ctx.strokeStyle = 'white'; ctx.strokeRect(140, 72, 150, 15);
-                ctx.fillStyle = '#00aaff'; ctx.fillRect(142, 74, 146 * (p1Energy/100), 11);
-
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(80, 100, 240, 85);
-                ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Arial'; ctx.fillText("Deploy Units:", 90, 115);
-                ctx.fillStyle = p1Energy >= 25 ? '#44ff44' : '#555'; ctx.fillText(`[LB] 3x Paratroopers (-25)`, 90, 135);
-                ctx.fillStyle = p1Energy >= 60 ? '#44ff44' : '#555'; ctx.fillText(`[LT] Tank Platoon (-60)`, 90, 155);
-                ctx.fillStyle = p1Energy >= 90 ? '#ff4444' : '#555'; ctx.fillText(`[RB] Heavy Bunker (-90)`, 90, 175);
-
-                // --- UI FOR P2 (SWARM) ---
-                let p2Offset = canvas.width - 320;
-                ctx.fillStyle = 'white'; ctx.font = 'bold 20px Arial';
-                ctx.fillText(`P2 (SWARM)`, p2Offset, 30);
-                
-                ctx.fillStyle = nestHealth > (nestMaxHealth*0.3) ? '#ff00aa' : '#ff4444'; 
-                ctx.fillText(`Nest HP: ${Math.max(0, nestHealth)}/${nestMaxHealth}`, p2Offset, 55);
-
-                ctx.fillStyle = 'white'; ctx.font = '14px Arial'; ctx.fillText("Bio-Energy:", p2Offset, 85);
-                ctx.strokeStyle = 'white'; ctx.strokeRect(p2Offset + 80, 72, 150, 15);
-                ctx.fillStyle = '#ff0055'; ctx.fillRect(p2Offset + 82, 74, 146 * (p2Energy/100), 11);
-
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(p2Offset, 100, 240, 105);
-                ctx.fillStyle = '#aaaaaa'; ctx.font = '12px Arial'; ctx.fillText("Spawn Mutants:", p2Offset + 10, 115);
-                ctx.fillStyle = p2Energy >= 10 ? '#ff88aa' : '#555'; ctx.fillText(`[LB] 5x Basic Tadpole (-10)`, p2Offset + 10, 135);
-                ctx.fillStyle = p2Energy >= 20 ? '#00ffff' : '#555'; ctx.fillText(`[LT] 2x Shielded Mutant (-20)`, p2Offset + 10, 155);
-                ctx.fillStyle = p2Energy >= 30 ? '#44ff44' : '#555'; ctx.fillText(`[RB] Giant Boss Frog (-30)`, p2Offset + 10, 175);
-                ctx.fillStyle = p2Energy >= 40 ? '#ff4444' : '#555'; ctx.fillText(`[RT] 5x Speed Froglet (-40)`, p2Offset + 10, 195);
-            }
-
-            if (pads.length < 2 && gameState !== 'START') {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-                drawTextCentered("Waiting for 2 Controllers...", 0, 40, "yellow");
-            }
-
-            requestAnimationFrame(gameLoop);
+            
+            ctx.fillStyle = '#f00'; ctx.fillRect(-80, -280, 160, 10);
+            ctx.fillStyle = '#0f0'; ctx.fillRect(-80, -280, 160 * (Math.max(0, hp) / maxHp), 10);
+            
+            ctx.restore();
         }
 
-        requestAnimationFrame(gameLoop);
+        function drawCrosshair(x, y, color, reloadPercent) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-25, 0); ctx.lineTo(-5, 0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(5, 0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, -25); ctx.lineTo(0, -5); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, 25); ctx.lineTo(0, 5); ctx.stroke();
+            
+            if (reloadPercent < 1) {
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.beginPath();
+                ctx.moveTo(0,0);
+                ctx.arc(0, 0, 15, -Math.PI/2, -Math.PI/2 + (Math.PI*2 * reloadPercent), true);
+                ctx.fill();
+            } else {
+                ctx.fillStyle = color;
+                ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+        }
 
-        window.addEventListener('resize', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            tadpoleNest.x = canvas.width - 150;
-            tadpoleNest.height = canvas.height;
-            playerBase.height = canvas.height;
-        });
+        // --- UPDATE LOOP ---
+        function update(dt) {
+            // Check for Gemini Intel Triggers
+            if (gameState === 'MENU' && Input.p1.intelJustPressed) {
+                triggerGeminiIntel('PROPAGANDA');
+            } else if (gameState === 'GAMEOVER' && Input.p1.intelJustPressed) {
+                triggerGeminiIntel('AAR');
+            }
+
+            if (gameState === 'GAMEOVER') {
+                if (Input.p1.fireJustPressed || Input.p2.fireJustPressed || Input.keys.space || Input.keys.enter) gameState = 'MENU';
+                return;
+            }
+
+            if (gameState === 'MENU') return;
+
+            // AI LOGIC
+            if (gameState === 'PVE') {
+                let aiX = Input.p2.x;
+                let aiY = Input.p2.y;
+                let target = p1Base.hp > 0 ? {x: 100, y: 950} : null;
+                
+                let playerTroops = troops.filter(t => !t.isRobot && t.state !== 'RAPPELLING');
+                if (playerTroops.length > 0) {
+                    target = playerTroops.reduce((prev, curr) => (curr.x > prev.x ? curr : prev)); 
+                }
+
+                if (target) {
+                    let dx = target.x - aiX;
+                    let dy = target.y - aiY;
+                    Input.p2.x += Math.sign(dx) * 400 * dt;
+                    Input.p2.y += Math.sign(dy) * 400 * dt;
+                    
+                    if (Math.abs(dx) < 50 && Math.abs(dy) < 50) {
+                        if (p2Base.tankCooldown <= 0) Input.p2.fireJustPressed = true;
+                        if (p2Base.heliCooldown <= 0 && Math.random() < 0.02) Input.p2.heliJustPressed = true;
+                    }
+                }
+            }
+
+            // Cooldowns
+            p1Base.tankCooldown -= dt; p1Base.heliCooldown -= dt;
+            p2Base.tankCooldown -= dt; p2Base.heliCooldown -= dt;
+
+            // Spawning
+            p1Base.spawnTimer -= dt;
+            if (p1Base.spawnTimer <= 0) {
+                troops.push(new Troop(220, 950, false));
+                p1Base.spawnTimer = 4.0;
+            }
+            p2Base.spawnTimer -= dt;
+            if (p2Base.spawnTimer <= 0) {
+                troops.push(new Troop(1700, 950, true));
+                p2Base.spawnTimer = 4.0;
+            }
+
+            // Actions P1
+            if (Input.p1.fireJustPressed && p1Base.tankCooldown <= 0) {
+                missiles.push(new Missile(150, 915, Input.p1.x, Input.p1.y, false));
+                p1Base.tankCooldown = 1.5;
+                addExplosion(150, 915, 20, true); 
+            }
+            if (Input.p1.heliJustPressed && p1Base.heliCooldown <= 0) {
+                helicopters.push(new Helicopter(1, Math.min(Input.p1.x, 1500)));
+                p1Base.heliCooldown = 8.0;
+            }
+
+            // Actions P2
+            if (Input.p2.fireJustPressed && p2Base.tankCooldown <= 0) {
+                missiles.push(new Missile(1770, 915, Input.p2.x, Input.p2.y, true));
+                p2Base.tankCooldown = 1.5;
+                addExplosion(1770, 915, 20, true);
+            }
+            if (Input.p2.heliJustPressed && p2Base.heliCooldown <= 0) {
+                helicopters.push(new Helicopter(2, Math.max(Input.p2.x, 400)));
+                p2Base.heliCooldown = 8.0;
+            }
+            Input.p2.fireJustPressed = false; Input.p2.heliJustPressed = false;
+
+            // Updates
+            for (let i = troops.length - 1; i >= 0; i--) {
+                troops[i].update(dt);
+                if (troops[i].hp <= 0) {
+                    addExplosion(troops[i].x, troops[i].y - 20, 30, true);
+                    troops.splice(i, 1);
+                }
+            }
+            for (let i = helicopters.length - 1; i >= 0; i--) {
+                helicopters[i].update(dt);
+                if (helicopters[i].x < -300 || helicopters[i].x > 2220) helicopters.splice(i, 1);
+            }
+            for (let i = missiles.length - 1; i >= 0; i--) {
+                if (missiles[i].update(dt)) missiles.splice(i, 1);
+            }
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].x += particles[i].vx;
+                particles[i].y += particles[i].vy;
+                particles[i].life -= particles[i].decay;
+                if (particles[i].life <= 0) particles.splice(i, 1);
+            }
+            
+            if (screenShake > 0) screenShake -= dt * 30;
+            if (screenShake < 0) screenShake = 0;
+
+            // Win Condition
+            if (p1Base.hp <= 0) { gameState = 'GAMEOVER'; winner = 2; terminalState.visible = false; updateTerminalDOM(); }
+            else if (p2Base.hp <= 0) { gameState = 'GAMEOVER'; winner = 1; terminalState.visible = false; updateTerminalDOM(); }
+        }
+
+        // --- RENDER LOOP ---
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+            ctx.save();
+            
+            // Letterbox scaling
+            let dx = (width - 1920 * scale) / 2;
+            let dy = (height - 1080 * scale) / 2;
+            ctx.translate(dx, dy);
+            ctx.scale(scale, scale);
+            
+            // Screen Shake
+            if (screenShake > 0) {
+                ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
+            }
+            
+            ctx.beginPath(); ctx.rect(0, 0, 1920, 1080); ctx.clip();
+
+            if (gameState === 'MENU') {
+                drawBackground();
+                ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,1920,1080);
+                
+                ctx.fillStyle = '#fff';
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 80px "Segoe UI"';
+                ctx.fillText('IRON & FLESH: ANNIHILATION', 1920/2, 220);
+                
+                // --- Controls HUD Box ---
+                ctx.fillStyle = 'rgba(10, 20, 10, 0.85)';
+                ctx.strokeStyle = '#334433';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                if (ctx.roundRect) ctx.roundRect(1920/2 - 550, 280, 1100, 360, 10);
+                else ctx.rect(1920/2 - 550, 280, 1100, 360); // Fallback
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#0f0';
+                ctx.font = 'bold 32px "Courier New"';
+                ctx.fillText('// TACTICAL CONTROL LINK ESTABLISHED', 1920/2, 340);
+                
+                // Column Headers
+                ctx.font = 'bold 24px "Segoe UI"';
+                ctx.fillStyle = '#888';
+                ctx.fillText('ACTION', 1920/2, 410);
+                ctx.fillStyle = '#0f0';
+                ctx.fillText('PLAYER 1 (ARMY)', 1920/2 - 300, 410);
+                ctx.fillStyle = '#f00';
+                ctx.fillText('PLAYER 2 (ROBOTS)', 1920/2 + 300, 410);
+
+                ctx.font = '26px "Segoe UI"';
+                let cy = 460;
+                
+                // Row 1
+                ctx.fillStyle = '#fff'; ctx.fillText('Aim Artillery', 1920/2, cy);
+                ctx.fillStyle = '#0f0'; ctx.fillText('L-Stick / WASD', 1920/2 - 300, cy);
+                ctx.fillStyle = '#f00'; ctx.fillText('L-Stick / Arrows', 1920/2 + 300, cy);
+                cy += 50;
+
+                // Row 2
+                ctx.fillStyle = '#fff'; ctx.fillText('Fire Tank Missile', 1920/2, cy);
+                ctx.fillStyle = '#0f0'; ctx.fillText('RT / (A) / Space', 1920/2 - 300, cy);
+                ctx.fillStyle = '#f00'; ctx.fillText('RT / (A) / Enter', 1920/2 + 300, cy);
+                cy += 50;
+
+                // Row 3
+                ctx.fillStyle = '#fff'; ctx.fillText('Call Heli Drop', 1920/2, cy);
+                ctx.fillStyle = '#0f0'; ctx.fillText('LT / (X) / L-Shift', 1920/2 - 300, cy);
+                ctx.fillStyle = '#f00'; ctx.fillText('LT / (X) / R-Shift', 1920/2 + 300, cy);
+                cy += 60;
+
+                // Row 4 (Intel)
+                ctx.fillStyle = '#0ff'; 
+                ctx.fillText('✨ Intercept Intel / Propaganda: Press (Y) Button or "C" Key', 1920/2, cy);
+
+                // --- Play Prompts ---
+                ctx.font = 'bold 36px "Segoe UI"';
+                ctx.fillStyle = '#0f0';
+                ctx.fillText('Press [P1 Fire] to play 1 Player (Vs AI)', 1920/2, 750);
+                ctx.fillStyle = '#f00';
+                ctx.fillText('Press [P2 Fire] to play 2 Player PvP', 1920/2, 820);
+
+                if (Input.p1.fireJustPressed || Input.keys.space) { resetGame(); gameState = 'PVE'; }
+                if (Input.p1.heliJustPressed || Input.keys.enter) { resetGame(); gameState = 'PVP'; }
+
+            } else {
+                drawBackground();
+                
+                drawBase(100, 950, false, p1Base.hp, p1Base.maxHp);
+                drawBase(1820, 950, true, p2Base.hp, p2Base.maxHp);
+                drawTank(150, 950, 1, false, Input.p1.x, Input.p1.y);
+                drawTank(1770, 950, -1, true, Input.p2.x, Input.p2.y);
+                
+                for (let h of helicopters) h.draw(ctx);
+                for (let t of troops) t.draw(ctx);
+                for (let m of missiles) m.draw(ctx);
+                
+                for (let p of particles) {
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = p.life;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                }
+                
+                drawCrosshair(Input.p1.x, Input.p1.y, '#0f0', Math.max(0, 1.5 - p1Base.tankCooldown) / 1.5);
+                if (gameState === 'PVP') drawCrosshair(Input.p2.x, Input.p2.y, '#f00', Math.max(0, 1.5 - p2Base.tankCooldown) / 1.5);
+                
+                ctx.fillStyle = '#fff'; ctx.font = '24px "Segoe UI"'; ctx.textAlign = 'left';
+                let h1 = p1Base.heliCooldown > 0 ? (p1Base.heliCooldown).toFixed(1) + 's' : 'READY (LT)';
+                ctx.fillText('Heli: ' + h1, 30, 40);
+                
+                ctx.textAlign = 'right';
+                let h2 = p2Base.heliCooldown > 0 ? (p2Base.heliCooldown).toFixed(1) + 's' : (gameState === 'PVP' ? 'READY (LT)' : 'AI AUTO');
+                ctx.fillText('Heli: ' + h2, 1890, 40);
+
+                if (gameState === 'GAMEOVER') {
+                    ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,1920,1080);
+                    ctx.fillStyle = winner === 1 ? '#0f0' : '#f00';
+                    ctx.textAlign = 'center';
+                    ctx.font = 'bold 100px "Segoe UI"';
+                    ctx.fillText(winner === 1 ? 'ARMY WINS' : 'ROBOTS WIN', 1920/2, 400);
+                    ctx.fillStyle = '#fff'; ctx.font = '40px "Segoe UI"';
+                    ctx.fillText('Press Fire to Return to Menu', 1920/2, 550);
+                    
+                    ctx.fillStyle = '#0ff';
+                    ctx.font = '30px "Segoe UI"';
+                    ctx.fillText('Press (Y) or "C" for ✨ After-Action Report', 1920/2, 700);
+                }
+            }
+            
+            ctx.restore();
+            ctx.fillStyle = '#000';
+            if (dx > 0) { ctx.fillRect(0, 0, dx, height); ctx.fillRect(width - dx, 0, dx, height); }
+            if (dy > 0) { ctx.fillRect(0, 0, width, dy); ctx.fillRect(0, height - dy, width, dy); }
+        }
+
+        function loop(timestamp) {
+            let dt = (timestamp - lastTime) / 1000;
+            if (dt > 0.1) dt = 0.1; 
+            lastTime = timestamp;
+            
+            pollInput();
+            update(dt);
+            draw();
+            
+            requestAnimationFrame(loop);
+        }
+        
+        requestAnimationFrame(loop);
     </script>
 </body>
 </html>
