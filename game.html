@@ -86,13 +86,112 @@
         const ctx = canvas.getContext('2d');
         let width, height;
         let scale = 1;
+        let isFirstPerson = false;
         
+        // --- AUDIO ENGINE ---
+        let audioCtx;
+        function initAudio() {
+            if (audioCtx) return;
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return; // Prevent crash on unsupported/blocked browsers
+            audioCtx = new AudioCtx();
+            startSynthwaveTrack();
+        }
+
+        function playSound(type) {
+            if (!audioCtx || audioCtx.state !== 'running') return;
+            let now = audioCtx.currentTime;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'tank') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.3);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3);
+            } else if (type === 'explosion') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, now);
+                osc.frequency.exponentialRampToValueAtTime(20, now + 0.5);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc.start(now); osc.stop(now + 0.5);
+            } else if (type === 'heli') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(80, now);
+                osc.frequency.linearRampToValueAtTime(100, now + 0.5);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
+                osc.start(now); osc.stop(now + 0.5);
+            } else if (type === 'shoot') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'hit') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.15);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now); osc.stop(now + 0.15);
+            } else if (type === 'toggle') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            }
+        }
+        
+        function startSynthwaveTrack() {
+            const bassNotes = [65.41, 65.41, 130.81, 98.00, 65.41, 155.56, 130.81, 98.00];
+            let step = 0;
+
+            setInterval(() => {
+                if (gameState === 'MENU' || gameState === 'GAMEOVER') return;
+                if (!audioCtx || audioCtx.state !== 'running') return; 
+
+                let now = audioCtx.currentTime;
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                let filter = audioCtx.createBiquadFilter();
+
+                osc.type = 'sawtooth';
+                osc.frequency.value = bassNotes[step % bassNotes.length];
+
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(400, now);
+                filter.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.15);
+                step++;
+            }, 180);
+        }
+
         function resize() {
-            width = window.innerWidth;
-            height = window.innerHeight;
-            canvas.width = width * window.devicePixelRatio;
-            canvas.height = height * window.devicePixelRatio;
-            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            width = window.innerWidth || 1920;
+            height = window.innerHeight || 1080;
+            let dpr = window.devicePixelRatio || 1; 
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            ctx.scale(dpr, dpr);
             scale = Math.min(width / 1920, height / 1080); 
         }
         window.addEventListener('resize', resize);
@@ -162,63 +261,77 @@
 
         // --- GAMEPAD & INPUT ---
         const Input = {
-            p1: { x: 400, y: 540, fire: false, heli: false, intel: false, fireJustPressed: false, heliJustPressed: false, intelJustPressed: false },
+            p1: { x: 400, y: 540, fire: false, heli: false, intel: false, view: false, fireJustPressed: false, heliJustPressed: false, intelJustPressed: false, viewJustPressed: false },
             p2: { x: 1520, y: 540, fire: false, heli: false, fireJustPressed: false, heliJustPressed: false },
             keys: {
-                w: false, a: false, s: false, d: false, space: false, shift: false, c: false,
+                w: false, a: false, s: false, d: false, space: false, shift: false, c: false, v: false,
                 up: false, left: false, down: false, right: false, enter: false, rshift: false
             }
         };
 
         window.addEventListener('keydown', e => {
+            if (!e.key) return; // Crash prevention on missing key prop
             const k = e.key.toLowerCase();
             if (k === 'w') Input.keys.w = true; if (k === 'a') Input.keys.a = true;
             if (k === 's') Input.keys.s = true; if (k === 'd') Input.keys.d = true;
-            if (e.code === 'Space') Input.keys.space = true; if (e.code === 'ShiftLeft') Input.keys.shift = true;
-            if (k === 'c') Input.keys.c = true;
+            if (e.code === 'Space' || k === ' ') Input.keys.space = true; if (e.code === 'ShiftLeft' || k === 'shift') Input.keys.shift = true;
+            if (k === 'c') Input.keys.c = true; if (k === 'v') Input.keys.v = true;
             if (e.key === 'ArrowUp') Input.keys.up = true; if (e.key === 'ArrowLeft') Input.keys.left = true;
             if (e.key === 'ArrowDown') Input.keys.down = true; if (e.key === 'ArrowRight') Input.keys.right = true;
-            if (e.code === 'Enter') Input.keys.enter = true; if (e.code === 'ShiftRight') Input.keys.rshift = true;
+            if (e.code === 'Enter' || k === 'enter') Input.keys.enter = true; if (e.code === 'ShiftRight') Input.keys.rshift = true;
         });
         window.addEventListener('keyup', e => {
+            if (!e.key) return;
             const k = e.key.toLowerCase();
             if (k === 'w') Input.keys.w = false; if (k === 'a') Input.keys.a = false;
             if (k === 's') Input.keys.s = false; if (k === 'd') Input.keys.d = false;
-            if (e.code === 'Space') Input.keys.space = false; if (e.code === 'ShiftLeft') Input.keys.shift = false;
-            if (k === 'c') Input.keys.c = false;
+            if (e.code === 'Space' || k === ' ') Input.keys.space = false; if (e.code === 'ShiftLeft' || k === 'shift') Input.keys.shift = false;
+            if (k === 'c') Input.keys.c = false; if (k === 'v') Input.keys.v = false;
             if (e.key === 'ArrowUp') Input.keys.up = false; if (e.key === 'ArrowLeft') Input.keys.left = false;
             if (e.key === 'ArrowDown') Input.keys.down = false; if (e.key === 'ArrowRight') Input.keys.right = false;
-            if (e.code === 'Enter') Input.keys.enter = false; if (e.code === 'ShiftRight') Input.keys.rshift = false;
+            if (e.code === 'Enter' || k === 'enter') Input.keys.enter = false; if (e.code === 'ShiftRight') Input.keys.rshift = false;
         });
 
         function pollInput() {
             const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+            // Highly robust wrapper to prevent crashes on non-standard controllers
+            const btn = (pad, idx) => pad && pad.buttons && pad.buttons[idx] && pad.buttons[idx].pressed;
+            const ax = (pad, idx) => pad && pad.axes && pad.axes[idx] ? pad.axes[idx] : 0;
             
             // P1 Update
             let p1Fire = Input.keys.space;
             let p1Heli = Input.keys.shift;
             let p1Intel = Input.keys.c;
+            let p1View = Input.keys.v;
             let p1dx = (Input.keys.d ? 1 : 0) - (Input.keys.a ? 1 : 0);
             let p1dy = (Input.keys.s ? 1 : 0) - (Input.keys.w ? 1 : 0);
 
             if (pads[0]) {
-                if (Math.abs(pads[0].axes[0]) > 0.15) p1dx = pads[0].axes[0];
-                if (Math.abs(pads[0].axes[1]) > 0.15) p1dy = pads[0].axes[1];
-                if (pads[0].buttons[0].pressed || pads[0].buttons[7].pressed) p1Fire = true;
-                if (pads[0].buttons[2].pressed || pads[0].buttons[6].pressed) p1Heli = true;
-                if (pads[0].buttons[3].pressed) p1Intel = true; // Y button
+                if (Math.abs(ax(pads[0], 0)) > 0.15) p1dx = ax(pads[0], 0);
+                if (Math.abs(ax(pads[0], 1)) > 0.15) p1dy = ax(pads[0], 1);
+                if (btn(pads[0], 0) || btn(pads[0], 7)) p1Fire = true;
+                if (btn(pads[0], 2) || btn(pads[0], 6)) p1Heli = true;
+                // Button 3 (Y) serves dual purpose: Intel on menus, Optics in game
+                if (btn(pads[0], 3)) {
+                    p1Intel = true; 
+                    p1View = true;
+                }
             }
             
-            Input.p1.x = Math.max(100, Math.min(1920 - 100, Input.p1.x + p1dx * 12));
-            Input.p1.y = Math.max(50, Math.min(1080 - 50, Input.p1.y + p1dy * 12));
+            // Allow tighter panning when zoomed in
+            let speed = isFirstPerson ? 6 : 12;
+            Input.p1.x = Math.max(100, Math.min(1920 - 100, Input.p1.x + p1dx * speed));
+            Input.p1.y = Math.max(50, Math.min(1080 - 50, Input.p1.y + p1dy * speed));
             
             Input.p1.fireJustPressed = p1Fire && !Input.p1.fire;
             Input.p1.heliJustPressed = p1Heli && !Input.p1.heli;
             Input.p1.intelJustPressed = p1Intel && !Input.p1.intel;
+            Input.p1.viewJustPressed = p1View && !Input.p1.view;
             
             Input.p1.fire = p1Fire;
             Input.p1.heli = p1Heli;
             Input.p1.intel = p1Intel;
+            Input.p1.view = p1View;
 
             // P2 Update
             let p2Fire = Input.keys.enter;
@@ -227,13 +340,13 @@
             let p2dy = (Input.keys.down ? 1 : 0) - (Input.keys.up ? 1 : 0);
 
             if (pads[1]) {
-                if (Math.abs(pads[1].axes[0]) > 0.15) p2dx = pads[1].axes[0];
-                if (Math.abs(pads[1].axes[1]) > 0.15) p2dy = pads[1].axes[1];
-                if (pads[1].buttons[0].pressed || pads[1].buttons[7].pressed) p2Fire = true;
-                if (pads[1].buttons[2].pressed || pads[1].buttons[6].pressed) p2Heli = true;
-            } else if (gameState === 'PVE') {
-                // AI Logic for P2 overrides input later
-            } else {
+                if (Math.abs(ax(pads[1], 0)) > 0.15) p2dx = ax(pads[1], 0);
+                if (Math.abs(ax(pads[1], 1)) > 0.15) p2dy = ax(pads[1], 1);
+                if (btn(pads[1], 0) || btn(pads[1], 7)) p2Fire = true;
+                if (btn(pads[1], 2) || btn(pads[1], 6)) p2Heli = true;
+            }
+            
+            if (gameState !== 'PVE') {
                 Input.p2.x = Math.max(100, Math.min(1920 - 100, Input.p2.x + p2dx * 12));
                 Input.p2.y = Math.max(50, Math.min(1080 - 50, Input.p2.y + p2dy * 12));
             }
@@ -308,6 +421,7 @@
                     if (this.shootCooldown <= 0) {
                         this.shootCooldown = 0.5 + Math.random() * 0.5;
                         target.hp -= 25;
+                        playSound('shoot');
                         // Muzzle flash particle
                         particles.push({
                             x: this.x + 20 * this.facing, y: this.y - 25,
@@ -322,9 +436,11 @@
                     if (this.isRobot && this.x <= 200) {
                         p1Base.hp -= 20 * dt;
                         this.x = 200;
+                        if (Math.random() < 0.1) playSound('hit');
                     } else if (!this.isRobot && this.x >= 1720) {
                         p2Base.hp -= 20 * dt;
                         this.x = 1720;
+                        if (Math.random() < 0.1) playSound('hit');
                     }
                 }
             }
@@ -341,61 +457,37 @@
                     ctx.strokeStyle = '#223';
                     ctx.lineWidth = 2;
                     
-                    // Back Leg
                     ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(-10 * wOffset, 0); ctx.stroke(); ctx.fill();
-                    // Front Leg
                     ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(10 * wOffset, 0); ctx.stroke(); ctx.fill();
                     
-                    // Torso
-                    ctx.fillStyle = '#889';
-                    ctx.fillRect(-6, -30, 12, 16);
+                    ctx.fillStyle = '#889'; ctx.fillRect(-6, -30, 12, 16);
+                    ctx.fillStyle = '#445'; ctx.beginPath(); ctx.arc(0, -35, 6, 0, Math.PI*2); ctx.fill();
                     
-                    // Head
-                    ctx.fillStyle = '#445';
-                    ctx.beginPath(); ctx.arc(0, -35, 6, 0, Math.PI*2); ctx.fill();
-                    // Visor
-                    ctx.fillStyle = '#f00';
-                    ctx.shadowBlur = 10; ctx.shadowColor = '#f00';
-                    ctx.fillRect(0, -37, 5, 2);
-                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = '#f00'; ctx.shadowBlur = 10; ctx.shadowColor = '#f00';
+                    ctx.fillRect(0, -37, 5, 2); ctx.shadowBlur = 0;
 
-                    // Gun Arm
-                    ctx.strokeStyle = '#555';
-                    ctx.lineWidth = 4;
+                    ctx.strokeStyle = '#555'; ctx.lineWidth = 4;
                     ctx.beginPath(); ctx.moveTo(-2, -26); ctx.lineTo(12, -22); ctx.stroke();
                     ctx.fillStyle = '#111'; ctx.fillRect(10, -25, 18, 4);
-
                 } else {
                     // Army Man (Olive/Tan)
                     ctx.fillStyle = '#4A5D23';
                     
-                    // Back Leg
                     ctx.strokeStyle = '#3A4D13'; ctx.lineWidth = 4;
                     ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(-12 * wOffset, 0); ctx.stroke();
-                    // Front Leg
                     ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(12 * wOffset, 0); ctx.stroke();
                     
-                    // Torso
                     ctx.fillRect(-7, -30, 14, 16);
+                    ctx.fillStyle = '#E5C298'; ctx.beginPath(); ctx.arc(0, -35, 5, 0, Math.PI*2); ctx.fill();
                     
-                    // Head
-                    ctx.fillStyle = '#E5C298';
-                    ctx.beginPath(); ctx.arc(0, -35, 5, 0, Math.PI*2); ctx.fill();
-                    // Helmet
-                    ctx.fillStyle = '#2A3D03';
-                    ctx.beginPath(); ctx.arc(0, -36, 6, Math.PI, 0); ctx.fill();
+                    ctx.fillStyle = '#2A3D03'; ctx.beginPath(); ctx.arc(0, -36, 6, Math.PI, 0); ctx.fill();
                     ctx.fillRect(-7, -36, 14, 3);
                     
-                    // Gun Arm
                     ctx.strokeStyle = '#4A5D23'; ctx.lineWidth = 4;
                     ctx.beginPath(); ctx.moveTo(-2, -26); ctx.lineTo(10, -22); ctx.stroke();
-                    // Rifle
-                    ctx.fillStyle = '#222';
-                    ctx.fillRect(5, -24, 20, 3);
-                    ctx.fillRect(12, -21, 3, 4); // mag
+                    ctx.fillStyle = '#222'; ctx.fillRect(5, -24, 20, 3); ctx.fillRect(12, -21, 3, 4); 
                 }
                 
-                // Health bar if damaged
                 if (this.hp < 100) {
                     ctx.fillStyle = 'red'; ctx.fillRect(-10, -50, 20, 3);
                     ctx.fillStyle = '#0f0'; ctx.fillRect(-10, -50, 20 * (this.hp/100), 3);
@@ -429,18 +521,14 @@
                 } else if (this.state === 'HOVERING') {
                     this.hoverTimer -= dt;
                     if (this.hoverTimer < 1.0 && this.hoverTimer + dt >= 1.0) {
-                        // Drop troop
                         troops.push(new Troop(this.x, this.y + 40, this.isRobot, true));
                     }
-                    if (this.hoverTimer <= 0) {
-                        this.state = 'OUTBOUND';
-                    }
+                    if (this.hoverTimer <= 0) this.state = 'OUTBOUND';
                 } else if (this.state === 'OUTBOUND') {
                     let dir = this.side === 1 ? -1 : 1;
                     this.x += dir * 400 * dt;
                 }
                 
-                // Downwash dust
                 if (this.state === 'HOVERING') {
                     particles.push({
                         x: this.x + (Math.random()-0.5)*100, y: 940,
@@ -453,7 +541,6 @@
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 
-                // Pitch based on movement
                 let pitch = 0;
                 if (this.state === 'INBOUND') pitch = this.side === 1 ? 0.2 : -0.2;
                 if (this.state === 'OUTBOUND') pitch = this.side === 1 ? -0.2 : 0.2;
@@ -463,56 +550,36 @@
                 ctx.scale(facing, 1);
                 
                 if (this.isRobot) {
-                    // Robot Drone Chopper
                     ctx.fillStyle = '#2b2b2b';
                     ctx.beginPath(); ctx.moveTo(40, 0); ctx.lineTo(-40, -10); ctx.lineTo(-60, 0); ctx.lineTo(-40, 20); ctx.lineTo(30, 20); ctx.fill();
-                    
-                    // Glowing Engine
                     ctx.fillStyle = '#f00'; ctx.shadowBlur = 15; ctx.shadowColor = '#f00';
                     ctx.fillRect(-50, 0, 10, 5); ctx.shadowBlur = 0;
-                    
-                    // Rotors
                     ctx.fillStyle = 'rgba(200, 200, 255, 0.5)';
                     ctx.beginPath(); ctx.ellipse(20, -15, 40 * Math.abs(Math.sin(this.rotorAngle)), 2, 0, 0, Math.PI*2); ctx.fill();
                     ctx.beginPath(); ctx.ellipse(-30, -15, 40 * Math.abs(Math.sin(this.rotorAngle)), 2, 0, 0, Math.PI*2); ctx.fill();
-                    
                 } else {
-                    // Human Chopper
                     ctx.fillStyle = '#3A4D13';
-                    // Body
                     ctx.beginPath(); ctx.ellipse(0, 0, 45, 20, 0, 0, Math.PI*2); ctx.fill();
-                    // Tail
                     ctx.beginPath(); ctx.moveTo(-30, 0); ctx.lineTo(-90, -10); ctx.lineTo(-90, 5); ctx.lineTo(-30, 10); ctx.fill();
-                    // Tail fin
                     ctx.beginPath(); ctx.moveTo(-85, -10); ctx.lineTo(-95, -30); ctx.lineTo(-80, -30); ctx.fill();
-                    
-                    // Cockpit glass
                     ctx.fillStyle = '#447799';
                     ctx.beginPath(); ctx.moveTo(20, -10); ctx.lineTo(40, 0); ctx.lineTo(40, 10); ctx.lineTo(10, 10); ctx.fill();
-                    
-                    // Skids
                     ctx.strokeStyle = '#111'; ctx.lineWidth = 3;
                     ctx.beginPath(); ctx.moveTo(-20, 15); ctx.lineTo(-20, 30); ctx.stroke();
                     ctx.beginPath(); ctx.moveTo(20, 15); ctx.lineTo(20, 30); ctx.stroke();
                     ctx.beginPath(); ctx.moveTo(-40, 30); ctx.lineTo(40, 30); ctx.stroke();
-                    
-                    // Main Rotor
                     ctx.fillStyle = 'rgba(50, 50, 50, 0.6)';
                     ctx.beginPath(); ctx.ellipse(0, -22, 70 * Math.abs(Math.sin(this.rotorAngle)), 3, 0, 0, Math.PI*2); ctx.fill();
-                    ctx.fillRect(-2, -22, 4, 10); // Mast
-                    
-                    // Tail Rotor
+                    ctx.fillRect(-2, -22, 4, 10); 
                     ctx.beginPath(); ctx.ellipse(-90, -20, 15 * Math.abs(Math.sin(this.rotorAngle)), 2, Math.PI/2, 0, Math.PI*2); ctx.fill();
                 }
                 
-                // Rope
                 if (this.state === 'HOVERING' && this.hoverTimer > 0) {
                     ctx.strokeStyle = '#666'; ctx.lineWidth = 2;
                     let ropeLen = (2.0 - this.hoverTimer) * 400;
                     if (ropeLen > 750) ropeLen = 750;
                     ctx.beginPath(); ctx.moveTo(0, 20); ctx.lineTo(0, 20 + ropeLen); ctx.stroke();
                 }
-                
                 ctx.restore();
             }
         }
@@ -533,7 +600,6 @@
                 this.x += this.vx * dt;
                 this.y += this.vy * dt;
                 
-                // Trail
                 particles.push({
                     x: this.x, y: this.y,
                     vx: -this.vx*0.1 + (Math.random()-0.5)*10, vy: -this.vy*0.1 + (Math.random()-0.5)*10,
@@ -542,16 +608,16 @@
                 
                 let dx = this.targetX - this.x;
                 let dy = this.targetY - this.y;
-                if (dx*this.vx <= 0 && dy*this.vy <= 0) { // Passed target
+                if (dx*this.vx <= 0 && dy*this.vy <= 0) { 
                     addExplosion(this.targetX, this.targetY, 120);
-                    // Damage logic
+                    playSound('explosion');
                     for (let t of troops) {
                         let dist = Math.sqrt((t.x - this.targetX)**2 + (t.y - this.targetY)**2);
-                        if (dist < 120) t.hp -= 200; // Insta kill
+                        if (dist < 120) t.hp -= 200; 
                     }
                     if (Math.abs(this.targetX - 100) < 150 && this.targetY > 800) p1Base.hp -= 100;
                     if (Math.abs(this.targetX - 1820) < 150 && this.targetY > 800) p2Base.hp -= 100;
-                    return true; // Destroyed
+                    return true; 
                 }
                 return false;
             }
@@ -559,10 +625,9 @@
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 ctx.rotate(Math.atan2(this.vy, this.vx));
-                ctx.fillStyle = '#fff';
-                ctx.fillRect(-15, -3, 30, 6);
+                ctx.fillStyle = '#fff'; ctx.fillRect(-15, -3, 30, 6);
                 ctx.fillStyle = this.isRobot ? '#f00' : '#fa0';
-                ctx.fillRect(10, -3, 5, 6); // tip
+                ctx.fillRect(10, -3, 5, 6); 
                 ctx.restore();
             }
         }
@@ -584,34 +649,32 @@
             p2Base.hp = 1000; p2Base.tankCooldown = 0; p2Base.heliCooldown = 0; p2Base.spawnTimer = 0;
             Input.p1.x = 400; Input.p1.y = 540;
             Input.p2.x = 1520; Input.p2.y = 540;
+            isFirstPerson = false;
             terminalState.visible = false;
             updateTerminalDOM();
         }
 
         // --- DRAWING FUNCTIONS ---
         function drawBackground() {
-            // Sky
+            // Expanded bounds from -500 to 2500 so background isn't clipped during optics zoom
             let grad = ctx.createLinearGradient(0, 0, 0, 1080);
             grad.addColorStop(0, '#0a0b10');
             grad.addColorStop(0.7, '#2a1b15');
             grad.addColorStop(1, '#000');
             ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, 1920, 1080);
+            ctx.fillRect(-500, 0, 3000, 1080);
             
-            // Distant Mountains
             ctx.fillStyle = '#111';
             ctx.beginPath();
-            ctx.moveTo(0, 950);
-            for(let i=0; i<=1920; i+=100) ctx.lineTo(i, 700 - Math.sin(i*0.01)*50 - Math.cos(i*0.023)*30);
-            ctx.lineTo(1920, 950); ctx.fill();
+            ctx.moveTo(-500, 950);
+            for(let i=-500; i<=2500; i+=100) ctx.lineTo(i, 700 - Math.sin(i*0.01)*50 - Math.cos(i*0.023)*30);
+            ctx.lineTo(2500, 950); ctx.fill();
 
-            // Ground
             ctx.fillStyle = '#1c1815';
-            ctx.fillRect(0, 950, 1920, 130);
+            ctx.fillRect(-500, 950, 3000, 130);
             ctx.fillStyle = '#2c251f';
-            ctx.fillRect(0, 955, 1920, 125);
+            ctx.fillRect(-500, 955, 3000, 125);
             
-            // Craters
             for (let c of craters) {
                 ctx.fillStyle = `rgba(10, 8, 5, ${c.life})`;
                 ctx.beginPath(); ctx.ellipse(c.x, c.y, c.size, c.size*0.3, 0, 0, Math.PI*2); ctx.fill();
@@ -625,17 +688,15 @@
             ctx.translate(x, y);
             ctx.scale(facing, 1);
             
-            // Aim angle
             let actualAimX = facing === 1 ? aimX : (x - (aimX - x));
             let dx = actualAimX - x;
             let dy = aimY - y;
             let angle = Math.atan2(dy, dx);
-            if (angle > 0) angle = 0; // Don't aim into ground
+            if (angle > 0) angle = 0; 
             
             if (isRobot) {
-                // Robot Tank
                 ctx.save(); ctx.translate(0, -30); ctx.rotate(angle);
-                ctx.fillStyle = '#445'; ctx.fillRect(0, -10, 100, 20); // Barrel
+                ctx.fillStyle = '#445'; ctx.fillRect(0, -10, 100, 20); 
                 ctx.fillStyle = '#556'; ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI*2); ctx.fill();
                 ctx.fillStyle = '#f00'; ctx.shadowBlur = 10; ctx.shadowColor = '#f00'; ctx.beginPath(); ctx.arc(10, -5, 5, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
                 ctx.restore();
@@ -645,7 +706,6 @@
                 ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
                 ctx.beginPath(); ctx.ellipse(0, 15, 50, 5, 0, 0, Math.PI*2); ctx.fill();
             } else {
-                // Human Tank
                 ctx.save(); ctx.translate(10, -35); ctx.rotate(angle);
                 ctx.fillStyle = '#2A3D03'; ctx.fillRect(0, -6, 110, 12);
                 ctx.fillStyle = '#3A4D13'; ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI, true); ctx.fill(); ctx.fillRect(-30, 0, 60, 10);
@@ -713,19 +773,24 @@
 
         // --- UPDATE LOOP ---
         function update(dt) {
-            // Check for Gemini Intel Triggers
-            if (gameState === 'MENU' && Input.p1.intelJustPressed) {
-                triggerGeminiIntel('PROPAGANDA');
-            } else if (gameState === 'GAMEOVER' && Input.p1.intelJustPressed) {
-                triggerGeminiIntel('AAR');
-            }
+            if (gameState === 'MENU' && Input.p1.intelJustPressed) triggerGeminiIntel('PROPAGANDA');
+            else if (gameState === 'GAMEOVER' && Input.p1.intelJustPressed) triggerGeminiIntel('AAR');
 
             if (gameState === 'GAMEOVER') {
-                if (Input.p1.fireJustPressed || Input.p2.fireJustPressed || Input.keys.space || Input.keys.enter) gameState = 'MENU';
+                if (Input.p1.fireJustPressed || Input.p2.fireJustPressed || Input.keys.space || Input.keys.enter) {
+                    initAudio();
+                    gameState = 'MENU';
+                }
                 return;
             }
 
             if (gameState === 'MENU') return;
+
+            // Camera Toggle (Optics View)
+            if (gameState === 'PVE' && Input.p1.viewJustPressed) {
+                isFirstPerson = !isFirstPerson;
+                playSound('toggle');
+            }
 
             // AI LOGIC
             if (gameState === 'PVE') {
@@ -751,11 +816,9 @@
                 }
             }
 
-            // Cooldowns
             p1Base.tankCooldown -= dt; p1Base.heliCooldown -= dt;
             p2Base.tankCooldown -= dt; p2Base.heliCooldown -= dt;
 
-            // Spawning
             p1Base.spawnTimer -= dt;
             if (p1Base.spawnTimer <= 0) {
                 troops.push(new Troop(220, 950, false));
@@ -767,30 +830,31 @@
                 p2Base.spawnTimer = 4.0;
             }
 
-            // Actions P1
             if (Input.p1.fireJustPressed && p1Base.tankCooldown <= 0) {
                 missiles.push(new Missile(150, 915, Input.p1.x, Input.p1.y, false));
                 p1Base.tankCooldown = 1.5;
                 addExplosion(150, 915, 20, true); 
+                playSound('tank');
             }
             if (Input.p1.heliJustPressed && p1Base.heliCooldown <= 0) {
                 helicopters.push(new Helicopter(1, Math.min(Input.p1.x, 1500)));
                 p1Base.heliCooldown = 8.0;
+                playSound('heli');
             }
 
-            // Actions P2
             if (Input.p2.fireJustPressed && p2Base.tankCooldown <= 0) {
                 missiles.push(new Missile(1770, 915, Input.p2.x, Input.p2.y, true));
                 p2Base.tankCooldown = 1.5;
                 addExplosion(1770, 915, 20, true);
+                playSound('tank');
             }
             if (Input.p2.heliJustPressed && p2Base.heliCooldown <= 0) {
                 helicopters.push(new Helicopter(2, Math.max(Input.p2.x, 400)));
                 p2Base.heliCooldown = 8.0;
+                playSound('heli');
             }
             Input.p2.fireJustPressed = false; Input.p2.heliJustPressed = false;
 
-            // Updates
             for (let i = troops.length - 1; i >= 0; i--) {
                 troops[i].update(dt);
                 if (troops[i].hp <= 0) {
@@ -815,26 +879,22 @@
             if (screenShake > 0) screenShake -= dt * 30;
             if (screenShake < 0) screenShake = 0;
 
-            // Win Condition
-            if (p1Base.hp <= 0) { gameState = 'GAMEOVER'; winner = 2; terminalState.visible = false; updateTerminalDOM(); }
-            else if (p2Base.hp <= 0) { gameState = 'GAMEOVER'; winner = 1; terminalState.visible = false; updateTerminalDOM(); }
+            if (p1Base.hp <= 0) { gameState = 'GAMEOVER'; winner = 2; isFirstPerson = false; terminalState.visible = false; updateTerminalDOM(); }
+            else if (p2Base.hp <= 0) { gameState = 'GAMEOVER'; winner = 1; isFirstPerson = false; terminalState.visible = false; updateTerminalDOM(); }
         }
 
         // --- RENDER LOOP ---
         function draw() {
             ctx.clearRect(0, 0, width, height);
-            ctx.save();
+            ctx.save(); // Top Level Save
             
-            // Letterbox scaling
             let dx = (width - 1920 * scale) / 2;
             let dy = (height - 1080 * scale) / 2;
             ctx.translate(dx, dy);
             ctx.scale(scale, scale);
             
-            // Screen Shake
-            if (screenShake > 0) {
-                ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
-            }
+            ctx.save(); // Game World Transform Save
+            if (screenShake > 0) ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
             
             ctx.beginPath(); ctx.rect(0, 0, 1920, 1080); ctx.clip();
 
@@ -847,65 +907,67 @@
                 ctx.font = 'bold 80px "Segoe UI"';
                 ctx.fillText('IRON & FLESH: ANNIHILATION', 1920/2, 220);
                 
-                // --- Controls HUD Box ---
+                // HUD Box
                 ctx.fillStyle = 'rgba(10, 20, 10, 0.85)';
                 ctx.strokeStyle = '#334433';
                 ctx.lineWidth = 4;
                 ctx.beginPath();
-                if (ctx.roundRect) ctx.roundRect(1920/2 - 550, 280, 1100, 360, 10);
-                else ctx.rect(1920/2 - 550, 280, 1100, 360); // Fallback
-                ctx.fill();
-                ctx.stroke();
+                if (ctx.roundRect) ctx.roundRect(1920/2 - 550, 280, 1100, 420, 10);
+                else ctx.rect(1920/2 - 550, 280, 1100, 420); 
+                ctx.fill(); ctx.stroke();
 
                 ctx.fillStyle = '#0f0';
                 ctx.font = 'bold 32px "Courier New"';
                 ctx.fillText('// TACTICAL CONTROL LINK ESTABLISHED', 1920/2, 340);
                 
-                // Column Headers
                 ctx.font = 'bold 24px "Segoe UI"';
-                ctx.fillStyle = '#888';
-                ctx.fillText('ACTION', 1920/2, 410);
-                ctx.fillStyle = '#0f0';
-                ctx.fillText('PLAYER 1 (ARMY)', 1920/2 - 300, 410);
-                ctx.fillStyle = '#f00';
-                ctx.fillText('PLAYER 2 (ROBOTS)', 1920/2 + 300, 410);
+                ctx.fillStyle = '#888'; ctx.fillText('ACTION', 1920/2, 410);
+                ctx.fillStyle = '#0f0'; ctx.fillText('PLAYER 1 (ARMY)', 1920/2 - 300, 410);
+                ctx.fillStyle = '#f00'; ctx.fillText('PLAYER 2 (ROBOTS)', 1920/2 + 300, 410);
 
                 ctx.font = '26px "Segoe UI"';
                 let cy = 460;
                 
-                // Row 1
                 ctx.fillStyle = '#fff'; ctx.fillText('Aim Artillery', 1920/2, cy);
                 ctx.fillStyle = '#0f0'; ctx.fillText('L-Stick / WASD', 1920/2 - 300, cy);
                 ctx.fillStyle = '#f00'; ctx.fillText('L-Stick / Arrows', 1920/2 + 300, cy);
                 cy += 50;
 
-                // Row 2
                 ctx.fillStyle = '#fff'; ctx.fillText('Fire Tank Missile', 1920/2, cy);
                 ctx.fillStyle = '#0f0'; ctx.fillText('RT / (A) / Space', 1920/2 - 300, cy);
                 ctx.fillStyle = '#f00'; ctx.fillText('RT / (A) / Enter', 1920/2 + 300, cy);
                 cy += 50;
 
-                // Row 3
                 ctx.fillStyle = '#fff'; ctx.fillText('Call Heli Drop', 1920/2, cy);
                 ctx.fillStyle = '#0f0'; ctx.fillText('LT / (X) / L-Shift', 1920/2 - 300, cy);
                 ctx.fillStyle = '#f00'; ctx.fillText('LT / (X) / R-Shift', 1920/2 + 300, cy);
+                cy += 50;
+
+                ctx.fillStyle = '#fff'; ctx.fillText('Toggle Optics (PVE)', 1920/2, cy);
+                ctx.fillStyle = '#0f0'; ctx.fillText('(Y) / V Key', 1920/2 - 300, cy);
+                ctx.fillStyle = '#f00'; ctx.fillText('N/A', 1920/2 + 300, cy);
                 cy += 60;
 
-                // Row 4 (Intel)
                 ctx.fillStyle = '#0ff'; 
                 ctx.fillText('✨ Intercept Intel / Propaganda: Press (Y) Button or "C" Key', 1920/2, cy);
 
-                // --- Play Prompts ---
                 ctx.font = 'bold 36px "Segoe UI"';
-                ctx.fillStyle = '#0f0';
-                ctx.fillText('Press [P1 Fire] to play 1 Player (Vs AI)', 1920/2, 750);
-                ctx.fillStyle = '#f00';
-                ctx.fillText('Press [P2 Fire] to play 2 Player PvP', 1920/2, 820);
+                ctx.fillStyle = '#0f0'; ctx.fillText('Press [P1 Fire] to play 1 Player (Vs AI)', 1920/2, 800);
+                ctx.fillStyle = '#f00'; ctx.fillText('Press [P2 Fire] to play 2 Player PvP', 1920/2, 870);
 
-                if (Input.p1.fireJustPressed || Input.keys.space) { resetGame(); gameState = 'PVE'; }
-                if (Input.p1.heliJustPressed || Input.keys.enter) { resetGame(); gameState = 'PVP'; }
+                if (Input.p1.fireJustPressed || Input.keys.space) { initAudio(); resetGame(); gameState = 'PVE'; }
+                if (Input.p1.heliJustPressed || Input.keys.enter) { initAudio(); resetGame(); gameState = 'PVP'; }
 
+                ctx.restore(); // POP GAME WORLD TRANSFORM - Balanced perfectly
             } else {
+                // Apply "Tank Optics" Zoom Transform
+                if (gameState === 'PVE' && isFirstPerson) {
+                    let camX = Input.p1.x; let camY = Input.p1.y;
+                    ctx.translate(1920/2, 1080/2);
+                    ctx.scale(2.5, 2.5);
+                    ctx.translate(-camX, -camY);
+                }
+
                 drawBackground();
                 
                 drawBase(100, 950, false, p1Base.hp, p1Base.maxHp);
@@ -924,8 +986,38 @@
                     ctx.globalAlpha = 1.0;
                 }
                 
-                drawCrosshair(Input.p1.x, Input.p1.y, '#0f0', Math.max(0, 1.5 - p1Base.tankCooldown) / 1.5);
-                if (gameState === 'PVP') drawCrosshair(Input.p2.x, Input.p2.y, '#f00', Math.max(0, 1.5 - p2Base.tankCooldown) / 1.5);
+                ctx.restore(); // POP GAME WORLD TRANSFORM - Balanced perfectly
+                
+                // Draw Optics HUD Overlay
+                if (gameState === 'PVE' && isFirstPerson) {
+                    let grad = ctx.createRadialGradient(1920/2, 1080/2, 200, 1920/2, 1080/2, 1000);
+                    grad.addColorStop(0, 'rgba(0,255,0,0)');
+                    grad.addColorStop(1, 'rgba(0,10,0,0.95)');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(0,0,1920,1080);
+                    
+                    ctx.strokeStyle = 'rgba(0, 255, 0, 0.4)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(1920/2, 0); ctx.lineTo(1920/2, 1080); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(0, 1080/2); ctx.lineTo(1920, 1080/2); ctx.stroke();
+                    
+                    for(let i=1080/2 + 50; i<1080; i+=50) {
+                        ctx.beginPath(); ctx.moveTo(1920/2 - 20, i); ctx.lineTo(1920/2 + 20, i); ctx.stroke();
+                    }
+                    
+                    let targetDist = Math.floor(Math.abs(Input.p1.x - 150));
+                    ctx.fillStyle = '#0f0'; ctx.font = '24px "Courier New"'; ctx.textAlign = 'left';
+                    ctx.fillText('OPTICS: ACTIVE', 50, 100);
+                    ctx.fillText('ZOOM: 2.5X', 50, 130);
+                    ctx.fillText(`RANGE: ${targetDist}m`, 50, 160);
+
+                    // Always draw crosshair at physical screen center in optics mode
+                    drawCrosshair(1920/2, 1080/2, '#0f0', Math.max(0, 1.5 - p1Base.tankCooldown) / 1.5);
+                } else {
+                    // Standard Top-Down Crosshairs
+                    drawCrosshair(Input.p1.x, Input.p1.y, '#0f0', Math.max(0, 1.5 - p1Base.tankCooldown) / 1.5);
+                    if (gameState === 'PVP') drawCrosshair(Input.p2.x, Input.p2.y, '#f00', Math.max(0, 1.5 - p2Base.tankCooldown) / 1.5);
+                }
                 
                 ctx.fillStyle = '#fff'; ctx.font = '24px "Segoe UI"'; ctx.textAlign = 'left';
                 let h1 = p1Base.heliCooldown > 0 ? (p1Base.heliCooldown).toFixed(1) + 's' : 'READY (LT)';
@@ -950,7 +1042,7 @@
                 }
             }
             
-            ctx.restore();
+            ctx.restore(); // Top Level Restore
             ctx.fillStyle = '#000';
             if (dx > 0) { ctx.fillRect(0, 0, dx, height); ctx.fillRect(width - dx, 0, dx, height); }
             if (dy > 0) { ctx.fillRect(0, 0, width, dy); ctx.fillRect(0, height - dy, width, dy); }
