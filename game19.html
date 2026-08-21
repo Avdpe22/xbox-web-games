@@ -16,7 +16,6 @@
             align-items: center;
             font-family: 'Courier New', Courier, monospace;
         }
-        /* 16:9 Arcade Canvas with CRT Scanline Effect */
         #gameWrapper {
             position: relative;
             max-width: 100vw;
@@ -30,7 +29,6 @@
             background-color: #1a202c;
             image-rendering: pixelated;
         }
-        /* Retro CRT overlay */
         #gameWrapper::after {
             content: " ";
             display: block;
@@ -51,9 +49,6 @@
 
 <script>
 const canvas = document.getElementById('gameCanvas');
-// Xbox Edge (console browser) only exposes the Gamepad API to the currently
-// focused document, and gains focus can be lost when loaded inside the hub's
-// iframe -- pull focus onto this game whenever we get a chance to.
 function ensureGameFocus() { window.focus(); canvas.focus({ preventScroll: true }); }
 ensureGameFocus();
 window.addEventListener('load', ensureGameFocus);
@@ -61,61 +56,182 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) ensu
 window.addEventListener('gamepadconnected', ensureGameFocus);
 const ctx = canvas.getContext('2d');
 
-// Reference Image for the Store
-const storeImage = new Image();
-storeImage.src = 'watermarked_img_1759009538149875951.png';
+// --- DYNAMIC STORE IMAGES ---
+const storeImages = {
+    'freeze': new Image(),
+    'slip': new Image(),
+    'push': new Image()
+};
+storeImages['freeze'].src = 'store_freeze.png';
+storeImages['slip'].src = 'store_slip.png';
+storeImages['push'].src = 'store_push.png';
 
-// --- AUDIO ENGINE ---
+// --- ADVANCED AUDIO ENGINE ---
 let audioCtx = null;
+let noiseBuffer = null;
+let musicPlaying = false;
+let nextNoteTime = 0;
+let current16thNote = 0;
+
 function initAudio() {
     if (audioCtx) return;
     try {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Generate a White Noise Buffer for realistic impacts and splatters
+        const bufferSize = audioCtx.sampleRate * 2; // 2 seconds of noise
+        noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            output[i] = Math.random() * 2 - 1; 
+        }
+
+        // Start Procedural Music Sequencer
+        if (!musicPlaying) {
+            musicPlaying = true;
+            nextNoteTime = audioCtx.currentTime + 0.1;
+            requestAnimationFrame(musicLoop);
+        }
     } catch(e) { console.warn("Web Audio API not supported"); }
+}
+
+// --- PROCEDURAL MUSIC TRACKER ---
+function scheduleNote(beatNumber, time) {
+    // 1. Kick Drum (On the beat)
+    if (beatNumber % 4 === 0) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.frequency.setValueAtTime(150, time);
+        osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.5);
+        gain.gain.setValueAtTime(0.4, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
+        osc.start(time); osc.stop(time + 0.5);
+    }
+    
+    // 2. Hi-Hat (Off beats)
+    if (beatNumber % 2 !== 0 && noiseBuffer) {
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'highpass'; filter.frequency.value = 7000;
+        const gain = audioCtx.createGain();
+        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        gain.gain.setValueAtTime(0.05, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+        noise.start(time); noise.stop(time + 0.05);
+    }
+
+    // 3. Cyberpunk Driving Bassline
+    const bassNotes = [32.70, 32.70, 32.70, 38.89, 32.70, 32.70, 29.14, 43.65]; // C1, C1, C1, Eb1, C1, C1, Bb0, F1
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    
+    // Lowpass filter for the bass to make it sound "plucky" and gritty
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(800, time);
+    filter.frequency.exponentialRampToValueAtTime(100, time + 0.2);
+
+    osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+    osc.frequency.setValueAtTime(bassNotes[beatNumber % 8], time);
+    gain.gain.setValueAtTime(0.15, time);
+    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+    osc.start(time); osc.stop(time + 0.2);
+}
+
+function musicLoop() {
+    if (!audioCtx) return;
+    const secondsPerBeat = 60.0 / 125; // 125 BPM Cyberpunk Tempo
+    // Schedule notes slightly ahead of the current time to ensure perfect timing
+    while (nextNoteTime < audioCtx.currentTime + 0.1) {
+        scheduleNote(current16thNote, nextNoteTime);
+        nextNoteTime += 0.25 * secondsPerBeat;
+        current16thNote++;
+        if (current16thNote === 16) current16thNote = 0;
+    }
+    requestAnimationFrame(musicLoop);
 }
 
 function playSound(type) {
     if (!audioCtx) return;
     const now = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
 
-    if (type === 'shoot_slime') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(600, now);
-        osc.frequency.linearRampToValueAtTime(150, now + 0.2);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-        osc.start(now); osc.stop(now + 0.2);
-    } else if (type === 'pop') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.1);
-        osc.start(now); osc.stop(now + 0.1);
-    } else if (type === 'jump') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(250, now);
-        osc.frequency.exponentialRampToValueAtTime(500, now + 0.2);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.2);
-        osc.start(now); osc.stop(now + 0.2);
-    } else if (type === 'freeze') {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(800, now);
-        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.15);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.15);
-        osc.start(now); osc.stop(now + 0.15);
+    // Helper: Play simple sweeping oscillators
+    const playOsc = (oscType, freq1, freq2, duration, vol) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = oscType;
+        osc.frequency.setValueAtTime(freq1, now);
+        if (freq2) osc.frequency.exponentialRampToValueAtTime(freq2, now + duration);
+        
+        gain.gain.setValueAtTime(vol, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + duration);
+    };
+
+    // Helper: Play filtered noise for texture (splatters, explosions, mechanical hiss)
+    const playNoise = (duration, vol, filterType, filterFreq) => {
+        if (!noiseBuffer) return;
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = filterType;
+        filter.frequency.value = filterFreq;
+        
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(vol, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+        
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        noise.start(now); noise.stop(now + duration);
+    };
+
+    switch(type) {
+        case 'shoot_normal': // Wet, pressurized squirt
+            playOsc('sine', 500, 150, 0.2, 0.2);
+            playNoise(0.2, 0.3, 'lowpass', 1200); 
+            break;
+        case 'shoot_slip': // High-pitched toxic squelch
+            playOsc('sine', 900, 200, 0.15, 0.2);
+            playNoise(0.15, 0.2, 'bandpass', 2500);
+            break;
+        case 'shoot_push': // Heavy pneumatic thud
+            playOsc('square', 150, 40, 0.25, 0.25);
+            playNoise(0.2, 0.4, 'lowpass', 600);
+            break;
+        case 'pop': // Wet bubble pop
+            playOsc('sine', 300, 1000, 0.1, 0.3);
+            playNoise(0.05, 0.1, 'highpass', 4000);
+            break;
+        case 'jump': // Heavy suit jump (thud + hydraulic hiss)
+            playOsc('sine', 150, 50, 0.2, 0.2);
+            playNoise(0.15, 0.15, 'highpass', 2000);
+            break;
+        case 'freeze': // Crystalline shatter
+            playOsc('triangle', 1800, 1200, 0.3, 0.15);
+            playOsc('triangle', 2400, 1500, 0.2, 0.1);
+            playNoise(0.2, 0.2, 'highpass', 5000);
+            break;
+        case 'explode': // Concussive kinetic blast
+            playOsc('sawtooth', 120, 20, 0.6, 0.5);
+            playOsc('square', 80, 10, 0.5, 0.4);
+            playNoise(0.5, 0.8, 'lowpass', 800); // Massive muffled boom
+            break;
     }
 }
 
 const Input = {
     pads: {},
-    keys: { left: false, right: false, up: false, down: false, shoot: false, jump: false, select: false },
+    keys: { left: false, right: false, up: false, down: false, shoot: false, jump: false, select: false, back: false },
     mouseAim: { active: false, x: 1, y: 0 },
     poll() {
         const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -127,35 +243,33 @@ const Input = {
         const pad = this.pads[0];
         let vx = 0;
         let aimX = 0, aimY = 0;
-        let shoot = false, jump = false, select = false;
+        let shoot = false, jump = false, select = false, back = false;
         let usingPad = false;
 
         if (pad) {
             usingPad = true;
-            // Movement (Left Stick / D-Pad)
             if (Math.abs(pad.axes[0]) > 0.2) vx = pad.axes[0];
             if (pad.buttons[14]?.pressed) vx = -1;
             if (pad.buttons[15]?.pressed) vx = 1;
 
-            // Aiming (Right Stick)
             if (Math.hypot(pad.axes[2], pad.axes[3]) > 0.25) {
                 aimX = pad.axes[2];
                 aimY = pad.axes[3];
                 this.mouseAim.active = false;
             }
 
-            // Actions (RT=Shoot, A/LT=Jump, A=Select)
             shoot = pad.buttons[7]?.pressed || pad.buttons[2]?.pressed; 
             jump = pad.buttons[0]?.pressed || pad.buttons[6]?.pressed; 
-            select = pad.buttons[0]?.pressed; 
+            select = pad.buttons[0]?.pressed || pad.buttons[9]?.pressed; 
+            back = pad.buttons[1]?.pressed || pad.buttons[8]?.pressed;
         }
 
-        // Keyboard/Mouse Fallback
         if (this.keys.left) { vx = -1; usingPad = false; }
         if (this.keys.right) { vx = 1; usingPad = false; }
         if (this.keys.shoot) { shoot = true; usingPad = false; }
         if (this.keys.jump || this.keys.up) { jump = true; usingPad = false; }
         if (this.keys.select) { select = true; usingPad = false; }
+        if (this.keys.back) { back = true; usingPad = false; }
 
         if (this.mouseAim.active) {
             aimX = this.mouseAim.x;
@@ -163,7 +277,7 @@ const Input = {
             usingPad = false;
         }
 
-        return { vx, aimX, aimY, shoot, jump, select, usingPad };
+        return { vx, aimX, aimY, shoot, jump, select, back, usingPad };
     }
 };
 
@@ -174,13 +288,12 @@ let level = 1;
 let pacified = 0;
 let pacifiedRequired = 10;
 let menuSelection = 0;
+let storeAnimTimer = 0;
 
-// Camera & World
 const camera = { x: 0, targetX: 0, w: 1280, h: 720 };
 let levelWidth = 6000;
 const groundY = 600;
 
-// Weapon Types (Physics Focus)
 const WEAPONS = {
     NORMAL: { name: 'WATER-JET', color: '#4299e1', fireRate: 8, speed: 22, power: 20, type: 'normal', size: 6 },
     FREEZE: { name: 'CRYO-SLIME', color: '#00ffff', fireRate: 6, speed: 18, power: 15, type: 'freeze', size: 9 },
@@ -196,7 +309,6 @@ function generateLevel() {
     platforms = [];
     levelWidth = 4000 + (level * 1000); 
 
-    // Base ground blocks
     let currentX = -500; 
     while (currentX < levelWidth + 500) {
         let blockWidth = Math.random() * 800 + 400;
@@ -208,7 +320,6 @@ function generateLevel() {
         currentX += blockWidth + pitWidth;
     }
 
-    // Floating Scaffolds
     currentX = 800;
     while (currentX < levelWidth - 1000) {
         if (Math.random() > 0.4) {
@@ -235,7 +346,6 @@ function drawCyberSoldier(ctx, x, y, facing, walkCycle, isJumping, aimAngle) {
     const gunColor = '#2d3748';
     const slimeGlow = currentWeapon.color;
 
-    // Back Leg
     ctx.save();
     ctx.translate(-5, -15);
     ctx.rotate(-legSwing * Math.PI / 180);
@@ -243,7 +353,6 @@ function drawCyberSoldier(ctx, x, y, facing, walkCycle, isJumping, aimAngle) {
     ctx.fillStyle = '#4a5568'; ctx.fillRect(-10, 25, 22, 12);
     ctx.restore();
 
-    // Front Leg
     ctx.save();
     ctx.translate(5, -15);
     ctx.rotate(legSwing * Math.PI / 180);
@@ -251,33 +360,28 @@ function drawCyberSoldier(ctx, x, y, facing, walkCycle, isJumping, aimAngle) {
     ctx.fillStyle = '#2d3748'; ctx.fillRect(-10, 25, 22, 12);
     ctx.restore();
 
-    // Torso (Hazmat Style)
     ctx.fillStyle = suitColor;
     ctx.beginPath();
     ctx.moveTo(-16, -15); ctx.lineTo(16, -15);
     ctx.lineTo(20, -45); ctx.lineTo(-20, -45);
     ctx.closePath(); ctx.fill();
 
-    // Chest Plate
     ctx.fillStyle = armorColor;
     ctx.fillRect(-12, -40, 24, 20);
     ctx.fillStyle = slimeGlow; 
-    ctx.beginPath(); ctx.arc(0, -30, 6, 0, Math.PI*2); ctx.fill(); // Core gauge
+    ctx.beginPath(); ctx.arc(0, -30, 6, 0, Math.PI*2); ctx.fill();
 
-    // Head
     ctx.save();
     ctx.translate(0, -50);
     ctx.rotate(visualArmAngle * 0.15);
     
-    ctx.fillStyle = '#fbd38d'; // Skin
+    ctx.fillStyle = '#fbd38d';
     ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
     
-    // Bandana
     ctx.fillStyle = bandanaColor;
     ctx.fillRect(-16, -10, 32, 8);
     ctx.beginPath(); ctx.moveTo(-16, -6); ctx.lineTo(-35, -12 + Math.sin(Date.now()*0.01)*5); ctx.lineTo(-30, 2); ctx.fill();
 
-    // Visor / Goggles
     ctx.fillStyle = '#1a202c';
     ctx.fillRect(0, -5, 16, 10);
     ctx.fillStyle = slimeGlow;
@@ -286,22 +390,18 @@ function drawCyberSoldier(ctx, x, y, facing, walkCycle, isJumping, aimAngle) {
     ctx.shadowBlur = 0;
     ctx.restore();
 
-    // Front Arm & Sprayer (Rotates based on aimAngle)
     ctx.save();
     ctx.translate(0, -38); 
     ctx.rotate(visualArmAngle);
     
-    // Arm
     ctx.fillStyle = armorColor;
     ctx.beginPath(); ctx.roundRect(-8, -8, 30, 16, 8); ctx.fill();
 
-    // Slime Sprayer
     ctx.fillStyle = gunColor;
     ctx.fillRect(15, -12, 45, 24); 
     ctx.fillStyle = '#cbd5e0';
-    ctx.beginPath(); ctx.moveTo(60, -16); ctx.lineTo(75, -22); ctx.lineTo(75, 22); ctx.lineTo(60, 16); ctx.fill(); // Flared nozzle
+    ctx.beginPath(); ctx.moveTo(60, -16); ctx.lineTo(75, -22); ctx.lineTo(75, 22); ctx.lineTo(60, 16); ctx.fill();
     
-    // Slime Tank on gun
     ctx.fillStyle = slimeGlow;
     ctx.beginPath(); ctx.arc(35, 5, 10, 0, Math.PI*2); ctx.fill();
 
@@ -315,14 +415,13 @@ function drawMutant(ctx, x, y, facing, walkCycle, statusType) {
     if (facing === -1) ctx.scale(-1, 1);
 
     let legSwing = Math.sin(walkCycle * 0.2) * 20;
-    if (statusType === 'slip') legSwing = Math.sin(Date.now() * 0.03) * 45; // Flailing wildly
-    if (statusType === 'push') legSwing = 45; // Knocked back pose
+    if (statusType === 'slip') legSwing = Math.sin(Date.now() * 0.03) * 45; 
+    if (statusType === 'push') legSwing = 45; 
     
-    let bodyColor = '#805ad5'; // Base purple mutant
+    let bodyColor = '#805ad5'; 
     if (statusType === 'freeze') bodyColor = '#90cdf4'; 
     else if (statusType === 'slip') bodyColor = '#68d391'; 
 
-    // Gooey Legs
     ctx.save(); ctx.translate(-6, -15); ctx.rotate(-legSwing * Math.PI / 180);
     ctx.fillStyle = bodyColor; ctx.beginPath(); ctx.roundRect(-8, 0, 16, 25, 8); ctx.fill();
     ctx.restore();
@@ -331,26 +430,22 @@ function drawMutant(ctx, x, y, facing, walkCycle, statusType) {
     ctx.fillStyle = bodyColor; ctx.beginPath(); ctx.roundRect(-8, 0, 16, 25, 8); ctx.fill();
     ctx.restore();
 
-    // Gelatinous Torso
     ctx.save();
     ctx.translate(0, -25);
     ctx.rotate(statusType === 'slip' || statusType === 'push' ? -0.8 : 0.1); 
     
     ctx.fillStyle = bodyColor;
     ctx.beginPath(); 
-    // Wobbly body path
     const wobble = statusType === 'freeze' ? 0 : Math.sin(Date.now()*0.005) * 3;
     ctx.ellipse(0, -10, 22 + wobble, 28 - wobble, 0, 0, Math.PI*2); 
     ctx.fill();
     
-    // Tentacle Arms
     ctx.save();
     ctx.translate(5, -15);
     ctx.rotate(statusType === 'slip' ? -2 : -0.2 + Math.sin(walkCycle * 0.1) * 0.3);
     ctx.beginPath(); ctx.roundRect(0, -6, 35, 12, 6); ctx.fill();
     ctx.restore();
 
-    // Single Giant Eye
     ctx.fillStyle = '#ffffff'; 
     ctx.beginPath(); ctx.arc(10, -20, 10, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = statusType === 'freeze' ? '#4299e1' : '#e53e3e'; 
@@ -358,14 +453,12 @@ function drawMutant(ctx, x, y, facing, walkCycle, statusType) {
 
     ctx.restore();
 
-    // Ice block effect
     if (statusType === 'freeze') {
         ctx.fillStyle = 'rgba(226, 232, 240, 0.6)';
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 3;
         ctx.beginPath(); ctx.roundRect(-30, -75, 60, 85, 10); ctx.fill(); ctx.stroke();
     }
-    
     ctx.restore();
 }
 
@@ -394,7 +487,6 @@ class Player {
         if (Math.abs(this.vx) > 0.1) this.walkCycle += Math.abs(input.vx);
         else this.walkCycle = 0;
 
-        // 360 Aiming Logic
         let stickDist = Math.hypot(input.aimX, input.aimY);
         if (stickDist > 0.2) {
             this.aimAngle = Math.atan2(input.aimY, input.aimX);
@@ -407,12 +499,10 @@ class Player {
         this.x += this.vx;
         this.x = Math.max(camera.x + 20, Math.min(levelWidth - 20, this.x));
 
-        // Physics & Gravity
         this.vy += this.gravity;
         this.y += this.vy;
         this.grounded = false;
 
-        // Platforms
         for (let p of platforms) {
             if (this.vy >= 0 && this.y >= p.y && this.y - this.vy <= p.y + 15 &&
                 this.x > p.x - this.w && this.x < p.x + p.w + this.w) {
@@ -423,7 +513,6 @@ class Player {
             }
         }
 
-        // Pit death (respawn)
         if (this.y > 1000) {
             this.hp -= 25;
             screenShake = 15;
@@ -440,12 +529,13 @@ class Player {
             createParticles(this.x, this.y, '#ffffff', 6, 2);
         }
 
-        // Slime Sprayer
         if (this.fireCooldown > 0) this.fireCooldown--;
         
         if (input.shoot && this.fireCooldown <= 0) {
             this.fireCooldown = currentWeapon.fireRate;
-            playSound('shoot_slime');
+            
+            // Dynamic Audio depending on weapon
+            playSound('shoot_' + currentWeapon.type);
             
             const barrelL = 65;
             const spawnX = this.x + Math.cos(this.aimAngle) * barrelL;
@@ -459,7 +549,13 @@ class Player {
             ));
             
             screenShake = currentWeapon.type === 'push' ? 5 : 1;
-            createParticles(spawnX, spawnY, currentWeapon.color, 4, 6);
+
+            if (currentWeapon.type === 'normal') {
+                createParticles(spawnX, spawnY, '#ffffff', 5, 8); 
+                createParticles(spawnX, spawnY, currentWeapon.color, 3, 5); 
+            } else {
+                createParticles(spawnX, spawnY, currentWeapon.color, 4, 6);
+            }
         }
     }
 
@@ -494,27 +590,22 @@ class Mutant {
         this.vy += this.gravity;
         const dx = player.x - this.x;
         
-        // Physics / Status Effects
         if (this.statusTimer > 0) {
             this.statusTimer--;
             if (this.statusType === 'freeze') {
                 this.vx = 0; 
             } else if (this.statusType === 'slip') {
-                // Sliding uncontrollably
-                if (Math.abs(this.vx) < 0.5) this.vx = this.facing * -12; // Initial slip backward
-                this.vx *= 0.98; // Frictionless slide
-                createParticles(this.x, this.y, '#68d391', 1, 2); 
+                if (Math.abs(this.vx) < 0.5) this.vx = this.facing * -12; 
+                this.vx *= 0.98; 
+                createParticles(this.x, this.y, '#68d391', 2, 4); 
             } else if (this.statusType === 'push') {
-                // Launched through the air
                 this.vx *= 0.95;
             }
         } else {
             this.statusType = null;
-            // Normal Pathfinding
             this.facing = dx > 0 ? 1 : -1;
             this.vx = this.facing * this.speed;
 
-            // Gap Detection (Jump)
             if (this.grounded && Math.abs(dx) < 800) {
                 let gapAhead = true;
                 let lookX = this.x + (this.facing * 60);
@@ -534,7 +625,6 @@ class Mutant {
         this.y += this.vy;
         this.grounded = false;
 
-        // Collisions
         for (let p of platforms) {
             if (this.vy >= 0 && this.y >= p.y && this.y - this.vy <= p.y + 15 &&
                 this.x > p.x - this.w && this.x < p.x + p.w + this.w) {
@@ -545,7 +635,6 @@ class Mutant {
             }
         }
 
-        // Pacified by falling into pit (off map)
         if (this.y > 1000) this.pacificationMeter = this.maxPacification; 
 
         if (this.statusType !== 'freeze') this.walkCycle += Math.abs(this.vx);
@@ -561,12 +650,12 @@ class Mutant {
             playSound('freeze');
         } else if (weapon.type === 'slip') {
             this.statusTimer = 150; 
-            this.vx = this.facing * -18; // Force backward slide
-            this.vy = -4; // Slight pop up
+            this.vx = this.facing * -18; 
+            this.vy = -4; 
         } else if (weapon.type === 'push') {
             this.statusTimer = 40;
-            this.vx = (this.x > player.x ? 1 : -1) * 35; // Massive knockback
-            this.vy = -12; // Launch up
+            this.vx = (this.x > player.x ? 1 : -1) * 35; 
+            this.vy = -12; 
             this.grounded = false;
         }
     }
@@ -576,7 +665,6 @@ class Mutant {
         ctx.beginPath(); ctx.ellipse(this.x, this.y + 5, 25, 6, 0, 0, Math.PI*2); ctx.fill();
         drawMutant(ctx, this.x, this.y, this.facing, this.walkCycle, this.statusType);
 
-        // Pacification Meter above head
         if (this.pacificationMeter > 0 && this.pacificationMeter < this.maxPacification) {
             let pct = this.pacificationMeter / this.maxPacification;
             ctx.fillStyle = '#2d3748'; ctx.fillRect(this.x - 20, this.y - 85, 40, 6);
@@ -593,7 +681,11 @@ class Projectile {
     update() {
         this.x += this.vx; this.y += this.vy;
         this.life--;
-        this.vy += 0.25; // Slime gravity arc
+        this.vy += 0.25; 
+        
+        if (this.weapon.type === 'normal' && Math.random() > 0.5) {
+            createParticles(this.x, this.y, '#ffffff', 1, 2);
+        }
     }
     draw(ctx) {
         ctx.fillStyle = this.weapon.color;
@@ -667,7 +759,11 @@ function update() {
     }
 
     if (gameState === STATES.GAMEOVER) {
-        if (input.select || input.jump) resetGame();
+        if (input.select || input.jump || input.shoot) {
+            resetGame();
+        } else if (input.back) {
+            gameState = STATES.MENU;
+        }
         return;
     }
 
@@ -678,23 +774,22 @@ function update() {
     }
 
     if (gameState === STATES.UPGRADE) {
+        storeAnimTimer += 0.05;
         if (input.vx < -0.5) menuSelection = Math.max(0, menuSelection - 1);
         if (input.vx > 0.5) menuSelection = Math.min(upgradePool.length-1, menuSelection + 1);
         if (input.vx !== 0) input.vx = 0; 
 
-        if (input.select || input.jump) {
-            playSound('shoot_slime'); 
+        if (input.select || input.jump || input.shoot) {
+            playSound('shoot_' + upgradePool[menuSelection].type); 
             currentWeapon = upgradePool[menuSelection];
             startNextLevel();
         }
         return;
     }
 
-    // PLAYING STATE
     player.update(input);
 
-    // Spawn Mutants
-    if (mutants.length < 6 + (level * 2) && player.x < levelWidth - 800) {
+    if (mutants.length < 6 + (level * 2) && (player.x < levelWidth - 800 || pacified < pacifiedRequired)) {
         if (Math.random() < 0.03 + (level * 0.005)) {
             let spawnX = camera.x + (Math.random() > 0.2 ? 1280 + Math.random()*300 : -200);
             spawnX = Math.max(0, Math.min(spawnX, levelWidth - 50));
@@ -702,24 +797,21 @@ function update() {
         }
     }
 
-    // Camera Tracking
     camera.targetX = player.x - 400; 
     camera.targetX = Math.max(0, Math.min(levelWidth - 1280, camera.targetX));
     camera.x += (camera.targetX - camera.x) * 0.08;
 
-    // End of Zone
     if (player.x > levelWidth - 300) {
         if (pacified >= pacifiedRequired) {
             gameState = STATES.ZONE_CLEAR;
-            zoneClearTimer = 90; // hold the "AREA CONTAINED" screen so the player can read it
-            mutants.forEach(m => createParticles(m.x, m.y, '#805ad5', 20)); // Clear screen
+            zoneClearTimer = 90; 
+            mutants.forEach(m => createParticles(m.x, m.y, '#805ad5', 20)); 
             mutants = [];
         } else {
-            player.x = levelWidth - 300; // Block exit
+            player.x = levelWidth - 300; 
         }
     }
 
-    // Projectiles
     for (let i = projectiles.length - 1; i >= 0; i--) {
         let p = projectiles[i];
         p.update();
@@ -728,7 +820,6 @@ function update() {
             projectiles.splice(i, 1); continue;
         }
 
-        // Platform Hit
         let hitPlatform = false;
         for (let plat of platforms) {
             if (p.x > plat.x && p.x < plat.x + plat.w && p.y > plat.y && p.y < plat.y + plat.h) { hitPlatform = true; break; }
@@ -738,29 +829,40 @@ function update() {
             projectiles.splice(i, 1); continue;
         }
 
-        // Mutant Hit
         let hitMutant = false;
         for (let j = mutants.length - 1; j >= 0; j--) {
             let m = mutants[j];
             if (Math.abs(p.x - m.x) < 35 && Math.abs(p.y - (m.y - 30)) < 40) {
                 m.applyStatus(p.weapon);
-                createParticles(p.x, p.y, p.weapon.color, 8);
+                
+                if (p.weapon.type === 'normal') {
+                    createParticles(p.x, p.y, '#ffffff', 10, 8);
+                    createParticles(p.x, p.y, p.weapon.color, 10, 6);
+                } else if (p.weapon.type === 'slip') {
+                    createParticles(p.x, p.y, p.weapon.color, 35, 14); 
+                } else if (p.weapon.type === 'push') {
+                    createParticles(p.x, p.y, '#ff0000', 15, 20); 
+                    createParticles(p.x, p.y, p.weapon.color, 25, 15);
+                    screenShake = 15;
+                    playSound('explode');
+                } else {
+                    createParticles(p.x, p.y, p.weapon.color, 8);
+                }
+
                 hitMutant = true; break; 
             }
         }
         if (hitMutant) projectiles.splice(i, 1);
     }
 
-    // Mutants
     for (let i = mutants.length - 1; i >= 0; i--) {
         let m = mutants[i];
         
-        // Despawn or Pacified
         if (m.x < camera.x - 600 || m.pacificationMeter >= m.maxPacification) {
             if (m.pacificationMeter >= m.maxPacification) {
                 pacified++;
                 playSound('pop');
-                createParticles(m.x, m.y - 30, '#805ad5', 25); // Burst into bubbles/slime
+                createParticles(m.x, m.y - 30, '#805ad5', 25); 
                 createParticles(m.x, m.y - 30, '#68d391', 15);
             }
             mutants.splice(i, 1); continue;
@@ -768,7 +870,6 @@ function update() {
 
         if (Math.abs(m.x - camera.x) < 1500) {
             m.update(player);
-            // Player Collision (Damage)
             if (Math.abs(m.x - player.x) < 30 && Math.abs((m.y - 30) - (player.y - 30)) < 50 && m.statusType !== 'freeze') {
                 player.hp -= 1.0; 
                 screenShake = 6;
@@ -783,7 +884,6 @@ function update() {
 function drawParallax(ctx) {
     ctx.fillStyle = '#1a202c'; ctx.fillRect(0, 0, 1280, 720);
 
-    // City Ruins
     ctx.save(); ctx.fillStyle = '#2d3748';
     const cityOffset = camera.x * 0.15;
     ctx.translate(-cityOffset % 1280, 0);
@@ -794,7 +894,6 @@ function drawParallax(ctx) {
     }
     ctx.translate(1280 * Math.ceil(30 * 200 / 1280), 0); ctx.restore();
 
-    // Midground
     ctx.save(); ctx.fillStyle = '#4a5568';
     const midOffset = camera.x * 0.4;
     ctx.translate(-midOffset % 1280, 0);
@@ -821,7 +920,6 @@ function drawLevel(ctx) {
         }
     });
 
-    // Extraction Point
     if (levelWidth - camera.x < 1500) {
         ctx.fillStyle = 'rgba(104, 211, 145, 0.2)'; ctx.fillRect(levelWidth - 300, 0, 300, 720);
         ctx.fillStyle = '#68d391'; ctx.font = 'bold 36px Courier';
@@ -833,7 +931,6 @@ function drawLevel(ctx) {
 function drawHUD(ctx, input) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    // Top Stats
     ctx.fillStyle = '#fff'; ctx.font = 'bold 28px Courier New'; ctx.textAlign = 'left';
     ctx.fillText(`ZONE: ${level}`, 30, 50);
     ctx.fillStyle = currentWeapon.color; ctx.fillText(`SLIME: ${currentWeapon.name}`, 30, 90);
@@ -842,11 +939,9 @@ function drawHUD(ctx, input) {
     ctx.fillStyle = pacified >= pacifiedRequired ? '#68d391' : '#fff';
     ctx.fillText(`PACIFIED: ${pacified} / ${pacifiedRequired}`, 1250, 50);
     
-    // HP
     ctx.fillStyle = '#2d3748'; ctx.fillRect(1250 - 300, 70, 300, 24);
     ctx.fillStyle = '#fbd38d'; ctx.fillRect(1250 - 300, 70, 300 * Math.max(0, player.hp / 100), 24);
 
-    // Controls Overlay Overlay (Bottom Left)
     ctx.fillStyle = 'rgba(26, 32, 44, 0.6)'; ctx.roundRect(20, 600, 340, 100, 10); ctx.fill();
     ctx.fillStyle = '#cbd5e0'; ctx.font = '16px Courier New'; ctx.textAlign = 'left';
     if (input.usingPad) {
@@ -860,19 +955,24 @@ function drawHUD(ctx, input) {
     }
 }
 
-function drawUpgradeScreen() {
+function drawUpgradeScreen(input) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, 1280, 720);
 
-    // Store Image Backdrop
-    if (storeImage.complete && storeImage.naturalWidth > 0) {
-        ctx.globalAlpha = 0.5;
-        // Draw centered and scaled
-        const scale = Math.max(1280 / storeImage.width, 720 / storeImage.height);
-        const imgW = storeImage.width * scale;
-        const imgH = storeImage.height * scale;
-        ctx.drawImage(storeImage, (1280 - imgW)/2, (720 - imgH)/2, imgW, imgH);
+    const selectedWeapon = upgradePool[menuSelection];
+    const currentImg = storeImages[selectedWeapon.type];
+
+    if (currentImg && currentImg.complete && currentImg.naturalWidth > 0) {
+        ctx.globalAlpha = 0.5 + Math.sin(storeAnimTimer) * 0.1; 
+        const scale = Math.max(1280 / currentImg.width, 720 / currentImg.height);
+        const imgW = currentImg.width * scale;
+        const imgH = currentImg.height * scale;
+        ctx.drawImage(currentImg, (1280 - imgW)/2, (720 - imgH)/2, imgW, imgH);
         ctx.globalAlpha = 1.0;
+    } else {
+        ctx.strokeStyle = '#1a202c'; ctx.lineWidth = 2;
+        for(let i=0; i<1280; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,720); ctx.stroke(); }
+        for(let i=0; i<720; i+=40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(1280,i); ctx.stroke(); }
     }
 
     ctx.fillStyle = '#68d391'; ctx.font = 'bold 54px Courier New'; ctx.textAlign = 'center';
@@ -883,21 +983,29 @@ function drawUpgradeScreen() {
     const startX = 1280/2 - (boxW * 1.5) - 40;
 
     upgradePool.forEach((wep, i) => {
-        const x = startX + i * (boxW + 40); const y = 160;
+        const x = startX + i * (boxW + 40); 
+        const hoverY = menuSelection === i ? Math.sin(storeAnimTimer * 2) * 10 : 0;
+        const y = 160 + hoverY;
         
         ctx.fillStyle = menuSelection === i ? 'rgba(45, 55, 72, 0.9)' : 'rgba(26, 32, 44, 0.8)';
         ctx.fillRect(x, y, boxW, boxH);
+        
         ctx.strokeStyle = menuSelection === i ? wep.color : '#4a5568';
-        ctx.lineWidth = menuSelection === i ? 6 : 2; ctx.strokeRect(x, y, boxW, boxH);
+        ctx.lineWidth = menuSelection === i ? 6 + Math.sin(storeAnimTimer*4)*2 : 2; 
+        
+        if (menuSelection === i) {
+            ctx.shadowColor = wep.color; ctx.shadowBlur = 15;
+        }
+        ctx.strokeRect(x, y, boxW, boxH);
+        ctx.shadowBlur = 0;
 
-        // Icon
         ctx.fillStyle = wep.color; ctx.beginPath(); ctx.arc(x + boxW/2, y + 80, 40, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = '#1a202c'; ctx.font = 'bold 24px Courier'; ctx.fillText(wep.type.toUpperCase(), x + boxW/2, y + 88);
 
         ctx.fillStyle = wep.color; ctx.font = 'bold 32px Courier New'; ctx.fillText(wep.name, x + boxW/2, y + 180);
 
         ctx.fillStyle = '#cbd5e0'; ctx.font = '20px Courier New';
-        let desc = wep.type === 'freeze' ? "Stops targets solid in ice." : (wep.type === 'slip' ? "Coats targets, destroying friction." : "Massive kinetic knockback force.");
+        let desc = wep.type === 'freeze' ? "Stops targets solid in ice." : (wep.type === 'slip' ? "Coats targets, destroying friction." : "Massive concussive kinetic blast.");
         
         let words = desc.split(' '); let line = ''; let lineY = 260;
         for(let n = 0; n < words.length; n++) {
@@ -910,7 +1018,11 @@ function drawUpgradeScreen() {
     });
 
     ctx.fillStyle = '#fff'; ctx.font = '24px Courier New';
-    ctx.fillText("Use L-Stick/DPad to Select, Press (A)/Enter to Equip", 1280/2, 650);
+    if (input.usingPad) {
+        ctx.fillText("Use L-Stick/DPad to Select, Press (A) or (RT) to Equip", 1280/2, 680);
+    } else {
+        ctx.fillText("Use A/D to Select, Press Enter or Click to Equip", 1280/2, 680);
+    }
 }
 
 function loop() {
@@ -952,9 +1064,12 @@ function loop() {
         ctx.fillText("SLIME CONTAINMENT", 1280/2, 250); ctx.shadowBlur = 0;
 
         ctx.fillStyle = '#fff'; ctx.font = '32px Courier New';
-        ctx.fillText("PRESS (A) or SPACE to START", 1280/2, 400);
+        if (input.usingPad) {
+            ctx.fillText("PRESS (A) OR (RT) TO START", 1280/2, 400);
+        } else {
+            ctx.fillText("PRESS ENTER, SPACE, OR CLICK TO START", 1280/2, 400);
+        }
         
-        // Draw Controls visually in menu
         ctx.fillStyle = 'rgba(45, 55, 72, 0.8)'; ctx.roundRect(1280/2 - 400, 480, 800, 180, 15); ctx.fill();
         ctx.fillStyle = '#cbd5e0'; ctx.font = '24px Courier New';
         ctx.fillText("--- XBOX SERIES CONTROLS ---", 1280/2, 520);
@@ -962,14 +1077,24 @@ function loop() {
         ctx.fillText("RT: Shoot Slime   |  (A) or LT: Jump", 1280/2, 610);
     }
 
-    if (gameState === STATES.UPGRADE) drawUpgradeScreen();
+    if (gameState === STATES.UPGRADE) drawUpgradeScreen(input);
 
     if (gameState === STATES.GAMEOVER) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.fillStyle = 'rgba(229, 62, 62, 0.4)'; ctx.fillRect(0, 0, 1280, 720);
         ctx.fillStyle = '#fff'; ctx.font = 'bold 96px Courier New'; ctx.textAlign = 'center';
         ctx.fillText("OVERRUN!", 1280/2, 360);
-        ctx.font = '36px Courier New'; ctx.fillText("PRESS (A) OR ENTER TO RETRY", 1280/2, 480);
+        
+        ctx.font = '36px Courier New'; 
+        if (input.usingPad) {
+            ctx.fillText("PRESS (A) OR (RT) TO RETRY", 1280/2, 480);
+            ctx.fillStyle = '#cbd5e0'; ctx.font = '24px Courier New';
+            ctx.fillText("PRESS (B) FOR MAIN MENU", 1280/2, 540);
+        } else {
+            ctx.fillText("PRESS ENTER OR CLICK TO RETRY", 1280/2, 480);
+            ctx.fillStyle = '#cbd5e0'; ctx.font = '24px Courier New';
+            ctx.fillText("PRESS ESCAPE FOR MAIN MENU", 1280/2, 540);
+        }
     }
 
     ctx.restore();
@@ -984,6 +1109,7 @@ window.addEventListener('keydown', e => {
     if (k === 's' || e.key === 'ArrowDown') Input.keys.down = true;
     if (e.code === 'Space') Input.keys.shoot = true;
     if (e.code === 'Enter') Input.keys.select = true;
+    if (e.code === 'Escape' || e.code === 'Backspace') Input.keys.back = true;
 });
 
 window.addEventListener('keyup', e => {
@@ -994,6 +1120,7 @@ window.addEventListener('keyup', e => {
     if (k === 's' || e.key === 'ArrowDown') Input.keys.down = false;
     if (e.code === 'Space') Input.keys.shoot = false;
     if (e.code === 'Enter') Input.keys.select = false;
+    if (e.code === 'Escape' || e.code === 'Backspace') Input.keys.back = false;
 });
 
 window.addEventListener('mousemove', e => {
