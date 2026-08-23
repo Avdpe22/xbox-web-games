@@ -11,6 +11,10 @@
     "MMMMMMMMMGMMMMM",
     "WWWWWWWWWGWWWWW"
   ],
-  "spawnX": 7, 
-  "spawnY": 4
+  "spawnX": 7,
+  "spawnY": 4,
+  "enemies": [
+    { "x": 2, "y": 1, "axis": "x", "range": 2, "speed": 2 },
+    { "x": 6, "y": 3, "axis": "x", "range": 3, "speed": 1.5 }
+  ]
 }

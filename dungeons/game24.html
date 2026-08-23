@@ -496,7 +496,7 @@ class Player {
 // and flips the whole screen into that maze until the player finds the treasure
 // tile ('X') or walks back out through the entrance tile.
 
-const DUNGEON_TILES = { WALL: 0, FLOOR: 1, HAZARD: 2, TREASURE: 3 };
+const DUNGEON_TILES = { WALL: 0, FLOOR: 1, HAZARD: 2, TREASURE: 3, CLUE: 4 };
 let dungeonDataCache = {};
 let dungeon = null; // set while a dungeon screen is active
 
@@ -504,6 +504,7 @@ function charToDungeonTile(ch) {
     if (ch === 'M' || ch === 'W') return DUNGEON_TILES.WALL;
     if (ch === 'E') return DUNGEON_TILES.HAZARD;
     if (ch === 'X') return DUNGEON_TILES.TREASURE;
+    if (ch === 'C') return DUNGEON_TILES.CLUE; // rubble/bones marking a dead end - flavor, not a wall
     return DUNGEON_TILES.FLOOR;
 }
 
@@ -544,19 +545,39 @@ function enterDungeon(islandIndex) {
     const h = tiles.length, w = tiles[0].length;
     const spawn = findNearestFloor(tiles, data.spawnX ?? 1, data.spawnY ?? 1);
     const tileSize = 56;
+    const enemySize = 28;
+
+    // Enemies patrol back and forth along one axis between spawn +/- range tiles.
+    // Defeated by a sword swing (action button); reset fresh each time the dungeon is entered.
+    const enemies = (data.enemies || []).map(e => {
+        const speed = e.speed ?? 2;
+        return {
+            x: e.x * tileSize + (tileSize - enemySize) / 2,
+            y: e.y * tileSize + (tileSize - enemySize) / 2,
+            w: enemySize, h: enemySize,
+            axis: e.axis || 'x',
+            vx: e.axis === 'y' ? 0 : speed,
+            vy: e.axis === 'y' ? speed : 0,
+            traveled: 0,
+            range: (e.range ?? 3) * tileSize,
+            alive: true
+        };
+    });
 
     dungeon = {
         name: data.name || 'Dungeon',
         tiles, w, h, tileSize,
         islandIndex,
         spawnTile: spawn,
+        enemies,
         player: {
             x: spawn.x * tileSize + (tileSize - 26) / 2,
             y: spawn.y * tileSize + (tileSize - 26) / 2,
-            w: 26, h: 26, dir: 'down'
+            w: 26, h: 26, dir: 'down', actionCooldown: 0
         },
         camX: 0, camY: 0,
         enterCooldown: 30, // ignore the exit-via-interact check for a moment so the same key press that opened the door can't also close it
+        prevCX: spawn.x, prevCY: spawn.y,
         returnX: player.x, returnY: player.y
     };
 
@@ -571,6 +592,18 @@ function exitDungeon(silent) {
     playSound('interact');
     if (!silent) displayMessage("You emerge back onto the island.");
     dungeon = null;
+}
+
+function rectsOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function getSwingHitbox(p) {
+    const reach = 34;
+    if (p.dir === 'right') return { x: p.x + p.w, y: p.y - 4, w: reach, h: p.h + 8 };
+    if (p.dir === 'left') return { x: p.x - reach, y: p.y - 4, w: reach, h: p.h + 8 };
+    if (p.dir === 'up') return { x: p.x - 4, y: p.y - reach, w: p.w + 8, h: reach };
+    return { x: p.x - 4, y: p.y + p.h, w: p.w + 8, h: reach };
 }
 
 function updateDungeon(input) {
@@ -601,6 +634,40 @@ function updateDungeon(input) {
     p.y += dy;
     if (hitsWall()) p.y -= dy;
 
+    // Sword swing: on press, defeat any living enemy caught in the reach hitbox
+    if (p.actionCooldown > 0) p.actionCooldown--;
+    if (input.action && p.actionCooldown <= 0) {
+        p.actionCooldown = 20;
+        playSound('swing');
+        const hitbox = getSwingHitbox(p);
+        d.enemies.forEach(e => {
+            if (e.alive && rectsOverlap(hitbox, e)) {
+                e.alive = false;
+                playSound('secret');
+                screenShake = 6;
+                displayMessage("Enemy defeated!");
+            }
+        });
+    }
+
+    // Enemy patrols: bounce back and forth along their axis; knock the player back to the entrance on touch
+    d.enemies.forEach(e => {
+        if (!e.alive) return;
+        e.x += e.vx; e.y += e.vy;
+        e.traveled += e.axis === 'y' ? Math.abs(e.vy) : Math.abs(e.vx);
+        if (e.traveled >= e.range) {
+            e.vx *= -1; e.vy *= -1;
+            e.traveled = 0;
+        }
+        if (rectsOverlap(p, e)) {
+            p.x = d.spawnTile.x * d.tileSize + (d.tileSize - p.w) / 2;
+            p.y = d.spawnTile.y * d.tileSize + (d.tileSize - p.h) / 2;
+            playSound('push');
+            screenShake = 10;
+            displayMessage("An enemy strikes you down! Back to the entrance.");
+        }
+    });
+
     const cx = Math.floor((p.x + p.w / 2) / d.tileSize);
     const cy = Math.floor((p.y + p.h / 2) / d.tileSize);
     const tile = d.tiles[cy] && d.tiles[cy][cx];
@@ -611,6 +678,11 @@ function updateDungeon(input) {
         playSound('push');
         screenShake = 10;
         displayMessage("A trap sends you reeling back to the entrance!");
+    } else if (tile === DUNGEON_TILES.CLUE) {
+        if (cx !== d.prevCX || cy !== d.prevCY) {
+            playSound('interact');
+            displayMessage("Dead end — a cave-in blocks the way. There must be another route through...");
+        }
     } else if (tile === DUNGEON_TILES.TREASURE) {
         const info = islandDungeons[d.islandIndex];
         if (!info.solved) {
@@ -638,6 +710,8 @@ function updateDungeon(input) {
         exitDungeon();
         return;
     }
+
+    d.prevCX = cx; d.prevCY = cy;
 
     const viewW = 1920, viewH = 1080;
     const mapPxW = d.w * d.tileSize, mapPxH = d.h * d.tileSize;
@@ -690,12 +764,48 @@ function drawDungeon(ctx) {
                 ctx.shadowBlur = 0;
                 ctx.fillStyle = '#8d6e63';
                 ctx.fillRect(px + d.tileSize / 2 - 14, py + d.tileSize / 2 - 10, 28, 5);
+            } else if (tile === DUNGEON_TILES.CLUE) {
+                // Rubble and crossed bones - reads as a deliberate blockage, not a bug
+                ctx.fillStyle = '#3a3128';
+                ctx.beginPath();
+                ctx.arc(px + 14, py + d.tileSize - 14, 10, 0, Math.PI * 2);
+                ctx.arc(px + d.tileSize - 16, py + d.tileSize - 12, 8, 0, Math.PI * 2);
+                ctx.arc(px + d.tileSize / 2, py + 16, 9, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#e8dfd5'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(px + d.tileSize / 2 - 10, py + d.tileSize / 2 - 10);
+                ctx.lineTo(px + d.tileSize / 2 + 10, py + d.tileSize / 2 + 10);
+                ctx.moveTo(px + d.tileSize / 2 + 10, py + d.tileSize / 2 - 10);
+                ctx.lineTo(px + d.tileSize / 2 - 10, py + d.tileSize / 2 + 10);
+                ctx.stroke();
             } else if (x === d.spawnTile.x && y === d.spawnTile.y) {
                 ctx.strokeStyle = '#81d4fa'; ctx.lineWidth = 3;
                 ctx.strokeRect(px + 6, py + 6, d.tileSize - 12, d.tileSize - 12);
             }
         }
     }
+
+    d.enemies.forEach(e => {
+        if (!e.alive) return;
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath(); ctx.ellipse(e.x + e.w / 2, e.y + e.h + 2, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+        ctx.fillStyle = '#5d4a66';
+        ctx.beginPath(); ctx.ellipse(e.x + e.w / 2, e.y + e.h / 2, e.w / 2, e.h / 2 - 2, 0, 0, Math.PI * 2); ctx.fill();
+
+        ctx.strokeStyle = '#3d2f45'; ctx.lineWidth = 2;
+        for (let i = -1; i <= 1; i += 2) {
+            ctx.beginPath();
+            ctx.moveTo(e.x + e.w / 2 + i * 8, e.y + e.h - 2);
+            ctx.lineTo(e.x + e.w / 2 + i * 12, e.y + e.h + 6);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = '#e74c3c';
+        ctx.beginPath(); ctx.arc(e.x + e.w / 2 - 6, e.y + e.h / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(e.x + e.w / 2 + 6, e.y + e.h / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
+    });
 
     const p = d.player;
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -706,6 +816,17 @@ function drawDungeon(ctx) {
     ctx.fillRect(p.x, p.y + p.h - 8, p.w, 6);
     ctx.fillStyle = '#ffccaa';
     ctx.beginPath(); ctx.arc(p.x + p.w / 2, p.y + 4, 8, 0, Math.PI * 2); ctx.fill();
+
+    if (p.actionCooldown > 10) {
+        ctx.strokeStyle = '#eeeeee'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+        const scx = p.x + p.w / 2, scy = p.y + p.h / 2;
+        ctx.beginPath();
+        if (p.dir === 'right') { ctx.moveTo(scx, scy); ctx.lineTo(scx + 30, scy - 6); }
+        if (p.dir === 'left') { ctx.moveTo(scx, scy); ctx.lineTo(scx - 30, scy - 6); }
+        if (p.dir === 'up') { ctx.moveTo(scx, scy); ctx.lineTo(scx, scy - 34); }
+        if (p.dir === 'down') { ctx.moveTo(scx, scy); ctx.lineTo(scx, scy + 26); }
+        ctx.stroke();
+    }
 
     ctx.restore();
 }
