@@ -15,8 +15,7 @@
         #gameCanvas {
             background-color: #000;
             max-width: 100vw; max-height: 100vh; aspect-ratio: 16 / 9;
-            box-shadow: 0 0 50px rgba(255, 100, 0, 0.3);
-            /* Crisp rendering for HUD, smooth for gradients */
+            box-shadow: 0 0 50px rgba(255, 100, 0, 0.4);
             image-rendering: auto; 
         }
     </style>
@@ -29,7 +28,6 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// --- GAMEPAD FOCUS FIX (FOR IFRAME / XBOX EDGE) ---
 function ensureFocus() { window.focus(); canvas.focus(); }
 window.addEventListener('load', ensureFocus);
 window.addEventListener('click', ensureFocus);
@@ -49,19 +47,18 @@ function initAudio() {
 function startSynthwaveBGM() {
     if (bgmInterval) clearInterval(bgmInterval);
     const stepTime = 0.125; // 120 BPM 16th notes
-    // Driving minor bassline
     const bassLine = [55.00, 55.00, 55.00, 65.41, 55.00, 55.00, 73.42, 49.00]; 
 
     bgmInterval = setInterval(() => {
         if (!audioCtx || gameState !== STATES.PLAYING) return;
         const now = audioCtx.currentTime;
 
-        // Heavy Kick Drum (Beats 1, 2, 3, 4)
+        // Kick Drum
         if (musicStep % 4 === 0) {
             const kick = audioCtx.createOscillator();
             const kickGain = audioCtx.createGain();
             kick.type = 'sine';
-            kick.frequency.setValueAtTime(150, now);
+            kick.frequency.setValueAtTime(160, now);
             kick.frequency.exponentialRampToValueAtTime(30, now + 0.15);
             kickGain.gain.setValueAtTime(0.5, now);
             kickGain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
@@ -69,7 +66,7 @@ function startSynthwaveBGM() {
             kick.start(now); kick.stop(now + 0.15);
         }
 
-        // Distorted Sawtooth Bass
+        // Bassline
         const bOsc = audioCtx.createOscillator();
         const bGain = audioCtx.createGain();
         bOsc.type = 'sawtooth';
@@ -77,10 +74,9 @@ function startSynthwaveBGM() {
         bGain.gain.setValueAtTime(0.12, now);
         bGain.gain.exponentialRampToValueAtTime(0.01, now + stepTime * 1.5);
         
-        // Lowpass filter for grit and pulse
         const filter = audioCtx.createBiquadFilter();
         filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(800, now);
+        filter.frequency.setValueAtTime(900, now);
         filter.frequency.linearRampToValueAtTime(200, now + stepTime);
         
         bOsc.connect(filter); filter.connect(bGain); bGain.connect(audioCtx.destination);
@@ -99,39 +95,46 @@ function playSound(type) {
     
     if (type === 'explosion') {
         osc.type = 'square';
-        osc.frequency.setValueAtTime(120, now);
-        osc.frequency.exponentialRampToValueAtTime(30, now + 0.6);
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(25, now + 0.6);
         gain.gain.setValueAtTime(0.6, now);
         gain.gain.linearRampToValueAtTime(0.01, now + 0.6);
         osc.start(now); osc.stop(now + 0.6);
     } else if (type === 'vulcan') {
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(180 + Math.random() * 50, now);
-        osc.frequency.exponentialRampToValueAtTime(80, now + 0.1);
-        gain.gain.setValueAtTime(0.25, now);
-        gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now); osc.stop(now + 0.1);
+        osc.frequency.setValueAtTime(220 + Math.random() * 60, now);
+        osc.frequency.exponentialRampToValueAtTime(80, now + 0.08);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+        osc.start(now); osc.stop(now + 0.08);
     } else if (type === 'missile') {
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.linearRampToValueAtTime(1000, now + 0.5);
+        osc.frequency.setValueAtTime(350, now);
+        osc.frequency.linearRampToValueAtTime(1200, now + 0.5);
         gain.gain.setValueAtTime(0.5, now);
         gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
         osc.start(now); osc.stop(now + 0.5);
     } else if (type === 'rock_hit') {
         osc.type = 'square';
-        osc.frequency.setValueAtTime(80, now);
+        osc.frequency.setValueAtTime(90, now);
         osc.frequency.exponentialRampToValueAtTime(20, now + 0.1);
         gain.gain.setValueAtTime(0.2, now);
         gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
         osc.start(now); osc.stop(now + 0.1);
     } else if (type === 'boost') {
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(60, now);
-        osc.frequency.linearRampToValueAtTime(140, now + 1.2);
+        osc.frequency.setValueAtTime(80, now);
+        osc.frequency.linearRampToValueAtTime(180, now + 1.2);
         gain.gain.setValueAtTime(0.5, now);
         gain.gain.linearRampToValueAtTime(0.01, now + 1.2);
         osc.start(now); osc.stop(now + 1.2);
+    } else if (type === 'ring') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.3);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now); osc.stop(now + 0.3);
     }
 }
 
@@ -153,7 +156,6 @@ const Input = {
             if (Math.abs(pad.axes[0]) > 0.2) vx = pad.axes[0];
             if (Math.abs(pad.axes[1]) > 0.2) vy = pad.axes[1];
             
-            // D-Pad
             if (pad.buttons[14]?.pressed) vx = -1;
             if (pad.buttons[15]?.pressed) vx = 1;
             if (pad.buttons[12]?.pressed) vy = -1;
@@ -187,19 +189,14 @@ function project(x, y, z) {
 }
 
 function blendFog(hex, z) {
-    // Fog color matches the horizon haze: #ff9955
     const fogR = 255, fogG = 153, fogB = 85;
-    
-    // Parse the input hex color
     let r = parseInt(hex.slice(1, 3), 16);
     let g = parseInt(hex.slice(3, 5), 16);
     let b = parseInt(hex.slice(5, 7), 16);
     
-    // Calculate blend factor based on Z-depth (max visual distance ~12000)
     let factor = Math.max(0, Math.min(1, z / 12000));
-    factor = Math.pow(factor, 1.5); // Ease-in curve for realistic atmospheric perspective
+    factor = Math.pow(factor, 1.5);
     
-    // Blend the object color with the horizon fog
     r = Math.round(r + (fogR - r) * factor);
     g = Math.round(g + (fogG - g) * factor);
     b = Math.round(b + (fogB - b) * factor);
@@ -207,8 +204,6 @@ function blendFog(hex, z) {
     return `rgb(${r}, ${g}, ${b})`;
 }
 
-// --- 3D WIREFRAME ENGINE ---
-// Define the vertices of an F-18 Hornet style jet in 3D space
 const JET_VERTICES = [
     {x: 0, y: -15, z: 60},    // 0: Nose Tip
     {x: -10, y: 0, z: 20},    // 1: Cockpit Left
@@ -229,26 +224,23 @@ const JET_VERTICES = [
 ];
 
 const JET_FACES = [
-    [0, 1, 3], [0, 2, 3], [0, 1, 4], [0, 2, 5], // Nose
-    [1, 4, 3], [2, 5, 3], [3, 4, 5], // Cockpit canopy
-    [4, 6, 8], [5, 7, 9], // Wings
-    [4, 8, 10], [5, 9, 11], // Engines
-    [8, 12, 10], [9, 13, 11], // Rear stabs
-    [8, 14, 10], [9, 15, 11] // Tail fins
+    [0, 1, 3], [0, 2, 3], [0, 1, 4], [0, 2, 5],
+    [1, 4, 3], [2, 5, 3], [3, 4, 5],
+    [4, 6, 8], [5, 7, 9],
+    [4, 8, 10], [5, 9, 11],
+    [8, 12, 10], [9, 13, 11],
+    [8, 14, 10], [9, 15, 11]
 ];
 
 function rotate3D(x, y, z, pitch, roll, yaw) {
-    // Pitch (X-axis rotation)
     let cosP = Math.cos(pitch), sinP = Math.sin(pitch);
     let y1 = y * cosP - z * sinP;
     let z1 = y * sinP + z * cosP;
     
-    // Yaw (Y-axis rotation)
     let cosY = Math.cos(yaw), sinY = Math.sin(yaw);
     let x2 = x * cosY + z1 * sinY;
     let z2 = -x * sinY + z1 * cosY;
     
-    // Roll (Z-axis rotation)
     let cosR = Math.cos(roll), sinR = Math.sin(roll);
     let x3 = x2 * cosR - y1 * sinR;
     let y3 = x2 * sinR + y1 * cosR;
@@ -256,10 +248,7 @@ function rotate3D(x, y, z, pitch, roll, yaw) {
     return { x: x3, y: y3, z: z2 };
 }
 
-function drawWireframeJet(ctx, worldX, worldY, roll, pitch, isPlayer, isBoosting) {
-    const screenCenter = project(worldX, worldY, 150);
-    
-    // Calculate rotated and projected vertices
+function drawWireframeJet(ctx, worldX, worldY, roll, pitch, isPlayer, isBoosting, teamColor = null) {
     const projectedVerts = JET_VERTICES.map(v => {
         const rotated = rotate3D(v.x, v.y, v.z, pitch, roll, 0);
         return project(worldX + rotated.x, worldY + rotated.y, 150 + rotated.z);
@@ -267,12 +256,13 @@ function drawWireframeJet(ctx, worldX, worldY, roll, pitch, isPlayer, isBoosting
 
     ctx.save();
     
-    // Draw Faces
-    ctx.strokeStyle = isPlayer ? '#4facfe' : '#ff4a4a';
-    ctx.fillStyle = isPlayer ? 'rgba(10, 20, 40, 0.8)' : 'rgba(40, 10, 10, 0.8)';
+    let defaultStroke = isPlayer ? '#4facfe' : (teamColor || '#ff4a4a');
+    let defaultFill = isPlayer ? 'rgba(10, 20, 40, 0.85)' : 'rgba(40, 10, 10, 0.85)';
+    
+    ctx.strokeStyle = defaultStroke;
+    ctx.fillStyle = defaultFill;
     ctx.lineWidth = 2;
     
-    // Sort faces by average Z depth for basic painter's algorithm
     const facesWithDepth = JET_FACES.map(face => {
         let avgZ = 0;
         face.forEach(idx => {
@@ -281,7 +271,7 @@ function drawWireframeJet(ctx, worldX, worldY, roll, pitch, isPlayer, isBoosting
         });
         return { face, depth: avgZ / face.length };
     });
-    facesWithDepth.sort((a, b) => b.depth - a.depth); // Draw back to front
+    facesWithDepth.sort((a, b) => b.depth - a.depth);
 
     facesWithDepth.forEach(item => {
         ctx.beginPath();
@@ -295,13 +285,11 @@ function drawWireframeJet(ctx, worldX, worldY, roll, pitch, isPlayer, isBoosting
         ctx.stroke();
     });
 
-    // Exhaust rendering
     if (isBoosting || !isPlayer) {
         ctx.fillStyle = isBoosting ? '#00ffff' : '#ff5500';
         ctx.shadowColor = ctx.fillStyle;
         ctx.shadowBlur = isBoosting ? 30 : 15;
         
-        // Find exhaust vertices
         const exL = projectedVerts[10];
         const exR = projectedVerts[11];
         
@@ -311,10 +299,8 @@ function drawWireframeJet(ctx, worldX, worldY, roll, pitch, isPlayer, isBoosting
         ctx.beginPath();
         ctx.arc(exR.x, exR.y, 8 * exR.scale, 0, Math.PI*2);
         ctx.fill();
-        
         ctx.shadowBlur = 0;
     }
-    
     ctx.restore();
 }
 
@@ -324,25 +310,24 @@ class Player {
         this.y = 150;
         this.roll = 0;
         this.pitch = 0;
-        this.baseSpeed = 45; // Slower approach for massive structures
-        this.boostMeter = 0;
+        this.baseSpeed = 50;
+        this.boostMeter = 20;
         this.fireTimer = 0;
         this.missileTimer = 0;
         this.targetsDestroyed = 0;
         this.placement = 4;
         this.crashed = false;
+        this.distanceTraveled = 0;
     }
 
     update(input) {
         if (this.crashed) return 0;
         
-        // Fluid momentum-based rotation
-        this.roll += (input.vx * 0.8 - this.roll) * 0.15; // Max roll ~45 deg
-        this.pitch += (input.vy * 0.5 - this.pitch) * 0.15; // Max pitch ~25 deg
+        this.roll += (input.vx * 0.8 - this.roll) * 0.15;
+        this.pitch += (input.vy * 0.5 - this.pitch) * 0.15;
         
-        // Physical displacement follows the nose rotation
-        this.x += this.roll * 35;
-        this.y += this.pitch * 25;
+        this.x += this.roll * 38;
+        this.y += this.pitch * 28;
         
         this.x = Math.max(-1200, Math.min(1200, this.x));
         this.y = Math.max(-400, Math.min(400, this.y));
@@ -350,35 +335,67 @@ class Player {
         let currentSpeed = this.baseSpeed;
         const isBoosting = input.boost && this.boostMeter > 0;
         if (isBoosting) {
-            currentSpeed *= 2.2;
-            this.boostMeter = Math.max(0, this.boostMeter - 0.5);
-            screenShake = 5;
-            if (Math.random() < 0.1) playSound('boost');
+            currentSpeed *= 2.4;
+            this.boostMeter = Math.max(0, this.boostMeter - 0.6);
+            screenShake = 6;
+            if (Math.random() < 0.12) playSound('boost');
         }
 
-        // Weapons
+        this.distanceTraveled += currentSpeed;
+
+        // Auto-Aiming Smart Vulcan Firing
         if (this.fireTimer > 0) this.fireTimer--;
         if (input.fire && this.fireTimer <= 0) {
-            this.fireTimer = 4;
+            this.fireTimer = 3;
             playSound('vulcan');
-            projectiles.push(new Projectile(this.x - 20, this.y + 10, 0));
-            projectiles.push(new Projectile(this.x + 20, this.y + 10, 0));
+            
+            // Find nearest target (enemy or structure) for smart aiming trajectory
+            let bestTarget = null;
+            let minDist = Infinity;
+            
+            enemies.forEach(e => {
+                if (!e.dead && e.z > 0 && e.z < 6000) {
+                    let d = Math.hypot(e.x - this.x, e.y - this.y, e.z);
+                    if (d < minDist) { minDist = d; bestTarget = {x: e.x, y: e.y, z: e.z}; }
+                }
+            });
+            
+            if (!bestTarget) {
+                scenes.forEach(sc => {
+                    sc.elements.forEach(el => {
+                        if (!el.dead && Math.abs(sc.z - 150) < 5000) {
+                            let d = Math.hypot(el.x - this.x, el.y - this.y, sc.z);
+                            if (d < minDist) { minDist = d; bestTarget = {x: el.x, y: el.y, z: sc.z}; }
+                        }
+                    });
+                });
+            }
+
+            // Calculate trajectory towards target if in range, else straight ahead
+            let targetVx = 0, targetVy = 0;
+            if (bestTarget && minDist < 4500) {
+                let screenT = project(bestTarget.x, bestTarget.y, bestTarget.z);
+                let screenPlayer = project(this.x, this.y, 150);
+                let dx = screenT.x - screenPlayer.x;
+                let dy = screenT.y - screenPlayer.y;
+                let len = Math.hypot(dx, dy) || 1;
+                targetVx = (dx / len) * 35;
+                targetVy = (dy / len) * 35;
+            }
+
+            projectiles.push(new Projectile(this.x - 20, this.y + 10, 150, true, targetVx, targetVy));
+            projectiles.push(new Projectile(this.x + 20, this.y + 10, 150, true, targetVx, targetVy));
         }
 
         if (this.missileTimer > 0) this.missileTimer--;
         if (input.missile && this.missileTimer <= 0) {
-            // Find target
-            let target = enemies.find(e => e.z > 0 && e.z < 6000 && !e.dead);
+            let target = enemies.find(e => e.z > 0 && e.z < 6500 && !e.dead);
             if (target) {
-                this.missileTimer = 45;
+                this.missileTimer = 40;
                 playSound('missile');
                 projectiles.push(new Missile(this.x, this.y + 20, target));
             }
         }
-
-        // Progress canyon
-        environmentZ -= currentSpeed;
-        if (environmentZ <= -400) environmentZ += 400;
 
         return currentSpeed;
     }
@@ -389,33 +406,75 @@ class Player {
     }
 }
 
+class RivalRacer {
+    constructor(name, color, startZ, baseSpeed) {
+        this.name = name;
+        this.color = color;
+        this.x = (Math.random() - 0.5) * 1600;
+        this.y = (Math.random() - 0.5) * 300;
+        this.z = startZ;
+        this.baseSpeed = baseSpeed;
+        this.roll = 0;
+        this.distance = startZ;
+        this.dead = false;
+    }
+
+    update(playerSpeed) {
+        if (this.dead) return;
+        // Rival AI navigation and racing behavior
+        let speedDiff = this.baseSpeed - playerSpeed;
+        this.distance += speedDiff;
+        this.z -= playerSpeed - this.baseSpeed;
+        
+        this.x += Math.sin(this.z * 0.002) * 15;
+        this.roll = Math.cos(this.z * 0.003) * 0.5;
+
+        // Recycle if lapped or far behind
+        if (this.z < CAMERA_Z - 2000) {
+            this.z = 14000 + Math.random() * 3000;
+            this.x = (Math.random() - 0.5) * 1800;
+            this.dead = false;
+        }
+    }
+
+    draw(ctx) {
+        if (this.z < CAMERA_Z || this.dead) return;
+        drawWireframeJet(ctx, this.x, this.y, this.roll, 0, false, true, this.color);
+        
+        // Racer Name tag overhead
+        const screen = project(this.x, this.y - 40, this.z);
+        if (screen.scale > 0 && this.z < 5000) {
+            ctx.save();
+            ctx.fillStyle = this.color;
+            ctx.font = 'bold 20px "Segoe UI", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(this.name, screen.x, screen.y);
+            ctx.restore();
+        }
+    }
+}
+
 class Enemy {
     constructor(zOffset) {
-        this.x = (Math.random() - 0.5) * 2400;
-        this.y = (Math.random() - 0.5) * 800 - 100;
+        this.x = (Math.random() - 0.5) * 2200;
+        this.y = (Math.random() - 0.5) * 700 - 100;
         this.z = 10000 + zOffset;
-        this.speed = 75 + Math.random() * 25;
+        this.speed = 70 + Math.random() * 30;
         this.dead = false;
         this.roll = 0;
-        
-        this.evadeTimer = 0;
-        this.evadeDir = 0;
     }
 
     update(playerSpeed) {
         this.z -= (playerSpeed - this.speed);
-        
-        // Evasive roll
         const targetRoll = Math.sin(this.z * 0.005) * 0.6;
         this.roll += (targetRoll - this.roll) * 0.1;
-        this.x += this.roll * 20;
+        this.x += this.roll * 22;
         
-        // Recycle behind camera
         if (this.z < CAMERA_Z) {
-            this.z = 12000 + Math.random() * 2000;
-            this.x = (Math.random() - 0.5) * 2400;
+            this.z = 13000 + Math.random() * 2000;
+            this.x = (Math.random() - 0.5) * 2200;
             this.y = (Math.random() - 0.5) * 600 - 100;
-            this.speed = 70 + Math.random() * 20;
+            this.speed = 70 + Math.random() * 25;
             this.dead = false;
             this.roll = 0;
         }
@@ -426,17 +485,15 @@ class Enemy {
         const screen = project(this.x, this.y, this.z);
         if (screen.scale < 0) return;
         
-        drawWireframeJet(ctx, this.x, this.y, this.roll, 0, false, true);
+        drawWireframeJet(ctx, this.x, this.y, this.roll, 0, false, true, '#ff2255');
         
-        // Lock-on box visual if in range
-        if (this.z < 4000) {
+        if (this.z < 4500) {
             ctx.save();
             ctx.translate(screen.x, screen.y);
-            const br = Math.max(10, 80 * screen.scale); // Bracket radius
+            const br = Math.max(12, 85 * screen.scale);
             ctx.strokeStyle = this.z < 3000 ? '#ff0000' : '#00ff00';
             ctx.lineWidth = 3;
             
-            // Draw corners
             ctx.beginPath(); ctx.moveTo(-br, -br/2); ctx.lineTo(-br, -br); ctx.lineTo(-br/2, -br); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(br, -br/2); ctx.lineTo(br, -br); ctx.lineTo(br/2, -br); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(-br, br/2); ctx.lineTo(-br, br); ctx.lineTo(-br/2, br); ctx.stroke();
@@ -447,31 +504,40 @@ class Enemy {
 }
 
 let scenes = [];
+let boostRings = [];
 
 function spawnScene(zOffset) {
     let scene = { z: zOffset, elements: [], dead: false };
     let type = Math.random();
     
-    if (type < 0.3) {
-        // SCENE: TITAN BRIDGE
-        scene.elements.push({ type: 'pillar', x: -650, y: 150, w: 300, h: 900, hp: 600, dead: false });
-        scene.elements.push({ type: 'pillar', x: 650, y: 150, w: 300, h: 900, hp: 600, dead: false });
-        scene.elements.push({ type: 'beam', x: 0, y: -450, w: 2600, h: 200, hp: 1000, dead: false });
-    } else if (type < 0.6) {
-        // SCENE: ENEMY BASE CAMP
-        scene.elements.push({ type: 'barracks', x: -500, y: 150, w: 450, h: 120, hp: 200, dead: false });
-        scene.elements.push({ type: 'barracks', x: 500, y: 150, w: 450, h: 120, hp: 200, dead: false });
-        scene.elements.push({ type: 'tower', x: -900, y: 150, w: 120, h: 550, hp: 300, dead: false });
-        scene.elements.push({ type: 'tower', x: 900, y: 150, w: 120, h: 550, hp: 300, dead: false });
+    if (type < 0.28) {
+        // TITAN BRIDGE ARCH
+        scene.elements.push({ type: 'pillar', x: -700, y: 150, w: 320, h: 950, hp: 700, dead: false });
+        scene.elements.push({ type: 'pillar', x: 700, y: 150, w: 320, h: 950, hp: 700, dead: false });
+        scene.elements.push({ type: 'beam', x: 0, y: -480, w: 2800, h: 220, hp: 1200, dead: false });
+        // Add a bonus boost ring under the bridge arch!
+        boostRings.push({ x: 0, y: 0, z: zOffset, collected: false });
+    } else if (type < 0.55) {
+        // ENEMY FORTRESS COMPLEX
+        scene.elements.push({ type: 'barracks', x: -550, y: 150, w: 480, h: 140, hp: 250, dead: false });
+        scene.elements.push({ type: 'barracks', x: 550, y: 150, w: 480, h: 140, hp: 250, dead: false });
+        scene.elements.push({ type: 'tower', x: -950, y: 150, w: 130, h: 600, hp: 350, dead: false });
+        scene.elements.push({ type: 'tower', x: 950, y: 150, w: 130, h: 600, hp: 350, dead: false });
+        boostRings.push({ x: (Math.random()-0.5)*400, y: -100, z: zOffset, collected: false });
+    } else if (type < 0.8) {
+        // TUNNEL CANYON ARCH
+        scene.elements.push({ type: 'tunnel', x: 0, y: -200, w: 2200, h: 900, hp: 1500, dead: false });
+        boostRings.push({ x: 0, y: 50, z: zOffset, collected: false });
     } else {
-        // SCENE: TIGHT CANYON WALLS
-        let w1 = 700 + Math.random()*300;
-        let w2 = 700 + Math.random()*300;
-        let peaks1 = []; for(let i=0; i<6; i++) peaks1.push({x: (i/5 - 0.5)*w1, y: -(200 + Math.random()*500)});
-        let peaks2 = []; for(let i=0; i<6; i++) peaks2.push({x: (i/5 - 0.5)*w2, y: -(200 + Math.random()*500)});
+        // TIGHT SPIKY RAVINE
+        let w1 = 750 + Math.random()*350;
+        let w2 = 750 + Math.random()*350;
+        let peaks1 = []; for(let i=0; i<6; i++) peaks1.push({x: (i/5 - 0.5)*w1, y: -(220 + Math.random()*550)});
+        let peaks2 = []; for(let i=0; i<6; i++) peaks2.push({x: (i/5 - 0.5)*w2, y: -(220 + Math.random()*550)});
         
-        scene.elements.push({ type: 'canyon', x: -800, y: 150, w: w1, h: 700, hp: 400, dead: false, peaks: peaks1 });
-        scene.elements.push({ type: 'canyon', x: 800, y: 150, w: w2, h: 700, hp: 400, dead: false, peaks: peaks2 });
+        scene.elements.push({ type: 'canyon', x: -850, y: 150, w: w1, h: 750, hp: 500, dead: false, peaks: peaks1 });
+        scene.elements.push({ type: 'canyon', x: 850, y: 150, w: w2, h: 750, hp: 500, dead: false, peaks: peaks2 });
+        boostRings.push({ x: 0, y: -50, z: zOffset, collected: false });
     }
     scenes.push(scene);
 }
@@ -496,6 +562,19 @@ function drawStructure(ctx, el, z) {
         ctx.lineTo(screen.x + wScaled/2, screen.y);
         ctx.closePath();
         ctx.fill();
+    } else if (el.type === 'tunnel') {
+        const cTunnel = blendFog('#222831', z);
+        const cGlow = blendFog('#00f0ff', z);
+        ctx.strokeStyle = cGlow;
+        ctx.lineWidth = Math.max(2, 6 * screen.scale);
+        ctx.fillStyle = cTunnel;
+        
+        const rW = el.w * screen.scale;
+        const rH = el.h * screen.scale;
+        ctx.beginPath();
+        ctx.ellipse(screen.x, screen.y - rH/2, rW/2, rH/2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
     } else if (el.type === 'pillar') {
         const cMain = blendFog('#3a3f47', z);
         const cDark = blendFog('#1f2226', z);
@@ -577,24 +656,27 @@ function drawStructure(ctx, el, z) {
 }
 
 class Projectile {
-    constructor(x, y, z, isPlayer = false) {
+    constructor(x, y, z, isPlayer = false, vx = 0, vy = 0) {
         this.x = x; this.y = y; this.z = z;
-        this.speed = isPlayer ? 500 : -200; 
+        this.vx = vx; this.vy = vy;
+        this.speed = isPlayer ? 600 : -250; 
         this.dead = false;
         this.isPlayer = isPlayer;
     }
     update() {
+        this.x += this.vx;
+        this.y += this.vy;
         this.z += this.speed;
         if (this.z > 12000 || this.z < CAMERA_Z) this.dead = true;
     }
     draw(ctx) {
         const screen = project(this.x, this.y, this.z);
         if (screen.scale < 0) return;
-        ctx.fillStyle = this.isPlayer ? '#ffff00' : '#ff0055';
+        ctx.fillStyle = this.isPlayer ? '#00ffff' : '#ff0055';
         ctx.shadowColor = ctx.fillStyle;
         ctx.shadowBlur = 15;
         ctx.beginPath();
-        ctx.arc(screen.x, screen.y, Math.max(1, 12 * screen.scale), 0, Math.PI*2);
+        ctx.arc(screen.x, screen.y, Math.max(2, 12 * screen.scale), 0, Math.PI*2);
         ctx.fill();
         ctx.shadowBlur = 0;
     }
@@ -604,17 +686,16 @@ class Missile extends Projectile {
     constructor(x, y, target) {
         super(x, y, 100, true);
         this.target = target;
-        this.speed = 300;
+        this.speed = 350;
         this.smokeTrail = [];
     }
     update() {
         super.update();
         if (!this.target.dead) {
-            this.x += (this.target.x - this.x) * 0.15;
-            this.y += (this.target.y - this.y) * 0.15;
+            this.x += (this.target.x - this.x) * 0.2;
+            this.y += (this.target.y - this.y) * 0.2;
         }
         
-        // Generate Smoke
         if (Math.random() > 0.3) {
             this.smokeTrail.push({x: this.x, y: this.y, z: this.z, life: 1.0});
         }
@@ -622,7 +703,6 @@ class Missile extends Projectile {
         this.smokeTrail = this.smokeTrail.filter(s => s.life > 0);
     }
     draw(ctx) {
-        // Draw Smoke
         this.smokeTrail.forEach(s => {
             const scr = project(s.x, s.y, s.z);
             if (scr.scale > 0) {
@@ -639,7 +719,7 @@ class Missile extends Projectile {
         ctx.shadowColor = '#00f0ff';
         ctx.shadowBlur = 20;
         ctx.beginPath();
-        ctx.arc(screen.x, screen.y, Math.max(2, 16 * screen.scale), 0, Math.PI*2);
+        ctx.arc(screen.x, screen.y, Math.max(3, 16 * screen.scale), 0, Math.PI*2);
         ctx.fill();
         ctx.shadowBlur = 0;
     }
@@ -647,20 +727,18 @@ class Missile extends Projectile {
 
 let particles = [];
 function createExplosion(x, y, z) {
-    // Core fire
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 28; i++) {
         particles.push({
             x: x, y: y, z: z,
-            vx: (Math.random()-0.5)*40, vy: (Math.random()-0.5)*40, vz: (Math.random()-0.5)*40,
+            vx: (Math.random()-0.5)*45, vy: (Math.random()-0.5)*45, vz: (Math.random()-0.5)*45,
             life: 1.0, decay: Math.random() * 0.03 + 0.02,
             type: 'fire', scale: Math.random() * 3 + 1
         });
     }
-    // Dark Smoke
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 16; i++) {
         particles.push({
             x: x, y: y, z: z,
-            vx: (Math.random()-0.5)*20, vy: (Math.random()-0.5)*20, vz: (Math.random()-0.5)*20,
+            vx: (Math.random()-0.5)*22, vy: (Math.random()-0.5)*22, vz: (Math.random()-0.5)*22,
             life: 1.0, decay: Math.random() * 0.015 + 0.01,
             type: 'smoke', scale: Math.random() * 4 + 2
         });
@@ -671,36 +749,30 @@ function createRockDebris(x, y, z) {
     for (let i = 0; i < 15; i++) {
         particles.push({
             x: x, y: y, z: z,
-            vx: (Math.random()-0.5)*30, vy: (Math.random()-0.5)*30, vz: (Math.random()-0.5)*30,
+            vx: (Math.random()-0.5)*35, vy: (Math.random()-0.5)*35, vz: (Math.random()-0.5)*35,
             life: 1.0, decay: Math.random() * 0.04 + 0.02,
             type: 'rock', scale: Math.random() * 2 + 1
         });
     }
 }
 
-function createWindShear(x, y, z) {
-    particles.push({
-        x: x, y: y, z: z,
-        vx: 0, vy: 0, vz: 50,
-        life: 0.8, decay: 0.05,
-        type: 'wind', scale: 1.5
-    });
-}
-
 const STATES = { MENU: 0, PLAYING: 1, GAMEOVER: 2 };
 let gameState = STATES.MENU;
-let player, enemies, projectiles;
+let player, enemies, rivals, projectiles;
 let screenShake = 0;
 let environmentZ = 0;
 
 function startNewGame() {
     initAudio();
     player = new Player();
-    scenes = []; enemies = []; projectiles = []; particles = [];
+    scenes = []; enemies = []; rivals = []; projectiles = []; particles = []; boostRings = [];
     
-    // Staggered Scenes
-    for(let i=0; i<5; i++) spawnScene(i * 3000 + 2000);
-    for(let i=0; i<7; i++) enemies.push(new Enemy(i * 1800));
+    rivals.push(new RivalRacer("VIPER", "#00ffcc", 2500, 53));
+    rivals.push(new RivalRacer("TALON", "#ffcc00", 4500, 56));
+    rivals.push(new RivalRacer("GHOST", "#bf00ff", 7000, 59));
+
+    for(let i=0; i<6; i++) spawnScene(i * 2800 + 1500);
+    for(let i=0; i<8; i++) enemies.push(new Enemy(i * 1600));
     
     gameState = STATES.PLAYING;
 }
@@ -716,13 +788,31 @@ function update() {
     environmentZ -= playerSpeed;
     if (environmentZ <= -800) environmentZ += 800;
 
-    let aheadCount = 0;
-    enemies.forEach(e => {
-        e.update(playerSpeed);
-        if (e.z > 0 && !e.dead) aheadCount++;
+    // Update Rivals and calculate dynamic race placement
+    let rank = 1;
+    rivals.forEach(r => {
+        r.update(playerSpeed);
+        if (r.distance > player.distanceTraveled) rank++;
     });
-    player.placement = Math.max(1, aheadCount + 1);
+    player.placement = rank;
+
+    enemies.forEach(e => e.update(playerSpeed));
     
+    // Check Boost Rings collection
+    boostRings.forEach(ring => {
+        ring.z -= playerSpeed;
+        if (!ring.collected && Math.abs(ring.z - 150) < 200) {
+            let dist = Math.hypot(player.x - ring.x, player.y - ring.y);
+            if (dist < 280) {
+                ring.collected = true;
+                player.boostMeter = Math.min(100, player.boostMeter + 40);
+                playSound('ring');
+                screenShake = 12;
+            }
+        }
+    });
+    boostRings = boostRings.filter(r => r.z > CAMERA_Z && !r.collected);
+
     scenes.forEach(scene => {
         scene.z -= playerSpeed;
         if (scene.z < CAMERA_Z) scene.dead = true;
@@ -732,27 +822,20 @@ function update() {
 
             let dz = Math.abs(scene.z - 150);
             
-            // Crash logic vs Near Miss Proximity Weaving
             if (!player.crashed && dz < 250) {
-                // Y-axis bounding check
                 if (player.y > el.y - el.h - 50 && player.y < el.y + 50) {
                     let minX = el.x - el.w/2;
                     let maxX = el.x + el.w/2;
                     
                     if (player.x > minX - 100 && player.x < maxX + 100) {
                         if (player.x > minX + 25 && player.x < maxX - 25) {
-                            // Critical Crash
                             player.crashed = true;
-                            screenShake = 40;
+                            screenShake = 45;
                             playSound('explosion');
                             createExplosion(player.x, player.y, 150);
                             setTimeout(() => gameState = STATES.GAMEOVER, 2000);
                         } else {
-                            // Proximity Weaving (Near Miss!)
-                            player.boostMeter = Math.min(100, player.boostMeter + 0.5); 
-                            if (Math.random() < 0.2) {
-                                createWindShear(player.x + (player.x < el.x ? 30 : -30), player.y, 150);
-                            }
+                            player.boostMeter = Math.min(100, player.boostMeter + 0.8); 
                         }
                     }
                 }
@@ -760,11 +843,10 @@ function update() {
         });
     });
 
-    // Cleanup and spawn endless scenes
     scenes = scenes.filter(s => !s.dead);
     let maxZ = 0;
     scenes.forEach(s => { if (s.z > maxZ) maxZ = s.z; });
-    if (maxZ < 12000) spawnScene(maxZ + 3000);
+    if (maxZ < 12000) spawnScene(maxZ + 2800);
 
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
@@ -773,25 +855,34 @@ function update() {
         let hit = false;
         
         enemies.forEach(e => {
-            if (!hit && p.isPlayer && !e.dead && Math.abs(p.z - e.z) < 300 && Math.abs(p.x - e.x) < 200 && Math.abs(p.y - e.y) < 150) {
+            if (!hit && p.isPlayer && !e.dead && Math.abs(p.z - e.z) < 350 && Math.abs(p.x - e.x) < 220 && Math.abs(p.y - e.y) < 160) {
                 e.dead = true; p.dead = true; hit = true;
                 playSound('explosion');
                 createExplosion(e.x, e.y, e.z);
-                screenShake = 18;
+                screenShake = 20;
                 player.targetsDestroyed++;
-                player.boostMeter = Math.min(100, player.boostMeter + 20);
+                player.boostMeter = Math.min(100, player.boostMeter + 25);
             }
         });
 
-        // Terrain/Structure Destruction Logic
+        // Also check if rivals can be shot for race dominance
+        rivals.forEach(r => {
+            if (!hit && p.isPlayer && !r.dead && Math.abs(p.z - r.z) < 350 && Math.abs(p.x - r.x) < 220 && Math.abs(p.y - r.y) < 160) {
+                r.dead = true; p.dead = true; hit = true;
+                playSound('explosion');
+                createExplosion(r.x, r.y, r.z);
+                screenShake = 25;
+                player.boostMeter = Math.min(100, player.boostMeter + 50);
+            }
+        });
+
         if (!hit && p.isPlayer) {
             scenes.forEach(scene => {
                 if (Math.abs(p.z - scene.z) > 300) return;
                 scene.elements.forEach(el => {
                     if (!hit && !el.dead && p.x > el.x - el.w/2 && p.x < el.x + el.w/2 && p.y > el.y - el.h && p.y < el.y) {
                         p.dead = true; hit = true;
-                        // Missiles do massive damage, Vulcans chip them
-                        let damage = (p instanceof Missile) ? 150 : 25; 
+                        let damage = (p instanceof Missile) ? 150 : 35; 
                         el.hp -= damage;
                         
                         playSound('rock_hit');
@@ -801,9 +892,8 @@ function update() {
                             el.dead = true;
                             playSound('explosion');
                             createExplosion(el.x, el.y - el.h/2, scene.z);
-                            createExplosion(el.x - el.w/4, el.y, scene.z);
-                            screenShake = 30;
-                            player.boostMeter = Math.min(100, player.boostMeter + 20);
+                            screenShake = 35;
+                            player.boostMeter = Math.min(100, player.boostMeter + 25);
                             player.targetsDestroyed++;
                         }
                     }
@@ -822,36 +912,32 @@ function update() {
 }
 
 function drawEnvironment(ctx) {
-    // Cinematic Sunset Sky Gradient
     const skyGrad = ctx.createLinearGradient(0, 0, 0, 1080/2 + 200);
-    skyGrad.addColorStop(0, '#102542'); // Deep space blue
-    skyGrad.addColorStop(0.5, '#cd5c5c'); // Crimson red
-    skyGrad.addColorStop(0.8, '#ff9955'); // Sunset orange
-    skyGrad.addColorStop(1, '#ffeb99'); // Yellow horizon haze
+    skyGrad.addColorStop(0, '#0d1b2a');
+    skyGrad.addColorStop(0.5, '#b83333');
+    skyGrad.addColorStop(0.8, '#ff7733');
+    skyGrad.addColorStop(1, '#ffcc66');
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, 1920, 1080);
     
-    // The Sun
     ctx.fillStyle = '#fffdf0';
-    ctx.shadowColor = '#ffdd55';
-    ctx.shadowBlur = 100;
+    ctx.shadowColor = '#ffaa33';
+    ctx.shadowBlur = 120;
     ctx.beginPath();
-    ctx.arc(1920/2, 1080/2 + 150, 120, 0, Math.PI*2);
+    ctx.arc(1920/2, 1080/2 + 150, 130, 0, Math.PI*2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Fast Moving Desert Floor Grid
     const groundGrad = ctx.createLinearGradient(0, 1080/2 + 200, 0, 1080);
-    groundGrad.addColorStop(0, '#ff9955'); // Foggy horizon
-    groundGrad.addColorStop(0.1, '#a64924');
-    groundGrad.addColorStop(1, '#3b1606'); // Dark rust foreground
+    groundGrad.addColorStop(0, '#ff7733');
+    groundGrad.addColorStop(0.1, '#993311');
+    groundGrad.addColorStop(1, '#2b0f04');
     ctx.fillStyle = groundGrad;
     ctx.fillRect(0, 1080/2 + 200, 1920, 1080);
     
-    ctx.strokeStyle = 'rgba(255, 120, 50, 0.15)';
+    ctx.strokeStyle = 'rgba(255, 140, 50, 0.18)';
     ctx.lineWidth = 3;
     
-    // Moving horizontal depth lines
     for (let z = 100; z < 10000; z += 800) {
         let drawZ = z + environmentZ;
         if (drawZ < 100) continue;
@@ -862,22 +948,23 @@ function drawEnvironment(ctx) {
 }
 
 function drawHUD(ctx) {
-    // Top Right: Placement icon
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 70px Impact';
     ctx.textAlign = 'center';
     
-    // Polygon badge background
-    ctx.fillStyle = '#00ff00';
+    ctx.fillStyle = player.placement === 1 ? '#00ffff' : '#00ff00';
     ctx.beginPath();
-    ctx.moveTo(1920/2, 30); ctx.lineTo(1920/2 + 80, 60); ctx.lineTo(1920/2 + 40, 140);
-    ctx.lineTo(1920/2 - 40, 140); ctx.lineTo(1920/2 - 80, 60); ctx.closePath();
+    ctx.moveTo(1920/2, 30); ctx.lineTo(1920/2 + 90, 65); ctx.lineTo(1920/2 + 45, 145);
+    ctx.lineTo(1920/2 - 45, 145); ctx.lineTo(1920/2 - 90, 65); ctx.closePath();
     ctx.fill();
     
     ctx.fillStyle = '#000000';
-    ctx.fillText(`${player.placement}TH`, 1920/2, 115);
+    let suffix = 'TH';
+    if (player.placement === 1) suffix = 'ST';
+    else if (player.placement === 2) suffix = 'ND';
+    else if (player.placement === 3) suffix = 'RD';
+    ctx.fillText(`${player.placement}${suffix}`, 1920/2, 118);
     
-    // Left side: Throttle / Altitude bar (Green digital)
     ctx.fillStyle = '#00ff00';
     ctx.font = '24px "Segoe UI", sans-serif';
     ctx.textAlign = 'left';
@@ -886,43 +973,40 @@ function drawHUD(ctx) {
     ctx.fillStyle = '#111';
     ctx.fillRect(52, 762, 16, 196);
     
-    // Active throttle level
     ctx.fillStyle = '#00ff00';
     const altRatio = Math.max(0, Math.min(1, (400 - player.y) / 800));
     ctx.fillRect(52, 958 - (altRatio * 196), 16, altRatio * 196);
     ctx.fillText(`${Math.round(400 - player.y)} ft`, 80, 958 - (altRatio * 196) + 10);
 
-    // Bottom Left: Targets Neutralized Block
-    ctx.fillStyle = 'rgba(10, 20, 10, 0.8)';
-    ctx.fillRect(50, 980, 400, 60);
+    ctx.fillStyle = 'rgba(10, 20, 10, 0.85)';
+    ctx.fillRect(50, 980, 420, 60);
     ctx.strokeStyle = '#00ff00';
     ctx.lineWidth = 3;
-    ctx.strokeRect(50, 980, 400, 60);
+    ctx.strokeRect(50, 980, 420, 60);
     
     ctx.fillStyle = '#00ff00';
-    ctx.font = 'bold 32px Impact';
+    ctx.font = 'bold 30px Impact';
     ctx.fillText(`TARGETS NEUTRALIZED: ${player.targetsDestroyed}`, 65, 1022);
 
-    // Bottom Center: Destruction Boost Meter
     ctx.textAlign = 'center';
     ctx.font = 'bold 28px "Segoe UI", sans-serif';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText("DESTRUCTION BOOST", 1920/2, 970);
+    ctx.fillText("DESTRUCTION & BOOST RINGS METER", 1920/2, 970);
     
-    ctx.fillStyle = 'rgba(20, 0, 0, 0.8)';
+    ctx.fillStyle = 'rgba(20, 0, 0, 0.85)';
     ctx.fillRect(1920/2 - 350, 990, 700, 30);
     ctx.strokeStyle = '#ff0000';
     ctx.strokeRect(1920/2 - 350, 990, 700, 30);
     
     ctx.fillStyle = player.boostMeter >= 100 ? '#00ffff' : '#ff3300';
     ctx.shadowColor = ctx.fillStyle;
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = 18;
     ctx.fillRect(1920/2 - 348, 992, (player.boostMeter / 100) * 696, 26);
     ctx.shadowBlur = 0;
     
     ctx.fillStyle = '#ffffff';
     ctx.font = '20px "Segoe UI", sans-serif';
-    ctx.fillText("PRESS (LB) OR (Y) TO ENGAGE AFTERBURNER", 1920/2, 1045);
+    ctx.fillText("PRESS (LB) OR (SHIFT) TO ENGAGE AFTERBURNER", 1920/2, 1045);
 }
 
 function loop() {
@@ -948,31 +1032,48 @@ function loop() {
             });
         });
         
+        boostRings.forEach(ring => {
+            renderList.push({type: 'ring', obj: ring, z: ring.z});
+        });
+
+        rivals.forEach(r => { if(!r.dead) renderList.push({type: 'rival', obj: r, z: r.z}); });
         enemies.forEach(e => { if(!e.dead) renderList.push({type: 'enemy', obj: e, z: e.z}); });
         projectiles.forEach(p => { renderList.push({type: 'proj', obj: p, z: p.z}); });
         particles.forEach(p => { renderList.push({type: 'part', obj: p, z: p.z}); });
         
-        renderList.sort((a, b) => b.z - a.z); // Draw furthest to nearest
+        renderList.sort((a, b) => b.z - a.z);
         
         renderList.forEach(item => {
             if (item.type === 'struct') drawStructure(ctx, item.obj, item.z);
+            if (item.type === 'ring') {
+                const scr = project(item.obj.x, item.obj.y, item.obj.z);
+                if (scr.scale > 0) {
+                    ctx.save();
+                    ctx.strokeStyle = '#00ffff';
+                    ctx.shadowColor = '#00ffff';
+                    ctx.shadowBlur = 25;
+                    ctx.lineWidth = Math.max(3, 8 * scr.scale);
+                    ctx.beginPath();
+                    ctx.arc(scr.x, scr.y, 140 * scr.scale, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+            if (item.type === 'rival') item.obj.draw(ctx);
             if (item.type === 'enemy') item.obj.draw(ctx);
             if (item.type === 'proj') item.obj.draw(ctx);
             if (item.type === 'part') {
                 const screen = project(item.obj.x, item.obj.y, item.obj.z);
                 if (screen.scale > 0) {
                     if (item.obj.type === 'fire') {
-                        ctx.fillStyle = `rgba(255, ${Math.random()*100 + 50}, 0, ${item.obj.life})`;
+                        ctx.fillStyle = `rgba(255, ${Math.random()*120 + 60}, 0, ${item.obj.life})`;
                         ctx.globalCompositeOperation = 'lighter';
                     } else if (item.obj.type === 'smoke') {
-                        ctx.fillStyle = `rgba(30, 30, 30, ${item.obj.life * 0.8})`;
+                        ctx.fillStyle = `rgba(35, 35, 35, ${item.obj.life * 0.85})`;
                         ctx.globalCompositeOperation = 'source-over';
                     } else if (item.obj.type === 'rock') {
                         ctx.fillStyle = `rgba(140, 53, 20, ${item.obj.life})`;
                         ctx.globalCompositeOperation = 'source-over';
-                    } else if (item.obj.type === 'wind') {
-                        ctx.fillStyle = `rgba(255, 255, 255, ${item.obj.life * 0.4})`;
-                        ctx.globalCompositeOperation = 'lighter';
                     }
                     ctx.beginPath();
                     ctx.arc(screen.x, screen.y, Math.max(1, 40 * screen.scale * item.obj.scale), 0, Math.PI*2);
@@ -985,56 +1086,55 @@ function loop() {
         const currentInput = Input.getState();
         const isBoostingActive = currentInput.boost && player.boostMeter > 0;
         player.draw(ctx, isBoostingActive);
+        drawHUD(ctx);
     } else {
-        // Menu Screen
         drawEnvironment(ctx);
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
         ctx.fillRect(0,0,1920,1080);
         
         ctx.fillStyle = '#ffffff'; 
         ctx.textAlign = 'center'; 
-        ctx.font = 'italic 120px Impact';
+        ctx.font = 'italic 110px Impact';
         ctx.shadowColor = '#ff5500';
-        ctx.shadowBlur = 40;
-        ctx.fillText("MACH-V: CANYON INTERCEPTOR", 1920/2, 300);
+        ctx.shadowBlur = 45;
+        ctx.fillText("MACH-V: CANYON INTERCEPTOR", 1920/2, 260);
         
         ctx.shadowBlur = 0;
         
-        // Tactical Control Link HUD
-        ctx.fillStyle = 'rgba(10, 20, 30, 0.85)';
-        ctx.fillRect(1920/2 - 450, 380, 900, 380);
+        ctx.fillStyle = 'rgba(10, 25, 40, 0.9)';
+        ctx.fillRect(1920/2 - 460, 330, 920, 420);
         ctx.strokeStyle = '#00f0ff';
         ctx.lineWidth = 3;
-        ctx.strokeRect(1920/2 - 450, 380, 900, 380);
+        ctx.strokeRect(1920/2 - 460, 330, 920, 420);
         
         ctx.fillStyle = '#00f0ff';
-        ctx.font = 'bold 40px "Segoe UI", sans-serif';
-        ctx.fillText("TACTICAL CONTROL LINK", 1920/2, 450);
+        ctx.font = 'bold 38px "Segoe UI", sans-serif';
+        ctx.fillText("TACTICAL & RACE CONTROLS", 1920/2, 395);
         
-        // Control Mappings
-        ctx.font = '30px "Segoe UI", sans-serif';
+        ctx.font = '28px "Segoe UI", sans-serif';
         ctx.textAlign = 'left';
-        const startX = 1920/2 - 350;
+        const startX = 1920/2 - 380;
         ctx.fillStyle = '#ffffff';
-        ctx.fillText("STEER AIRCRAFT:", startX, 530);
-        ctx.fillText("VULCAN CANNON:", startX, 590);
-        ctx.fillText("HEAT-SEEKING MISSILES:", startX, 650);
-        ctx.fillText("ENGAGE AFTERBURNER:", startX, 710);
+        ctx.fillText("MANEUVER AIRCRAFT:", startX, 470);
+        ctx.fillText("SMART-TARGETING VULCAN:", startX, 530);
+        ctx.fillText("HEAT-SEEKING MISSILES:", startX, 590);
+        ctx.fillText("AFTERBURNER & BOOST RINGS:", startX, 650);
+        ctx.fillText("RIVAL RACER INTERCEPT:", startX, 710);
         
         ctx.textAlign = 'right';
-        const endX = 1920/2 + 350;
+        const endX = 1920/2 + 380;
         ctx.fillStyle = '#ffaa00';
-        ctx.fillText("LEFT STICK  /  W A S D", endX, 530);
-        ctx.fillText("(RT) OR (A)  /  SPACEBAR", endX, 590);
-        ctx.fillText("(RB) OR (X)  /  E KEY", endX, 650);
-        ctx.fillText("(LB) OR (Y)  /  SHIFT KEY", endX, 710);
+        ctx.fillText("LEFT STICK  /  W A S D", endX, 470);
+        ctx.fillText("(RT) OR (A)  /  SPACEBAR", endX, 530);
+        ctx.fillText("(RB) OR (X)  /  E KEY", endX, 590);
+        ctx.fillText("(LB) OR (Y)  /  SHIFT KEY", endX, 650);
+        ctx.fillText("PASS OR TAKE DOWN RIVALS", endX, 710);
         
-        // Launch prompt
         ctx.textAlign = 'center';
         ctx.font = 'bold 45px "Segoe UI", sans-serif';
-        ctx.fillStyle = '#00f0ff';
-        ctx.globalAlpha = 0.5 + Math.sin(Date.now() * 0.004) * 0.5; // Pulsing effect
-        ctx.fillText("PRESS (RT) OR (A) TO LAUNCH", 1920/2, 880);
+        ctx.fillStyle = '#00ffff';
+        ctx.globalAlpha = 0.5 + Math.sin(Date.now() * 0.004) * 0.5;
+        ctx.fillText("PRESS (RT) OR (A) TO LAUNCH RACE", 1920/2, 860);
         ctx.globalAlpha = 1.0;
     }
     
@@ -1042,7 +1142,6 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-// PC Fallback Controls
 window.addEventListener('keydown', e => {
     if (e.code === 'Space') Input.keys.fire = true;
     if (e.key === 'e') Input.keys.missile = true;
