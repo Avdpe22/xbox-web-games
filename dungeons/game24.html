@@ -154,7 +154,8 @@ const DUNGEON_FILES = ['abyssaltrench.json', 'ironkeep.json', 'skullcave.json'];
 let mapData = [];
 let npcs = [];
 let caveEntrances = []; // {x, y, islandIndex} in overworld tile coords
-let islandDungeons = {}; // islandIndex -> { file, solved }
+let islandGates = []; // {x, y, islandIndex} - mountain tile that opens once the island is unlocked
+let islandDungeons = {}; // islandIndex -> { file, solved, unlocked }
 let screenShake = 0;
 let timeOffset = 0;
 
@@ -181,7 +182,7 @@ function generateWorld() {
         mapData[center.y+8][center.x] = TILES.WATER; // Water clearance for boat
 
         if (idx === 0) {
-            npcs.push({x: center.x, y: center.y, text: "Ahoy! Explore the 9 other islands and step into each cave mouth. Every dungeon below holds a different trial - find the treasure and get out!"});
+            npcs.push({x: center.x, y: center.y, text: "Ahoy! Sail to the first island and clear its dungeon. Every treasure you find breaks the barrier sealing the next island's shores!"});
         } else {
             for(let dy=-4; dy<=4; dy++) {
                 for(let dx=-4; dx<=4; dx++) {
@@ -193,9 +194,18 @@ function generateWorld() {
                 }
             }
 
+            // Gate: a breach in the mountain ring facing the dock. Only the first
+            // island starts open - the rest stay sealed until the previous island's
+            // dungeon treasure is found (see the TREASURE branch in updateDungeon).
+            const gateX = center.x;
+            const gateY = center.y + 4;
+            const unlocked = idx === 1;
+            mapData[gateY][gateX] = unlocked ? TILES.GRASS : TILES.MOUNTAIN;
+            islandGates.push({ x: gateX, y: gateY, islandIndex: idx });
+
             mapData[center.y][center.x] = TILES.CAVE;
             caveEntrances.push({ x: center.x, y: center.y, islandIndex: idx });
-            islandDungeons[idx] = { file: DUNGEON_FILES[(idx - 1) % DUNGEON_FILES.length], solved: false };
+            islandDungeons[idx] = { file: DUNGEON_FILES[(idx - 1) % DUNGEON_FILES.length], solved: false, unlocked };
         }
     });
 }
@@ -351,6 +361,13 @@ class Player {
         if (this.dir === 'left') fx--; if (this.dir === 'right') fx++;
 
         if (this.state === 'walking') {
+            const gate = islandGates.find(g => g.x === fx && g.y === fy);
+            if (gate && !islandDungeons[gate.islandIndex].unlocked) {
+                playSound('push');
+                displayMessage("A magical barrier seals this island. Clear the previous island's dungeon to break it.");
+                return;
+            }
+
             for (let npc of npcs) {
                 if (npc.x === fx && npc.y === fy) {
                     playSound('interact');
@@ -601,7 +618,16 @@ function updateDungeon(input) {
             player.treasures++;
             playSound('secret');
             screenShake = 15;
-            displayMessage(`You found Ancient Treasure! (${player.treasures}/9)`);
+
+            const nextInfo = islandDungeons[d.islandIndex + 1];
+            if (nextInfo && !nextInfo.unlocked) {
+                nextInfo.unlocked = true;
+                const gate = islandGates.find(g => g.islandIndex === d.islandIndex + 1);
+                if (gate) mapData[gate.y][gate.x] = TILES.GRASS;
+                displayMessage(`You found Ancient Treasure! (${player.treasures}/9) The barrier to the next island crumbles away...`);
+            } else {
+                displayMessage(`You found Ancient Treasure! (${player.treasures}/9)`);
+            }
         } else {
             playSound('interact');
             displayMessage("This chest is already empty.");
