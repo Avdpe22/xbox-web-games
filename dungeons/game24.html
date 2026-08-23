@@ -143,14 +143,18 @@ const TILE_SIZE = 40;
 const MAP_TILES = 120; // 4800x4800 pixel ocean
 
 const TILES = {
-    WATER: 0, SAND: 1, GRASS: 2, MOUNTAIN: 3, DOCK: 4, SWITCH: 5, BARRIER: 6
+    WATER: 0, SAND: 1, GRASS: 2, MOUNTAIN: 3, DOCK: 4, CAVE: 5
 };
 
+// Dungeon layout files, one per island puzzle. Add more .json files here
+// (same shape as abyssaltrench.json) to give more islands their own unique maze -
+// they'll be assigned to islands in order and cycle if there are more islands than files.
+const DUNGEON_FILES = ['abyssaltrench.json', 'ironkeep.json', 'skullcave.json'];
+
 let mapData = [];
-let puzzles = [];
-let blocks = [];
-let chests = [];
 let npcs = [];
+let caveEntrances = []; // {x, y, islandIndex} in overworld tile coords
+let islandDungeons = {}; // islandIndex -> { file, solved }
 let screenShake = 0;
 let timeOffset = 0;
 
@@ -177,7 +181,7 @@ function generateWorld() {
         mapData[center.y+8][center.x] = TILES.WATER; // Water clearance for boat
 
         if (idx === 0) {
-            npcs.push({x: center.x, y: center.y, text: "Ahoy! Explore the 9 other islands. Push the steel crates onto pressure plates to shatter the gates!"});
+            npcs.push({x: center.x, y: center.y, text: "Ahoy! Explore the 9 other islands and step into each cave mouth. Every dungeon below holds a different trial - find the treasure and get out!"});
         } else {
             for(let dy=-4; dy<=4; dy++) {
                 for(let dx=-4; dx<=4; dx++) {
@@ -189,19 +193,9 @@ function generateWorld() {
                 }
             }
 
-            mapData[center.y+4][center.x] = TILES.BARRIER;
-            
-            let switchX = center.x - 2;
-            let switchY = center.y + 5;
-            mapData[switchY][switchX] = TILES.SWITCH;
-            blocks.push({ x: center.x - 4, y: center.y + 5 });
-            chests.push({ x: center.x, y: center.y, opened: false });
-            
-            puzzles.push({
-                switchX: switchX, switchY: switchY,
-                barrierX: center.x, barrierY: center.y+4,
-                solved: false
-            });
+            mapData[center.y][center.x] = TILES.CAVE;
+            caveEntrances.push({ x: center.x, y: center.y, islandIndex: idx });
+            islandDungeons[idx] = { file: DUNGEON_FILES[(idx - 1) % DUNGEON_FILES.length], solved: false };
         }
     });
 }
@@ -235,7 +229,6 @@ class Player {
         this.state = 'walking'; 
         this.actionCooldown = 0;
         this.interactCooldown = 0;
-        this.pushTimer = 0;
         this.walkCycle = 0;
         
         // Ship coordinates
@@ -265,46 +258,10 @@ class Player {
             this.walkCycle += 0.2;
         }
 
-        let blockedByCrate = false;
-        if (this.state === 'walking' && (dx !== 0 || dy !== 0)) {
-            let nextX = this.x + dx;
-            let nextY = this.y + dy;
-
-            for (let b of blocks) {
-                let bx = b.x * TILE_SIZE;
-                let by = b.y * TILE_SIZE;
-                if (nextX < bx + TILE_SIZE && nextX + this.w > bx && nextY < by + TILE_SIZE && nextY + this.h > by) {
-                    blockedByCrate = b;
-                    break;
-                }
-            }
-        }
-
-        if (blockedByCrate) {
-            this.pushTimer++;
-            if (this.pushTimer > 25) {
-                let tgtX = blockedByCrate.x;
-                let tgtY = blockedByCrate.y;
-                if (this.dir === 'right') tgtX++;
-                if (this.dir === 'left') tgtX--;
-                if (this.dir === 'down') tgtY++;
-                if (this.dir === 'up') tgtY--;
-
-                if (canMoveBlockTo(tgtX, tgtY)) {
-                    blockedByCrate.x = tgtX;
-                    blockedByCrate.y = tgtY;
-                    playSound('push');
-                    checkPuzzles();
-                }
-                this.pushTimer = 0;
-            }
-        } else {
-            this.pushTimer = 0;
-            this.x += dx;
-            if (this.checkCollision()) this.x -= dx;
-            this.y += dy;
-            if (this.checkCollision()) this.y -= dy;
-        }
+        this.x += dx;
+        if (this.checkCollision()) this.x -= dx;
+        this.y += dy;
+        if (this.checkCollision()) this.y -= dy;
 
         this.x = Math.max(0, Math.min(MAP_TILES * TILE_SIZE - this.w, this.x));
         this.y = Math.max(0, Math.min(MAP_TILES * TILE_SIZE - this.h, this.y));
@@ -333,7 +290,7 @@ class Player {
             const tile = mapData[tY][tX];
             
             if (this.state === 'walking') {
-                return tile === TILES.WATER || tile === TILES.MOUNTAIN || tile === TILES.BARRIER;
+                return tile === TILES.WATER || tile === TILES.MOUNTAIN;
             } else if (this.state === 'sailing') {
                 return tile !== TILES.WATER && tile !== TILES.DOCK;
             }
@@ -381,6 +338,14 @@ class Player {
             return;
         }
 
+        if (this.state === 'walking' && tile === TILES.CAVE) {
+            const cave = caveEntrances.find(c => c.x === cx && c.y === cy);
+            if (cave) {
+                enterDungeon(cave.islandIndex);
+                return;
+            }
+        }
+
         let fx = cx; let fy = cy;
         if (this.dir === 'up') fy--; if (this.dir === 'down') fy++;
         if (this.dir === 'left') fx--; if (this.dir === 'right') fx++;
@@ -390,14 +355,6 @@ class Player {
                 if (npc.x === fx && npc.y === fy) {
                     playSound('interact');
                     displayMessage(npc.text);
-                }
-            }
-            for (let chest of chests) {
-                if (chest.x === fx && chest.y === fy && !chest.opened) {
-                    playSound('secret');
-                    chest.opened = true;
-                    this.treasures++;
-                    displayMessage(`You found Ancient Treasure! (${this.treasures}/9)`);
                 }
             }
         }
@@ -517,31 +474,214 @@ class Player {
     }
 }
 
-// --- PUZZLE LOGIC ---
+// --- DUNGEON SYSTEM ---
+// Each island's cave entrance loads a JSON layout (see abyssaltrench.json etc.)
+// and flips the whole screen into that maze until the player finds the treasure
+// tile ('X') or walks back out through the entrance tile.
 
-function canMoveBlockTo(tx, ty) {
-    if (tx < 0 || tx >= MAP_TILES || ty < 0 || ty >= MAP_TILES) return false;
-    let tile = mapData[ty][tx];
-    if (tile === TILES.WATER || tile === TILES.MOUNTAIN || tile === TILES.BARRIER || tile === TILES.DOCK) return false;
-    for (let b of blocks) { if (b.x === tx && b.y === ty) return false; }
-    for (let c of chests) { if (c.x === tx && c.y === ty) return false; }
-    for (let n of npcs) { if (n.x === tx && n.y === ty) return false; }
-    return true;
+const DUNGEON_TILES = { WALL: 0, FLOOR: 1, HAZARD: 2, TREASURE: 3 };
+let dungeonDataCache = {};
+let dungeon = null; // set while a dungeon screen is active
+
+function charToDungeonTile(ch) {
+    if (ch === 'M' || ch === 'W') return DUNGEON_TILES.WALL;
+    if (ch === 'E') return DUNGEON_TILES.HAZARD;
+    if (ch === 'X') return DUNGEON_TILES.TREASURE;
+    return DUNGEON_TILES.FLOOR;
 }
 
-function checkPuzzles() {
-    puzzles.forEach(p => {
-        if (!p.solved) {
-            let pressed = blocks.some(b => b.x === p.switchX && b.y === p.switchY);
-            if (pressed) {
-                p.solved = true;
-                playSound('secret');
-                screenShake = 15;
-                mapData[p.barrierY][p.barrierX] = TILES.GRASS;
-                displayMessage("A hidden gate has shattered open!");
+async function preloadDungeons() {
+    await Promise.all(DUNGEON_FILES.map(async file => {
+        try {
+            const res = await fetch(file);
+            dungeonDataCache[file] = await res.json();
+        } catch (e) {
+            console.warn(`Could not load dungeon file "${file}":`, e);
+        }
+    }));
+}
+
+// If a JSON's declared spawn point lands on a wall (bad data), find the nearest floor tile instead.
+function findNearestFloor(tiles, x, y) {
+    const h = tiles.length, w = tiles[0].length;
+    const isFloor = (tx, ty) => tx >= 0 && ty >= 0 && tx < w && ty < h && tiles[ty][tx] !== DUNGEON_TILES.WALL;
+    if (isFloor(x, y)) return { x, y };
+    for (let radius = 1; radius < Math.max(w, h); radius++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+                if (isFloor(x + dx, y + dy)) return { x: x + dx, y: y + dy };
             }
         }
-    });
+    }
+    return { x, y };
+}
+
+function enterDungeon(islandIndex) {
+    const info = islandDungeons[islandIndex];
+    if (!info) return;
+    const data = dungeonDataCache[info.file];
+    if (!data) { displayMessage("The cave is still being carved... try again in a moment."); return; }
+
+    const tiles = data.layout.map(row => row.split('').map(charToDungeonTile));
+    const h = tiles.length, w = tiles[0].length;
+    const spawn = findNearestFloor(tiles, data.spawnX ?? 1, data.spawnY ?? 1);
+    const tileSize = 56;
+
+    dungeon = {
+        name: data.name || 'Dungeon',
+        tiles, w, h, tileSize,
+        islandIndex,
+        spawnTile: spawn,
+        player: {
+            x: spawn.x * tileSize + (tileSize - 26) / 2,
+            y: spawn.y * tileSize + (tileSize - 26) / 2,
+            w: 26, h: 26, dir: 'down'
+        },
+        camX: 0, camY: 0,
+        enterCooldown: 30, // ignore the exit-via-interact check for a moment so the same key press that opened the door can't also close it
+        returnX: player.x, returnY: player.y
+    };
+
+    playSound('interact');
+    displayMessage(`You enter ${dungeon.name}...`);
+}
+
+function exitDungeon(silent) {
+    if (!dungeon) return;
+    player.x = dungeon.returnX;
+    player.y = dungeon.returnY;
+    playSound('interact');
+    if (!silent) displayMessage("You emerge back onto the island.");
+    dungeon = null;
+}
+
+function updateDungeon(input) {
+    const d = dungeon;
+    const p = d.player;
+    if (d.enterCooldown > 0) d.enterCooldown--;
+    const speed = 5;
+    const dx = input.vx * speed;
+    const dy = input.vy * speed;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 0) p.dir = 'right'; if (dx < 0) p.dir = 'left';
+    } else if (Math.abs(dy) > 0) {
+        if (dy > 0) p.dir = 'down'; if (dy < 0) p.dir = 'up';
+    }
+
+    const collides = (px, py) => {
+        const tx = Math.floor(px / d.tileSize);
+        const ty = Math.floor(py / d.tileSize);
+        if (tx < 0 || ty < 0 || tx >= d.w || ty >= d.h) return true;
+        return d.tiles[ty][tx] === DUNGEON_TILES.WALL;
+    };
+    const hitsWall = () => collides(p.x + 4, p.y + 4) || collides(p.x + p.w - 4, p.y + 4) ||
+                            collides(p.x + 4, p.y + p.h - 4) || collides(p.x + p.w - 4, p.y + p.h - 4);
+
+    p.x += dx;
+    if (hitsWall()) p.x -= dx;
+    p.y += dy;
+    if (hitsWall()) p.y -= dy;
+
+    const cx = Math.floor((p.x + p.w / 2) / d.tileSize);
+    const cy = Math.floor((p.y + p.h / 2) / d.tileSize);
+    const tile = d.tiles[cy] && d.tiles[cy][cx];
+
+    if (tile === DUNGEON_TILES.HAZARD) {
+        p.x = d.spawnTile.x * d.tileSize + (d.tileSize - p.w) / 2;
+        p.y = d.spawnTile.y * d.tileSize + (d.tileSize - p.h) / 2;
+        playSound('push');
+        screenShake = 10;
+        displayMessage("A trap sends you reeling back to the entrance!");
+    } else if (tile === DUNGEON_TILES.TREASURE) {
+        const info = islandDungeons[d.islandIndex];
+        if (!info.solved) {
+            info.solved = true;
+            player.treasures++;
+            playSound('secret');
+            screenShake = 15;
+            displayMessage(`You found Ancient Treasure! (${player.treasures}/9)`);
+        } else {
+            playSound('interact');
+            displayMessage("This chest is already empty.");
+        }
+        exitDungeon(true);
+        return;
+    } else if (input.interact && d.enterCooldown <= 0 && cx === d.spawnTile.x && cy === d.spawnTile.y) {
+        exitDungeon();
+        return;
+    }
+
+    const viewW = 1920, viewH = 1080;
+    const mapPxW = d.w * d.tileSize, mapPxH = d.h * d.tileSize;
+    d.camX = mapPxW <= viewW ? -(viewW - mapPxW) / 2 : Math.max(0, Math.min(mapPxW - viewW, p.x - viewW / 2 + p.w / 2));
+    d.camY = mapPxH <= viewH ? -(viewH - mapPxH) / 2 : Math.max(0, Math.min(mapPxH - viewH, p.y - viewH / 2 + p.h / 2));
+}
+
+function drawDungeon(ctx) {
+    const d = dungeon;
+    ctx.fillStyle = '#120a08';
+    ctx.fillRect(0, 0, 1920, 1080);
+
+    ctx.save();
+    ctx.translate(-d.camX, -d.camY);
+
+    const startCol = Math.max(0, Math.floor(d.camX / d.tileSize));
+    const endCol = Math.min(d.w, startCol + Math.ceil(1920 / d.tileSize) + 1);
+    const startRow = Math.max(0, Math.floor(d.camY / d.tileSize));
+    const endRow = Math.min(d.h, startRow + Math.ceil(1080 / d.tileSize) + 1);
+
+    for (let y = startRow; y < endRow; y++) {
+        for (let x = startCol; x < endCol; x++) {
+            const tile = d.tiles[y][x];
+            const px = x * d.tileSize, py = y * d.tileSize;
+
+            if (tile === DUNGEON_TILES.WALL) {
+                ctx.fillStyle = '#2b2320';
+                ctx.fillRect(px, py, d.tileSize, d.tileSize);
+                ctx.strokeStyle = '#181211'; ctx.lineWidth = 2;
+                ctx.strokeRect(px + 2, py + 2, d.tileSize - 4, d.tileSize - 4);
+                continue;
+            }
+
+            ctx.fillStyle = (x + y) % 2 === 0 ? '#4a3b30' : '#443528';
+            ctx.fillRect(px, py, d.tileSize, d.tileSize);
+
+            if (tile === DUNGEON_TILES.HAZARD) {
+                ctx.fillStyle = '#c0392b';
+                ctx.beginPath();
+                for (let i = 0; i < 3; i++) {
+                    ctx.moveTo(px + 8 + i * 14, py + d.tileSize - 8);
+                    ctx.lineTo(px + 15 + i * 14, py + 8);
+                    ctx.lineTo(px + 22 + i * 14, py + d.tileSize - 8);
+                }
+                ctx.fill();
+            } else if (tile === DUNGEON_TILES.TREASURE) {
+                ctx.shadowColor = 'rgba(255,202,40,0.8)'; ctx.shadowBlur = 20;
+                ctx.fillStyle = '#ffca28';
+                ctx.fillRect(px + d.tileSize / 2 - 14, py + d.tileSize / 2 - 10, 28, 20);
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#8d6e63';
+                ctx.fillRect(px + d.tileSize / 2 - 14, py + d.tileSize / 2 - 10, 28, 5);
+            } else if (x === d.spawnTile.x && y === d.spawnTile.y) {
+                ctx.strokeStyle = '#81d4fa'; ctx.lineWidth = 3;
+                ctx.strokeRect(px + 6, py + 6, d.tileSize - 12, d.tileSize - 12);
+            }
+        }
+    }
+
+    const p = d.player;
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.ellipse(p.x + p.w / 2, p.y + p.h + 2, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e8dfd5';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#cc2222';
+    ctx.fillRect(p.x, p.y + p.h - 8, p.w, 6);
+    ctx.fillStyle = '#ffccaa';
+    ctx.beginPath(); ctx.arc(p.x + p.w / 2, p.y + 4, 8, 0, Math.PI * 2); ctx.fill();
+
+    ctx.restore();
 }
 
 // --- RENDERING PIPELINE ---
@@ -620,57 +760,28 @@ function drawWorld(ctx) {
                 ctx.beginPath(); ctx.moveTo(px+8, py+10); ctx.lineTo(px+TILE_SIZE-8, py+10); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(px+8, py+25); ctx.lineTo(px+TILE_SIZE-8, py+25); ctx.stroke();
 
-            } else if (tile === TILES.SWITCH) {
+            } else if (tile === TILES.CAVE) {
                 ctx.fillStyle = '#55a644'; ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-                let isPressed = blocks.some(b => b.x === x && b.y === y);
-                ctx.fillStyle = isPressed ? '#00e676' : '#ffb300';
+                // Rocky arch around a dark entrance
+                ctx.fillStyle = '#5c5148';
                 ctx.beginPath();
-                ctx.moveTo(px+TILE_SIZE/2, py+6); ctx.lineTo(px+TILE_SIZE-6, py+TILE_SIZE/2);
-                ctx.lineTo(px+TILE_SIZE/2, py+TILE_SIZE-6); ctx.lineTo(px+6, py+TILE_SIZE/2);
+                ctx.moveTo(px + 4, py + TILE_SIZE);
+                ctx.lineTo(px + 4, py + 12);
+                ctx.quadraticCurveTo(px + TILE_SIZE / 2, py - 4, px + TILE_SIZE - 4, py + 12);
+                ctx.lineTo(px + TILE_SIZE - 4, py + TILE_SIZE);
                 ctx.fill();
-                ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
-
-            } else if (tile === TILES.BARRIER) {
-                ctx.fillStyle = '#3a3a40'; ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-                ctx.fillStyle = '#d32f2f'; ctx.fillRect(px+4, py+4, TILE_SIZE-8, TILE_SIZE-8);
-                // Skull icon
-                ctx.fillStyle = '#fff';
-                ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+16, 6, 0, Math.PI*2); ctx.fill();
-                ctx.fillRect(px+16, py+16, 8, 10);
+                ctx.fillStyle = '#0a0806';
+                ctx.beginPath();
+                ctx.moveTo(px + 10, py + TILE_SIZE);
+                ctx.lineTo(px + 10, py + 16);
+                ctx.quadraticCurveTo(px + TILE_SIZE / 2, py + 4, px + TILE_SIZE - 10, py + 16);
+                ctx.lineTo(px + TILE_SIZE - 10, py + TILE_SIZE);
+                ctx.fill();
             }
         }
     }
 
     // Entities
-    blocks.forEach(b => {
-        let px = b.x * TILE_SIZE; let py = b.y * TILE_SIZE;
-        if (px >= camera.x - TILE_SIZE && px <= camera.x + 1920 && py >= camera.y - TILE_SIZE && py <= camera.y + 1080) {
-            ctx.fillStyle = '#78909c'; 
-            ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 8;
-            ctx.fillRect(px+4, py+4, TILE_SIZE-8, TILE_SIZE-8);
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = '#455a64'; ctx.lineWidth = 3;
-            ctx.strokeRect(px+4, py+4, TILE_SIZE-8, TILE_SIZE-8);
-            ctx.beginPath(); ctx.moveTo(px+4, py+4); ctx.lineTo(px+TILE_SIZE-4, py+TILE_SIZE-4); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(px+TILE_SIZE-4, py+4); ctx.lineTo(px+4, py+TILE_SIZE-4); ctx.stroke();
-        }
-    });
-
-    chests.forEach(c => {
-        let px = c.x * TILE_SIZE; let py = c.y * TILE_SIZE;
-        if (px >= camera.x - TILE_SIZE && px <= camera.x + 1920 && py >= camera.y - TILE_SIZE && py <= camera.y + 1080) {
-            ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 6;
-            ctx.fillStyle = '#ffca28'; ctx.fillRect(px + 8, py + 12, 24, 16);
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = '#8d6e63'; ctx.fillRect(px + 8, py + 12, 24, 4); // Lid
-            if (c.opened) {
-                ctx.fillStyle = '#000'; ctx.fillRect(px+10, py+14, 20, 6);
-            } else {
-                ctx.fillStyle = '#5d4037'; ctx.fillRect(px + 18, py + 14, 4, 6); // Lock
-            }
-        }
-    });
-
     npcs.forEach(n => {
         let px = n.x * TILE_SIZE; let py = n.y * TILE_SIZE;
         if (px >= camera.x - TILE_SIZE && px <= camera.x + 1920 && py >= camera.y - TILE_SIZE && py <= camera.y + 1080) {
@@ -696,6 +807,23 @@ function drawHUD(ctx) {
     ctx.font = '22px "Segoe UI", sans-serif';
     ctx.fillStyle = '#ffca28';
     ctx.fillText(`◆ Treasures Secured: ${player.treasures} / 9`, 40, 85);
+
+    if (dungeon) {
+        ctx.fillStyle = 'rgba(10, 15, 25, 0.85)';
+        ctx.fillRect(1920 - 460, 20, 440, 90);
+        ctx.strokeStyle = '#81d4fa'; ctx.lineWidth = 3;
+        ctx.strokeRect(1920 - 460, 20, 440, 90);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 24px "Segoe UI", sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(dungeon.name, 1920 - 40, 55);
+
+        ctx.font = '18px "Segoe UI", sans-serif';
+        ctx.fillStyle = '#81d4fa';
+        ctx.fillText("Stand on the entrance and press interact to leave", 1920 - 40, 85);
+        ctx.textAlign = 'left';
+    }
 
     if (uiMessageTimer > 0) {
         ctx.fillStyle = 'rgba(10, 15, 25, 0.9)';
@@ -723,8 +851,12 @@ function update() {
 
     if (audioCtx) {
         timeOffset += 0.05;
-        player.update(input);
-        camera.update(player);
+        if (dungeon) {
+            updateDungeon(input);
+        } else {
+            player.update(input);
+            camera.update(player);
+        }
     }
 }
 
@@ -752,6 +884,9 @@ function loop() {
         ctx.fillText("Press (A) or Move to Embark", 1920 / 2, 700);
         ctx.textAlign = 'left';
         ctx.shadowBlur = 0;
+    } else if (dungeon) {
+        drawDungeon(ctx);
+        drawHUD(ctx);
     } else {
         ctx.save();
         ctx.translate(-camera.x, -camera.y);
@@ -788,6 +923,7 @@ window.addEventListener('keyup', e => {
 });
 
 generateWorld();
+preloadDungeons();
 requestAnimationFrame(loop);
 
 </script>
