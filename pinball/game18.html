@@ -3,45 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<<<<<<< HEAD
-    <title>SLIME SLUG // UNDEAD OVERDRIVE</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
-        body, html {
-            width: 100%;
-            height: 100%;
-            background-color: #050505;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-family: 'Courier New', Courier, monospace;
-        }
-        /* 16:9 Arcade Canvas with CRT Scanline Effect */
-        #gameWrapper {
-            position: relative;
-            max-width: 100vw;
-            max-height: 100vh;
-            aspect-ratio: 16 / 9;
-            box-shadow: 0 0 50px rgba(50, 255, 50, 0.2);
-        }
-        canvas {
-            width: 100%;
-            height: 100%;
-            background-color: #1a1c23;
-            image-rendering: pixelated;
-        }
-        /* Retro CRT overlay */
-        #gameWrapper::after {
-            content: " ";
-            display: block;
-            position: absolute;
-            top: 0; left: 0; bottom: 0; right: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            z-index: 2;
-            background-size: 100% 4px, 6px 100%;
-            pointer-events: none;
-=======
     <title>SOUR RUSH PINBALL - 1ST GRADE EDITION</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
@@ -58,28 +19,11 @@
             aspect-ratio: 16 / 9;
             box-shadow: 0 0 40px rgba(57, 255, 20, 0.6), inset 0 0 100px rgba(138, 43, 226, 0.3);
             border-radius: 20px;
->>>>>>> b0833c2195d2bcde9b3e725a32dcdde5e22350a6
         }
     </style>
 </head>
 <body>
 
-<<<<<<< HEAD
-<div id="gameWrapper">
-    <canvas id="gameCanvas" width="1280" height="720"></canvas>
-</div>
-
-<script>
-/**
- * SLIME SLUG: UNDEAD OVERDRIVE
- * Xbox Series S / Edge Browser Optimized
- */
-
-const canvas = document.getElementById('gameCanvas');
-// Xbox Edge (console browser) only exposes the Gamepad API to the currently
-// focused document, and gains focus can be lost when loaded inside the hub's
-// iframe -- pull focus onto this game whenever we get a chance to.
-=======
 <canvas id="gameCanvas" width="1920" height="1080"></canvas>
 
 <script>
@@ -95,26 +39,11 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 // --- XBOX EDGE BROWSER FOCUS FIX ---
->>>>>>> b0833c2195d2bcde9b3e725a32dcdde5e22350a6
 function ensureGameFocus() { window.focus(); canvas.focus({ preventScroll: true }); }
 ensureGameFocus();
 window.addEventListener('load', ensureGameFocus);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureGameFocus(); });
 window.addEventListener('gamepadconnected', ensureGameFocus);
-<<<<<<< HEAD
-const ctx = canvas.getContext('2d');
-
-// --- ASSETS ---
-const storeImage = new Image();
-// Referencing the requested image verbatim for the upgrade screen
-storeImage.src = 'store.jpeg'; // Ensure this image is in the same directory or adjust the path accordingly
-
-// --- AUDIO ENGINE ---
-let audioCtx = null;
-function initAudio() {
-    if (audioCtx) return;
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-=======
 window.addEventListener('click', ensureGameFocus);
 
 // --- AUDIO ENGINE ---
@@ -135,9 +64,9 @@ async function fetchAnnouncerMessage(currentScore) {
         const payload = {
             contents: [{ parts: [{ text: prompt }] }]
         };
-        const apiKey = ""; 
+        const apiKey = "";
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-        
+
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -153,7 +82,7 @@ async function fetchAnnouncerMessage(currentScore) {
         console.error("LLM Error:", e);
     } finally {
         // Short cooldown before allowing another fetch
-        setTimeout(() => { isFetchingMessage = false; }, 3000); 
+        setTimeout(() => { isFetchingMessage = false; }, 3000);
     }
 }
 
@@ -164,7 +93,6 @@ function initAudio() {
         isAudioInit = true;
         startCandyBGM();
     } catch (e) {}
->>>>>>> b0833c2195d2bcde9b3e725a32dcdde5e22350a6
 }
 
 function playSound(type) {
@@ -175,261 +103,6 @@ function playSound(type) {
     osc.connect(gain);
     gain.connect(audioCtx.destination);
 
-<<<<<<< HEAD
-    if (type === 'shoot_normal') {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(400, now);
-        osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.1);
-        osc.start(now); osc.stop(now + 0.1);
-    } else if (type === 'shoot_slime') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(800, now);
-        osc.frequency.linearRampToValueAtTime(200, now + 0.2);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-        osc.start(now); osc.stop(now + 0.2);
-    } else if (type === 'zombie_hit') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(120, now);
-        osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.15);
-        osc.start(now); osc.stop(now + 0.15);
-    } else if (type === 'upgrade') {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.linearRampToValueAtTime(600, now + 0.1);
-        osc.frequency.linearRampToValueAtTime(900, now + 0.3);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.3);
-        osc.start(now); osc.stop(now + 0.3);
-    }
-}
-
-// --- INPUT MANAGEMENT ---
-const Input = {
-    pads: {},
-    keys: { left: false, right: false, up: false, down: false, shoot: false, jump: false, select: false },
-    poll() {
-        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-        for (let i = 0; i < gamepads.length; i++) {
-            if (gamepads[i]) this.pads[i] = gamepads[i];
-        }
-    },
-    getState() {
-        const pad = this.pads[0];
-        let vx = 0, aimX = 1, aimY = 0;
-        let shoot = false, jump = false, select = false;
-
-        if (pad) {
-            // Movement (Left Stick / D-Pad)
-            if (Math.abs(pad.axes[0]) > 0.2) vx = pad.axes[0];
-            if (pad.buttons[14]?.pressed) vx = -1;
-            if (pad.buttons[15]?.pressed) vx = 1;
-
-            // Aiming (Right Stick)
-            if (Math.hypot(pad.axes[2], pad.axes[3]) > 0.3) {
-                aimX = pad.axes[2];
-                aimY = pad.axes[3];
-            }
-
-            // Actions
-            shoot = pad.buttons[7]?.pressed || pad.buttons[2]?.pressed; // RT or X
-            jump = pad.buttons[0]?.pressed || pad.buttons[6]?.pressed; // A or LT
-            select = pad.buttons[0]?.pressed; // A
-        }
-
-        // Keyboard Fallback
-        if (this.keys.left) vx = -1;
-        if (this.keys.right) vx = 1;
-        if (this.keys.shoot) shoot = true;
-        if (this.keys.jump || this.keys.up) jump = true;
-        if (this.keys.select) select = true;
-
-        return { vx, aimX, aimY, shoot, jump, select };
-    }
-};
-
-// --- GAME CONSTANTS & STATE ---
-const STATES = { MENU: 0, PLAYING: 1, UPGRADE: 2, GAMEOVER: 3 };
-let gameState = STATES.MENU;
-let screenShake = 0;
-let level = 1;
-let kills = 0;
-let killsRequired = 15;
-let menuSelection = 0;
-let groundY = 620;
-
-// Weapon Types
-const WEAPONS = {
-    NORMAL: { name: 'STANDARD', color: '#ffcc00', fireRate: 8, speed: 20, damage: 25, type: 'normal' },
-    FREEZE: { name: 'CRYO-SLIME', color: '#00ffff', fireRate: 5, speed: 18, damage: 10, type: 'freeze' },
-    MELT: { name: 'ACID-SLIME', color: '#33ff00', fireRate: 6, speed: 15, damage: 35, type: 'melt' },
-    PUSH: { name: 'KINETIC-SLIME', color: '#ff6600', fireRate: 12, speed: 25, damage: 15, type: 'push' }
-};
-
-// --- ENTITIES ---
-class Player {
-    constructor() {
-        this.reset();
-    }
-    reset() {
-        this.x = 1280 / 2;
-        this.y = groundY;
-        this.w = 40;
-        this.h = 70;
-        this.vx = 0;
-        this.vy = 0;
-        this.speed = 7;
-        this.jumpPower = -18;
-        this.gravity = 1.2;
-        this.grounded = false;
-        this.hp = 100;
-        this.weapon = WEAPONS.NORMAL;
-        this.fireCooldown = 0;
-        this.facing = 1;
-    }
-    update(input) {
-        // Horizontal Movement
-        this.vx = input.vx * this.speed;
-        this.x += this.vx;
-        
-        if (input.vx !== 0) this.facing = input.vx > 0 ? 1 : -1;
-
-        // Screen bounds
-        this.x = Math.max(20, Math.min(1260 - this.w, this.x));
-
-        // Jumping & Gravity
-        if (input.jump && this.grounded) {
-            this.vy = this.jumpPower;
-            this.grounded = false;
-        }
-        
-        this.vy += this.gravity;
-        this.y += this.vy;
-
-        if (this.y + this.h >= groundY) {
-            this.y = groundY - this.h;
-            this.vy = 0;
-            this.grounded = true;
-        }
-
-        // Shooting
-        if (this.fireCooldown > 0) this.fireCooldown--;
-        
-        if (input.shoot && this.fireCooldown <= 0) {
-            this.fireCooldown = this.weapon.fireRate;
-            playSound(this.weapon.type === 'normal' ? 'shoot_normal' : 'shoot_slime');
-            
-            // Calculate aim angle
-            let angle = Math.atan2(input.aimY, input.aimX);
-            if (Math.hypot(input.aimX, input.aimY) < 0.1) {
-                angle = this.facing === 1 ? 0 : Math.PI; // Default shoot forward
-            }
-
-            projectiles.push(new Projectile(
-                this.x + this.w / 2, 
-                this.y + this.h / 2 - 10, 
-                Math.cos(angle) * this.weapon.speed, 
-                Math.sin(angle) * this.weapon.speed, 
-                this.weapon
-            ));
-        }
-    }
-    draw(ctx) {
-        ctx.fillStyle = '#b0b0b0';
-        ctx.fillRect(this.x, this.y, this.w, this.h);
-        
-        // Bandana
-        ctx.fillStyle = '#ff0033';
-        ctx.fillRect(this.x, this.y + 10, this.w, 10);
-        if (this.facing === -1) ctx.fillRect(this.x + this.w, this.y + 10, 15, 8);
-        else ctx.fillRect(this.x - 15, this.y + 10, 15, 8);
-
-        // Gun
-        ctx.fillStyle = '#444';
-        const gunLength = 30;
-        if (this.facing === 1) ctx.fillRect(this.x + this.w, this.y + 25, gunLength, 12);
-        else ctx.fillRect(this.x - gunLength, this.y + 25, gunLength, 12);
-    }
-}
-
-class Zombie {
-    constructor() {
-        this.side = Math.random() > 0.5 ? 1 : -1;
-        this.x = this.side === 1 ? 1300 : -100;
-        this.y = groundY - 70;
-        this.w = 40;
-        this.h = 70;
-        this.baseSpeed = (Math.random() * 2 + 1) + (level * 0.3);
-        this.speed = this.baseSpeed;
-        this.hp = 80 + (level * 20);
-        
-        // Slime Status Effects
-        this.statusTimer = 0;
-        this.statusType = null;
-    }
-    update(playerX) {
-        // Apply Status Effects
-        if (this.statusTimer > 0) {
-            this.statusTimer--;
-            if (this.statusType === 'freeze') {
-                this.speed = 0; // Frozen solid
-            } else if (this.statusType === 'melt') {
-                this.hp -= 0.5; // DoT
-                this.speed = this.baseSpeed * 0.5;
-                createParticles(this.x + this.w/2, this.y + this.h/2, '#33ff00', 1, 2);
-            }
-        } else {
-            this.speed = this.baseSpeed;
-            this.statusType = null;
-        }
-
-        // Movement
-        if (this.x < playerX) this.x += this.speed;
-        else this.x -= this.speed;
-    }
-    applyStatus(type) {
-        this.statusType = type;
-        if (type === 'freeze') this.statusTimer = 180; // 3 seconds
-        if (type === 'melt') this.statusTimer = 120; // 2 seconds DoT
-        if (type === 'push') this.x += (this.x < player.x ? -120 : 120); // Kinetic knockback
-    }
-    draw(ctx) {
-        ctx.fillStyle = this.statusType === 'freeze' ? '#00ffff' : (this.statusType === 'melt' ? '#33ff00' : '#4a5c44');
-        ctx.fillRect(this.x, this.y, this.w, this.h);
-        
-        // Zombie Eyes
-        ctx.fillStyle = '#ff0000';
-        const dir = this.x < player.x ? 1 : -1;
-        if (dir === 1) ctx.fillRect(this.x + 25, this.y + 15, 6, 6);
-        else ctx.fillRect(this.x + 9, this.y + 15, 6, 6);
-    }
-}
-
-class Projectile {
-    constructor(x, y, vx, vy, weapon) {
-        this.x = x;
-        this.y = y;
-        this.vx = vx;
-        this.vy = vy;
-        this.weapon = weapon;
-        this.size = weapon.type === 'normal' ? 6 : 14;
-    }
-    update() {
-        this.x += this.vx;
-        this.y += this.vy;
-    }
-    draw(ctx) {
-        ctx.fillStyle = this.weapon.color;
-        ctx.shadowColor = this.weapon.color;
-        ctx.shadowBlur = 10;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        ctx.fill();
-=======
     if (type === 'bumper') {
         osc.type = 'sawtooth'; // Edgier Zap
         osc.frequency.setValueAtTime(1200, now);
@@ -487,12 +160,12 @@ function startCandyBGM() {
             bOsc.frequency.setValueAtTime(bass[Math.floor(musicStep/2) % 8], now);
             bGain.gain.setValueAtTime(0.12, now);
             bGain.gain.exponentialRampToValueAtTime(0.01, now + stepTime * 1.5);
-            
+
             const filter = audioCtx.createBiquadFilter();
             filter.type = 'lowpass';
             filter.frequency.setValueAtTime(1200, now);
             filter.frequency.exponentialRampToValueAtTime(100, now + stepTime);
-            
+
             bOsc.connect(filter); filter.connect(bGain); bGain.connect(audioCtx.destination);
             bOsc.start(now); bOsc.stop(now + stepTime * 1.5);
         }
@@ -500,41 +173,61 @@ function startCandyBGM() {
     }, stepTime * 1000);
 }
 
-// --- 1-BUTTON INPUT MANAGEMENT ---
-// Mashing ANY face button or trigger will flip both flippers or pull the plunger.
+// --- INPUT MANAGEMENT ---
+// Left flipper and right flipper each answer to their own button; any of
+// them (plus the dedicated action keys) will start the game / charge the plunger.
 const Input = {
+    leftPressed: false,
+    rightPressed: false,
     actionPressed: false,
     actionJustPressed: false,
     prevAction: false,
     plungerHoldTime: 0,
-    keys: { action: false },
+    plungerReleased: false,
+    plungerReleaseForce: 0,
+    keys: { left: false, right: false, action: false },
     poll() {
-        let isPressed = this.keys.action;
+        let left = this.keys.left;
+        let right = this.keys.right;
+        let action = this.keys.action;
 
         try {
             const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
             const pad = gamepads[0];
             if (pad && pad.buttons) {
-                // Check A, B, X, Y, LB, RB, LT, RT (Buttons 0 through 7)
-                for (let i = 0; i <= 7; i++) {
-                    if (pad.buttons[i]?.pressed) isPressed = true;
+                // Left flipper: LB, LT, D-Pad Left
+                if (pad.buttons[4]?.pressed || pad.buttons[6]?.pressed || pad.buttons[14]?.pressed) left = true;
+                // Right flipper: RB, RT, D-Pad Right
+                if (pad.buttons[5]?.pressed || pad.buttons[7]?.pressed || pad.buttons[15]?.pressed) right = true;
+                // Any face button also works for starting the game
+                for (let i = 0; i <= 3; i++) {
+                    if (pad.buttons[i]?.pressed) action = true;
                 }
             }
         } catch (e) {}
 
-        this.actionJustPressed = isPressed && !this.prevAction;
-        this.actionPressed = isPressed;
-        this.prevAction = isPressed;
+        this.leftPressed = left;
+        this.rightPressed = right;
+
+        const anyPressed = left || right || action;
+        this.actionJustPressed = anyPressed && !this.prevAction;
+        this.actionPressed = anyPressed;
+        this.prevAction = anyPressed;
 
         // Flipper sound on press
         if (this.actionJustPressed && gameState === 'PLAYING' && !(ball.x > 1800 && ball.y > 800)) {
             playSound('flipper');
         }
 
-        // Plunger Logic
-        if (this.actionPressed && ball.x > 1800 && ball.y > 800) {
+        // Plunger Logic - track the release edge here so it can never be
+        // missed by callers that only read state on some frames (e.g. the
+        // very first frame after the START screen).
+        this.plungerReleased = false;
+        if (anyPressed && ball.x > 1800 && ball.y > 800) {
             this.plungerHoldTime = Math.min(this.plungerHoldTime + 2, 100);
         } else if (this.plungerHoldTime > 0) {
+            this.plungerReleased = true;
+            this.plungerReleaseForce = this.plungerHoldTime;
             this.plungerHoldTime = 0;
         }
     }
@@ -544,7 +237,7 @@ const Input = {
 const GRAVITY = 0.2; // Halved for slower pacing
 let score = 0;
 let gumballsPlayed = 1;
-let gameState = 'START'; 
+let gameState = 'START';
 let tryAgainTimer = 0;
 
 let screenShake = 0;
@@ -556,15 +249,16 @@ class Gumball {
     reset(x, y) {
         this.x = x; this.y = y;
         this.vx = 0; this.vy = 0;
-        this.radius = 22; 
+        this.radius = 22;
         this.color = '#39ff14'; // Neon Green Sourball
         this.active = true;
         this.trail = [];
+        this.laneKicked = false;
     }
     update() {
         if (!this.active) return;
         this.vy += GRAVITY;
-        
+
         // Capped terminal velocity for easy tracking
         const speed = Math.hypot(this.vx, this.vy);
         if (speed > 16) {
@@ -578,15 +272,32 @@ class Gumball {
         this.trail.push({x: this.x, y: this.y});
         if (this.trail.length > 12) this.trail.shift();
 
-        // Wall collisions
-        if (this.x > 1800 && this.x < 1920) {
-            if (this.x - this.radius < 1800) { this.x = 1800 + this.radius; this.vx *= -0.5; }
-            if (this.x + this.radius > 1920) { this.x = 1920 - this.radius; this.vx *= -0.5; }
-        } else {
-            if (this.x - this.radius < 0) { this.x = this.radius; this.vx *= -0.6; }
-            if (this.x + this.radius > 1800) { this.x = 1800 - this.radius; this.vx *= -0.6; }
-        }
+        // Outer screen edges
+        if (this.x - this.radius < 0) { this.x = this.radius; this.vx *= -0.6; }
+        if (this.x + this.radius > 1920) { this.x = 1920 - this.radius; this.vx *= -0.5; }
         if (this.y - this.radius < 0) { this.y = this.radius; this.vy *= -0.6; }
+
+        // Shooter-lane divider - solid along the lane, but open above the
+        // lane's mouth so a strong plunge can sail over it into the table.
+        if (this.y > 450) {
+            if (this.x > 1800 && this.x - this.radius < 1800) { this.x = 1800 + this.radius; this.vx *= -0.5; }
+            if (this.x <= 1800 && this.x + this.radius > 1800) { this.x = 1800 - this.radius; this.vx *= -0.6; }
+        }
+
+        // Shooter lane floor - the ball rests here while the plunger charges
+        // instead of free-falling straight through and draining.
+        if (this.x > 1800 && this.y + this.radius > 1050) {
+            this.y = 1050 - this.radius;
+            if (this.vy > 0) this.vy = 0;
+            this.laneKicked = false;
+        }
+
+        // Shooter lane rail - once a plunge clears the lane's open mouth,
+        // the curved guide kicks it left into the table.
+        if (this.x > 1800 && this.y < 450 && this.vy < 0 && !this.laneKicked) {
+            this.vx = -9;
+            this.laneKicked = true;
+        }
 
         // Drain / Forgiveness State
         if (this.y > 1100) {
@@ -600,7 +311,7 @@ class Gumball {
     draw(ctx) {
         if (!this.active) return;
         ctx.save();
-        
+
         // Draw Glowing Motion Trail
         if (this.trail.length > 1) {
             ctx.beginPath();
@@ -616,11 +327,11 @@ class Gumball {
         }
 
         ctx.translate(this.x, this.y);
-        
+
         ctx.shadowColor = '#39ff14'; ctx.shadowBlur = 15;
         ctx.fillStyle = this.color;
         ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI * 2); ctx.fill();
-        
+
         // Sour Dust Speckles
         ctx.shadowBlur = 0;
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
@@ -644,7 +355,7 @@ class Bumper {
     checkCollision(ball) {
         const dx = ball.x - this.x; const dy = ball.y - this.y;
         const dist = Math.hypot(dx, dy);
-        
+
         if (dist < this.radius + ball.radius) {
             const overlap = (this.radius + ball.radius) - dist;
             const nx = dx / dist; const ny = dy / dist;
@@ -652,7 +363,7 @@ class Bumper {
 
             const dotProduct = ball.vx * nx + ball.vy * ny;
             ball.vx -= dotProduct * nx * 1.2; ball.vy -= dotProduct * ny * 1.2;
-            
+
             ball.vx += nx * 4; ball.vy += ny * 4; // Softer bounce
             this.hitFlash = 15;
             score += 250;
@@ -668,18 +379,18 @@ class Bumper {
         ctx.save();
         ctx.translate(this.x, this.y);
         if (this.hitFlash > 0) { ctx.scale(1.1, 1.1); this.hitFlash--; }
-        
+
         // Glowing Sour Ring
         ctx.shadowColor = '#8a2be2'; ctx.shadowBlur = 20;
         ctx.fillStyle = '#110022';
         ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI * 2); ctx.fill();
-        
+
         ctx.lineWidth = 12;
         ctx.strokeStyle = '#8a2be2';
         ctx.beginPath(); ctx.arc(0, 0, this.radius - 6, 0, Math.PI * 2); ctx.stroke();
 
         ctx.shadowBlur = 0;
-        
+
         // Sour Citrus Segments
         ctx.fillStyle = '#39ff14';
         for (let i = 0; i < 6; i++) {
@@ -740,11 +451,14 @@ function updateAndDrawJuice(ctx) {
 
 class Flipper {
     constructor(x, y, length, isRight) {
-        this.x = x; this.y = y; 
+        this.x = x; this.y = y;
         this.length = length; // Extended length to close the middle gap
         this.isRight = isRight;
+        // Resting: tips droop toward center, nearly closing the gap.
+        // Pressed: a real ~100 deg swing so a lone flipper sweeps back across
+        // its own side of the table instead of just wobbling near center.
         this.baseAngle = isRight ? Math.PI * 0.85 : Math.PI * 0.15;
-        this.upAngle = isRight ? Math.PI * 1.15 : -Math.PI * 0.15;
+        this.upAngle = isRight ? Math.PI * 1.4 : -Math.PI * 0.4;
         this.angle = this.baseAngle; this.width = 32; // Thicker flippers
     }
     update(isPressed) {
@@ -755,23 +469,23 @@ class Flipper {
         const endY = this.y + Math.sin(this.angle) * this.length;
         const l2 = this.length * this.length;
         let t = Math.max(0, Math.min(1, ((ball.x - this.x) * (endX - this.x) + (ball.y - this.y) * (endY - this.y)) / l2));
-        
+
         const projX = this.x + t * (endX - this.x); const projY = this.y + t * (endY - this.y);
         const dx = ball.x - projX; const dy = ball.y - projY;
         const dist = Math.hypot(dx, dy);
-        
+
         if (dist < ball.radius + this.width / 2) {
             const nx = dx / dist; const ny = dy / dist;
             ball.x += nx * ((ball.radius + this.width / 2) - dist);
             ball.y += ny * ((ball.radius + this.width / 2) - dist);
-            
+
             const kickForce = (Math.abs(this.angle - this.upAngle) > 0.1) ? 20 * t : 0;
             const dot = ball.vx * nx + ball.vy * ny;
             if (dot < 0) { ball.vx -= dot * nx * 1.1; ball.vy -= dot * ny * 1.1; }
-            
+
             const kX = Math.cos(this.angle - Math.PI/2) * (this.isRight ? -1 : 1);
             const kY = Math.sin(this.angle - Math.PI/2) * (this.isRight ? -1 : 1);
-            
+
             if (kickForce > 0) { ball.vx += kX * kickForce; ball.vy -= Math.abs(kY * kickForce); }
         }
     }
@@ -779,7 +493,7 @@ class Flipper {
         ctx.save();
         ctx.translate(this.x, this.y); ctx.rotate(this.angle);
         ctx.shadowColor = '#ccff00'; ctx.shadowBlur = 12;
-        
+
         // Sour Belt Flipper
         ctx.fillStyle = '#8a2be2';
         ctx.beginPath();
@@ -787,8 +501,8 @@ class Flipper {
         ctx.lineTo(this.length, -this.width/4);
         ctx.arc(this.length, 0, this.width/4, -Math.PI/2, Math.PI/2);
         ctx.fill(); ctx.clip();
-        
-        ctx.shadowBlur = 0; ctx.lineWidth = 16; 
+
+        ctx.shadowBlur = 0; ctx.lineWidth = 16;
         ctx.strokeStyle = '#39ff14'; // Neon green stripes
         for (let i = -10; i < this.length + 20; i += 25) {
             ctx.beginPath(); ctx.moveTo(i, -this.width); ctx.lineTo(i + 15, this.width); ctx.stroke();
@@ -818,7 +532,7 @@ function startGame() {
 function update() {
     Input.poll();
     if (!isAudioInit && Input.actionPressed) initAudio();
-    
+
     if (gameState === 'START') {
         if (Input.actionPressed) startGame();
         return;
@@ -835,21 +549,20 @@ function update() {
     // Single button plunges OR flips depending on ball position
     if (ball.x > 1800 && ball.y > 800) {
         // Plunger
-        if (Input.plungerHoldTime === 0 && ball.vy > -2 && Input.keys.plungerHoldCache > 10) {
-            ball.vy = -(Input.keys.plungerHoldCache * 0.40); // Softer launch
+        if (Input.plungerReleased && ball.vy > -2 && Input.plungerReleaseForce > 10) {
+            ball.vy = -(Input.plungerReleaseForce * 0.40); // Softer launch
             playSound('plunger');
         }
-        flippers[0].update(false); 
+        flippers[0].update(false);
         flippers[1].update(false);
     } else {
-        // Flippers (Both trigger on any button)
-        flippers[0].update(Input.actionPressed); 
-        flippers[1].update(Input.actionPressed);
+        // Flippers - each one only answers to its own button
+        flippers[0].update(Input.leftPressed);
+        flippers[1].update(Input.rightPressed);
     }
-    Input.keys.plungerHoldCache = Input.plungerHoldTime;
 
     ball.update();
-    
+
     bumpers.forEach(b => b.checkCollision(ball));
     flippers.forEach(f => f.checkCollision(ball));
 
@@ -858,16 +571,16 @@ function update() {
         if (ball.x < 500 + (ball.y - 700)*0.5) {
             ball.x = 500 + (ball.y - 700)*0.5;
             const dot = ball.vx * 0.866 + ball.vy * -0.5;
-            if (dot < 0) { 
-                ball.vx -= dot * 0.866 * 1.2; ball.vy -= dot * -0.5 * 1.2; ball.vx += 6; ball.vy -= 3; score += 50; 
+            if (dot < 0) {
+                ball.vx -= dot * 0.866 * 1.2; ball.vy -= dot * -0.5 * 1.2; ball.vx += 6; ball.vy -= 3; score += 50;
                 spawnParticles(ball.x, ball.y, '#8a2be2', 10); screenShake = 4;
             }
         }
         if (ball.x > 1400 - (ball.y - 700)*0.5 && ball.x < 1800) {
             ball.x = 1400 - (ball.y - 700)*0.5;
             const dot = ball.vx * -0.866 + ball.vy * -0.5;
-            if (dot < 0) { 
-                ball.vx -= dot * -0.866 * 1.2; ball.vy -= dot * -0.5 * 1.2; ball.vx -= 6; ball.vy -= 3; score += 50; 
+            if (dot < 0) {
+                ball.vx -= dot * -0.866 * 1.2; ball.vy -= dot * -0.5 * 1.2; ball.vx -= 6; ball.vy -= 3; score += 50;
                 spawnParticles(ball.x, ball.y, '#8a2be2', 10); screenShake = 4;
             }
         }
@@ -878,7 +591,7 @@ function drawBackground() {
     ctx.fillStyle = '#39ff14'; ctx.shadowColor = '#39ff14'; ctx.shadowBlur = 20;
     ctx.fillRect(1800, 0, 10, 1080);
     ctx.shadowBlur = 0;
-    
+
     ctx.strokeStyle = '#8a2be2'; ctx.lineWidth = 20; ctx.lineCap = 'round';
     ctx.shadowColor = '#8a2be2'; ctx.shadowBlur = 15;
     ctx.beginPath(); ctx.moveTo(0, 600); ctx.lineTo(500, 950); ctx.stroke();
@@ -888,7 +601,7 @@ function drawBackground() {
 
 function drawVisualTelegraphs() {
     if (gameState !== 'PLAYING' || !ball.active) return;
-    
+
     // Glowing Action Prompt when ball approaches flippers
     if (ball.y > 650 && ball.vy > 0 && ball.x < 1800) {
         const pulse = Math.abs(Math.sin(Date.now() / 150));
@@ -897,250 +610,16 @@ function drawVisualTelegraphs() {
         ctx.textAlign = 'center';
         ctx.shadowColor = '#39ff14'; ctx.shadowBlur = 20;
         ctx.fillText("PRESS ANY BUTTON!", 1920/2, 750);
->>>>>>> b0833c2195d2bcde9b3e725a32dcdde5e22350a6
         ctx.shadowBlur = 0;
     }
 }
 
-<<<<<<< HEAD
-// --- PARTICLES ---
-let particles = [];
-function createParticles(x, y, color, count, speed = 8) {
-    for (let i = 0; i < count; i++) {
-        particles.push({
-            x: x, y: y,
-            vx: (Math.random() - 0.5) * speed,
-            vy: (Math.random() - 0.5) * speed,
-            life: 1.0,
-            decay: Math.random() * 0.05 + 0.02,
-            color: color
-        });
-    }
-}
-function updateParticles() {
-    for (let i = particles.length - 1; i >= 0; i--) {
-        let p = particles[i];
-        p.x += p.vx; p.y += p.vy;
-        p.life -= p.decay;
-        if (p.life <= 0) particles.splice(i, 1);
-    }
-}
-function drawParticles(ctx) {
-    particles.forEach(p => {
-        ctx.globalAlpha = Math.max(0, p.life);
-        ctx.fillStyle = p.color;
-        ctx.fillRect(p.x, p.y, 6, 6);
-    });
-    ctx.globalAlpha = 1.0;
-}
-
-// --- GLOBAL GAME OBJECTS ---
-let player = new Player();
-let zombies = [];
-let projectiles = [];
-let upgradeOptions = [WEAPONS.FREEZE, WEAPONS.MELT, WEAPONS.PUSH];
-
-function startNextLevel() {
-    level++;
-    kills = 0;
-    killsRequired += 10;
-    zombies = [];
-    projectiles = [];
-    player.x = 1280 / 2;
-    gameState = STATES.PLAYING;
-}
-
-function spawnZombie() {
-    if (zombies.length < 8 + level && Math.random() < 0.03 + (level * 0.01)) {
-        zombies.push(new Zombie());
-    }
-}
-
-// --- RENDERING & LOGIC ---
-function drawEnvironment(ctx) {
-    // Sky
-    ctx.fillStyle = '#1c1515';
-    ctx.fillRect(0, 0, 1280, 720);
-
-    // City Ruins Parallax
-    ctx.fillStyle = '#0f0c0c';
-    ctx.fillRect(100, 300, 200, 400);
-    ctx.fillRect(400, 250, 150, 400);
-    ctx.fillRect(800, 150, 300, 600);
-    
-    // Ground
-    ctx.fillStyle = '#2b2b2b';
-    ctx.fillRect(0, groundY, 1280, 720 - groundY);
-    ctx.fillStyle = '#4a4a4a';
-    ctx.fillRect(0, groundY, 1280, 10);
-}
-
-function drawHUD(ctx) {
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 28px Courier New';
-    ctx.textAlign = 'left';
-    ctx.fillText(`LEVEL: ${level}`, 30, 50);
-    ctx.fillText(`WEAPON: ${player.weapon.name}`, 30, 90);
-    
-    ctx.textAlign = 'right';
-    ctx.fillText(`KILLS: ${kills} / ${killsRequired}`, 1250, 50);
-    
-    // HP Bar
-    ctx.fillStyle = '#333';
-    ctx.fillRect(1250 - 300, 70, 300, 20);
-    ctx.fillStyle = '#ff0033';
-    ctx.fillRect(1250 - 300, 70, 300 * (player.hp / 100), 20);
-}
-
-function drawUpgradeScreen() {
-    ctx.fillStyle = 'rgba(10, 10, 15, 0.95)';
-    ctx.fillRect(0, 0, 1280, 720);
-
-    // Render the requested reference image as the backdrop for the store
-    if (storeImage.complete && storeImage.naturalWidth > 0) {
-        ctx.globalAlpha = 0.4; // Dimmed background
-        ctx.drawImage(storeImage, 1280/2 - 300, 50, 600, 800);
-        ctx.globalAlpha = 1.0;
-    }
-
-    ctx.fillStyle = '#ffcc00';
-    ctx.font = 'bold 64px Courier New';
-    ctx.textAlign = 'center';
-    ctx.shadowColor = '#ffaa00';
-    ctx.shadowBlur = 20;
-    ctx.fillText("GUN STORE - SLIME UPGRADES", 1280/2, 120);
-    ctx.shadowBlur = 0;
-
-    const boxW = 300;
-    const boxH = 400;
-    const startX = 1280/2 - (boxW * 1.5) - 40;
-
-    upgradeOptions.forEach((wep, i) => {
-        const x = startX + i * (boxW + 40);
-        const y = 220;
-        
-        ctx.fillStyle = menuSelection === i ? '#333' : '#111';
-        ctx.fillRect(x, y, boxW, boxH);
-        
-        ctx.strokeStyle = menuSelection === i ? wep.color : '#444';
-        ctx.lineWidth = menuSelection === i ? 8 : 2;
-        ctx.strokeRect(x, y, boxW, boxH);
-
-        ctx.fillStyle = wep.color;
-        ctx.font = 'bold 32px Courier New';
-        ctx.fillText(wep.name, x + boxW/2, y + 60);
-
-        ctx.fillStyle = '#aaa';
-        ctx.font = '22px Courier New';
-        if (wep.type === 'freeze') ctx.fillText("Freezes targets", x + boxW/2, y + 150);
-        if (wep.type === 'melt') ctx.fillText("Acid damage DoT", x + boxW/2, y + 150);
-        if (wep.type === 'push') ctx.fillText("High Knockback", x + boxW/2, y + 150);
-    });
-
-    ctx.fillStyle = '#fff';
-    ctx.font = '28px Courier New';
-    ctx.fillText("Use Left Stick/D-Pad to Select, Press (A) to Equip", 1280/2, 680);
-}
-
-// --- MAIN LOOP ---
-function update() {
-    Input.poll();
-    const input = Input.getState();
-
-    if (gameState === STATES.MENU) {
-        if (input.jump || input.shoot || input.select) {
-            initAudio();
-            gameState = STATES.PLAYING;
-        }
-        return;
-    }
-
-    if (gameState === STATES.GAMEOVER) {
-        if (input.select) location.reload();
-        return;
-    }
-
-    if (gameState === STATES.UPGRADE) {
-        if (input.vx < -0.5) menuSelection = Math.max(0, menuSelection - 1);
-        if (input.vx > 0.5) menuSelection = Math.min(2, menuSelection + 1);
-
-        // Simple debounce for selection
-        if (input.vx !== 0) input.vx = 0; 
-
-        if (input.select || input.jump) {
-            playSound('upgrade');
-            player.weapon = upgradeOptions[menuSelection];
-            startNextLevel();
-        }
-        return;
-    }
-
-    // PLAYING STATE
-    player.update(input);
-    spawnZombie();
-
-    // Update Projectiles
-    for (let i = projectiles.length - 1; i >= 0; i--) {
-        let p = projectiles[i];
-        p.update();
-        if (p.x < 0 || p.x > 1280 || p.y < 0 || p.y > 720) {
-            projectiles.splice(i, 1);
-            continue;
-        }
-
-        // Collision with Zombies
-        let hit = false;
-        for (let j = zombies.length - 1; j >= 0; j--) {
-            let z = zombies[j];
-            if (p.x > z.x && p.x < z.x + z.w && p.y > z.y && p.y < z.y + z.h) {
-                z.hp -= p.weapon.damage;
-                z.applyStatus(p.weapon.type);
-                playSound('zombie_hit');
-                createParticles(p.x, p.y, p.weapon.color, 5);
-                createParticles(p.x, p.y, '#aa0000', 8); // Blood
-                hit = true;
-                break;
-            }
-        }
-        if (hit) projectiles.splice(i, 1);
-    }
-
-    // Update Zombies
-    for (let i = zombies.length - 1; i >= 0; i--) {
-        let z = zombies[i];
-        z.update(player.x);
-
-        // Player Collision
-        if (Math.abs(z.x - player.x) < 30 && Math.abs(z.y - player.y) < 60) {
-            player.hp -= 0.5;
-            screenShake = 5;
-            if (player.hp <= 0) gameState = STATES.GAMEOVER;
-        }
-
-        if (z.hp <= 0) {
-            kills++;
-            screenShake = 3;
-            createParticles(z.x + 20, z.y + 35, '#aa0000', 25);
-            zombies.splice(i, 1);
-            
-            // Level Complete Check
-            if (kills >= killsRequired) {
-                gameState = STATES.UPGRADE;
-                menuSelection = 1;
-                projectiles = [];
-                zombies = [];
-            }
-        }
-    }
-
-    updateParticles();
-=======
 function drawHUD() {
     ctx.fillStyle = '#39ff14'; ctx.font = '900 48px "Segoe UI"';
     ctx.textAlign = 'left'; ctx.shadowColor = '#39ff14'; ctx.shadowBlur = 10;
     ctx.fillText(`SCORE: ${score.toLocaleString()}`, 40, 80);
     ctx.textAlign = 'right'; ctx.fillText(`SOURBALL: ${gumballsPlayed}`, 1760, 80);
-    
+
     // AI Announcer Message
     ctx.fillStyle = '#ccff00';
     ctx.textAlign = 'center';
@@ -1153,7 +632,7 @@ function drawHUD() {
         ctx.fillStyle = '#112200'; ctx.fillRect(1830, 1000, 60, 50);
         ctx.fillStyle = '#8a2be2';
         ctx.fillRect(1830, 1000 + (100 - Input.plungerHoldTime), 60, Input.plungerHoldTime);
-        
+
         // Plunger Hint
         ctx.fillStyle = `rgba(204, 255, 0, ${Math.abs(Math.sin(Date.now()/200))})`;
         ctx.font = '900 40px "Segoe UI"'; ctx.textAlign = 'right';
@@ -1178,143 +657,47 @@ function drawHUD() {
         ctx.fillText("ZAP! LET'S TRY AGAIN!", 1920/2, 540);
         ctx.shadowBlur = 0;
     }
->>>>>>> b0833c2195d2bcde9b3e725a32dcdde5e22350a6
 }
 
 function loop() {
     update();
-<<<<<<< HEAD
+    ctx.save();
 
-    ctx.save();
-    if (screenShake > 0) {
-        ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
-=======
-    ctx.save();
-    
     // Apply global screen shake
     if (screenShake > 0) {
         ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
->>>>>>> b0833c2195d2bcde9b3e725a32dcdde5e22350a6
         screenShake *= 0.9;
         if (screenShake < 0.5) screenShake = 0;
     }
 
-<<<<<<< HEAD
-    if (gameState === STATES.PLAYING || gameState === STATES.GAMEOVER) {
-        drawEnvironment(ctx);
-        zombies.forEach(z => z.draw(ctx));
-        player.draw(ctx);
-        projectiles.forEach(p => p.draw(ctx));
-        drawParticles(ctx);
-        drawHUD(ctx);
-    }
-
-    if (gameState === STATES.MENU) {
-        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 1280, 720);
-        ctx.fillStyle = '#33ff00'; ctx.font = 'bold 72px Courier New'; ctx.textAlign = 'center';
-        ctx.fillText("SLIME SLUG", 1280/2, 300);
-        ctx.fillStyle = '#fff'; ctx.font = '32px Courier New';
-        ctx.fillText("PRESS (A) or SPACE to START", 1280/2, 400);
-    }
-
-    if (gameState === STATES.UPGRADE) {
-        drawUpgradeScreen();
-    }
-
-    if (gameState === STATES.GAMEOVER) {
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.3)'; ctx.fillRect(0, 0, 1280, 720);
-        ctx.fillStyle = '#fff'; ctx.font = 'bold 84px Courier New'; ctx.textAlign = 'center';
-        ctx.fillText("YOU WERE OVERRUN", 1280/2, 360);
-        ctx.font = '32px Courier New';
-        ctx.fillText("PRESS (A) TO RESTART", 1280/2, 450);
-    }
-
-=======
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawBackground();
     drawVisualTelegraphs();
     bumpers.forEach(b => b.draw(ctx));
     flippers.forEach(f => f.draw(ctx));
     ball.draw(ctx);
-    
+
     updateAndDrawJuice(ctx);
-    
+
     drawHUD();
-    
->>>>>>> b0833c2195d2bcde9b3e725a32dcdde5e22350a6
+
     ctx.restore();
     requestAnimationFrame(loop);
 }
 
-<<<<<<< HEAD
-// --- KEYBOARD LISTENERS ---
+// Left/Right arrows drive their own flipper; Space/Enter/Up/Down start the
+// game and can also charge the plunger.
 window.addEventListener('keydown', e => {
-    const k = e.key.toLowerCase();
-    if (k === 'a' || e.key === 'ArrowLeft') Input.keys.left = true;
-    if (k === 'd' || e.key === 'ArrowRight') Input.keys.right = true;
-    if (k === 'w' || e.key === 'ArrowUp') Input.keys.up = true;
-    if (k === 's' || e.key === 'ArrowDown') Input.keys.down = true;
-    if (e.code === 'Space') Input.keys.shoot = true;
-    if (e.code === 'Enter') Input.keys.select = true;
-});
-
-window.addEventListener('keyup', e => {
-    const k = e.key.toLowerCase();
-    if (k === 'a' || e.key === 'ArrowLeft') Input.keys.left = false;
-    if (k === 'd' || e.key === 'ArrowRight') Input.keys.right = false;
-    if (k === 'w' || e.key === 'ArrowUp') Input.keys.up = false;
-    if (k === 's' || e.key === 'ArrowDown') Input.keys.down = false;
-    if (e.code === 'Space') Input.keys.shoot = false;
-    if (e.code === 'Enter') Input.keys.select = false;
-});
-
-// PC Mouse Aiming Fallback
-window.addEventListener('mousemove', e => {
-    if (Input.pads[0]) return; // Ignore if using controller
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const mouseX = (e.clientX - rect.left) * scaleX;
-    const mouseY = (e.clientY - rect.top) * scaleY;
-    
-    // Normalize vector for aim
-    const dx = mouseX - (player.x + player.w/2);
-    const dy = mouseY - (player.y + player.h/2);
-    const dist = Math.hypot(dx, dy);
-    if (dist > 0) {
-        Input.getState().aimX = dx / dist; // We manually intercept this on PC
-        // Temporary hack to inject mouse aim into keyboard state
-        Input.keys.aimX = dx / dist;
-        Input.keys.aimY = dy / dist;
-    }
-});
-
-// Override keyboard state getter for mouse aim
-const originalGetState = Input.getState.bind(Input);
-Input.getState = function() {
-    let state = originalGetState();
-    if (!this.pads[0] && this.keys.aimX !== undefined) {
-        state.aimX = this.keys.aimX;
-        state.aimY = this.keys.aimY;
-    }
-    return state;
-};
-
-// Start Game Loop
-=======
-// Map any standard key to the single action trigger
-window.addEventListener('keydown', e => {
-    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(e.key)) {
-        Input.keys.action = true;
-    }
+    if (e.key === 'ArrowLeft') Input.keys.left = true;
+    else if (e.key === 'ArrowRight') Input.keys.right = true;
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'Enter') Input.keys.action = true;
 });
 window.addEventListener('keyup', e => {
-    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(e.key)) {
-        Input.keys.action = false;
-    }
+    if (e.key === 'ArrowLeft') Input.keys.left = false;
+    else if (e.key === 'ArrowRight') Input.keys.right = false;
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'Enter') Input.keys.action = false;
 });
 
->>>>>>> b0833c2195d2bcde9b3e725a32dcdde5e22350a6
 requestAnimationFrame(loop);
 </script>
 </body>
