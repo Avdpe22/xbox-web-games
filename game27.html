@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Titan's Eclipse</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); z-index: 10; }
+        #level-display { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+        #health-bar-container { width: 300px; height: 20px; background: rgba(50,50,50,0.8); border: 2px solid #555; }
+        #health-bar { width: 100%; height: 100%; background: #8b0000; transition: width 0.2s; }
+        #powerup-notice { display: none; color: #00ffcc; font-size: 18px; margin-top: 10px; font-weight: bold; }
+    </style>
+    <!-- Import Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="ui">
+        <div id="level-display">Level: 1 | Boss Phase: 1</div>
+        <div id="health-bar-container"><div id="health-bar"></div></div>
+        <div id="powerup-notice">POWER UP: Damage Boosted!</div>
+    </div>
+
+    <script>
+        // --- 1. SCENE SETUP (Next-Gen Atmosphere) ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a24);
+        scene.fog = new THREE.FogExp2(0x1a1a24, 0.015); // Gloomy volcanic fog
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping; // Cinematic color grading
+        renderer.toneMappingExposure = 1.0;
+        document.body.appendChild(renderer.domElement);
+
+        // --- 2. LIGHTING ---
+        const ambientLight = new THREE.AmbientLight(0x404050, 0.6); // Cool ambient
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffaa55, 1.5); // Volcanic sunset light
+        dirLight.position.set(-50, 100, -50);
+        dirLight.castShadow = true;
+        dirLight.shadow.camera.top = 100;
+        dirLight.shadow.camera.bottom = -100;
+        dirLight.shadow.camera.left = -100;
+        dirLight.shadow.camera.right = 100;
+        dirLight.shadow.camera.near = 0.1;
+        dirLight.shadow.camera.far = 500;
+        dirLight.shadow.mapSize.width = 2048; // High-res shadows
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+
+        const rimLight = new THREE.PointLight(0x00ccff, 2, 50); // Glowing crystal eye light
+        rimLight.position.set(0, 35, 10);
+        scene.add(rimLight);
+
+        // --- 3. ENVIRONMENT (Ash/Rock Terrain) ---
+        const planeGeo = new THREE.PlaneGeometry(500, 500, 64, 64);
+        // Perturb vertices slightly for rocky terrain
+        const posAttribute = planeGeo.attributes.position;
+        for (let i = 0; i < posAttribute.count; i++) {
+            posAttribute.setZ(i, Math.random() * 2);
+        }
+        planeGeo.computeVertexNormals();
+
+        const planeMat = new THREE.MeshStandardMaterial({ 
+            color: 0x222222, 
+            roughness: 0.9, 
+            metalness: 0.1,
+            flatShading: true 
+        });
+        const ground = new THREE.Mesh(planeGeo, planeMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Background Volcano/Mountains
+        const mtnGeo = new THREE.ConeGeometry(80, 100, 4);
+        const mtnMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1.0 });
+        const mountain = new THREE.Mesh(mtnGeo, mtnMat);
+        mountain.position.set(-100, 50, -150);
+        scene.add(mountain);
+
+        // --- 4. ENTITIES ---
+        
+        // A. The Titan (Boss)
+        const titan = new THREE.Group();
+        const stoneMat = new THREE.MeshStandardMaterial({ color: 0x444448, roughness: 0.8, metalness: 0.2 });
+        
+        // Titan Body
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(10, 20, 5), stoneMat);
+        torso.position.y = 20;
+        torso.castShadow = true;
+        titan.add(torso);
+        
+        // Titan Head (Crystal)
+        const headMat = new THREE.MeshStandardMaterial({ color: 0x00ccff, roughness: 0.2, metalness: 0.8, emissive: 0x004466 });
+        const head = new THREE.Mesh(new THREE.OctahedronGeometry(4), headMat);
+        head.position.y = 35;
+        head.castShadow = true;
+        titan.add(head);
+
+        // Titan Sword (Cross-like as in sketch)
+        const swordGroup = new THREE.Group();
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(2, 40, 1), stoneMat);
+        const crossguard = new THREE.Mesh(new THREE.BoxGeometry(15, 2, 1), stoneMat);
+        crossguard.position.y = 5;
+        swordGroup.add(blade);
+        swordGroup.add(crossguard);
+        swordGroup.position.set(12, 15, 5);
+        swordGroup.rotation.z = -Math.PI / 6;
+        swordGroup.castShadow = true;
+        titan.add(swordGroup);
+
+        titan.position.set(0, 0, -40);
+        scene.add(titan);
+
+        // B. The Player (Knight)
+        const player = new THREE.Group();
+        const armorMat = new THREE.MeshStandardMaterial({ color: 0x888899, roughness: 0.4, metalness: 0.7 });
+        
+        const pBody = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 3, 16), armorMat);
+        pBody.position.y = 1.5;
+        pBody.castShadow = true;
+        player.add(pBody);
+        
+        const pSword = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 0.5), new THREE.MeshStandardMaterial({color: 0xeeeeee}));
+        pSword.position.set(1.5, 2, 0);
+        player.add(pSword);
+
+        player.position.set(0, 0, 20);
+        scene.add(player);
+
+        // C. Powerups Group
+        const powerups = [];
+        const powerupGeo = new THREE.OctahedronGeometry(1);
+        const powerupMat = new THREE.MeshStandardMaterial({ color: 0x00ffcc, emissive: 0x00ffcc, emissiveIntensity: 0.5 });
+
+        // --- 5. GAME STATE & MECHANICS ---
+        let level = 1;
+        let bossHealth = 100;
+        let bossMaxHealth = 100;
+        let playerDamage = 10;
+        let speedMultiplier = 1;
+        
+        // GTA-style Third Person Camera Offsets
+        const cameraOffset = new THREE.Vector3(0, 5, 12);
+        let cameraAngle = 0;
+
+        // --- 6. XBOX CONTROLLER INPUT (Gamepad API) ---
+        const input = {
+            moveX: 0, moveY: 0, 
+            camX: 0, camY: 0, 
+            attack: false
+        };
+
+        function updateGamepad() {
+            const gamepads = navigator.getGamepads();
+            if (!gamepads) return;
+            
+            for (let i = 0; i < gamepads.length; i++) {
+                const gp = gamepads[i];
+                if (gp && gp.connected) {
+                    // Left Stick: Movement
+                    input.moveX = Math.abs(gp.axes[0]) > 0.1 ? gp.axes[0] : 0;
+                    input.moveY = Math.abs(gp.axes[1]) > 0.1 ? gp.axes[1] : 0;
+                    
+                    // Right Stick: Camera Rotation
+                    input.camX = Math.abs(gp.axes[2]) > 0.1 ? gp.axes[2] : 0;
+                    
+                    // A Button or Right Trigger for Attack
+                    input.attack = gp.buttons[0].pressed || gp.buttons[7].value > 0.5;
+                    break;
+                }
+            }
+        }
+
+        // --- 7. GAME LOOP & LOGIC ---
+        const clock = new THREE.Clock();
+        let lastAttackTime = 0;
+
+        function spawnPowerup() {
+            const p = new THREE.Mesh(powerupGeo, powerupMat);
+            p.position.set(
+                (Math.random() - 0.5) * 40,
+                1,
+                (Math.random() - 0.5) * 40 - 20
+            );
+            scene.add(p);
+            powerups.push(p);
+        }
+
+        function levelUp() {
+            level++;
+            bossMaxHealth = 100 + (level * 50);
+            bossHealth = bossMaxHealth;
+            document.getElementById('level-display').innerText = `Level: ${level} | Boss Phase: ${level}`;
+            document.getElementById('health-bar').style.width = '100%';
+            spawnPowerup();
+            
+            // Make Titan angry (change crystal color)
+            headMat.emissive.setHex(0xff0000);
+            rimLight.color.setHex(0xff0000);
+            setTimeout(() => {
+                headMat.emissive.setHex(0x004466);
+                rimLight.color.setHex(0x00ccff);
+            }, 2000);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            updateGamepad();
+
+            // --- Player Movement & Camera Navigation ---
+            // Rotate camera around player
+            cameraAngle -= input.camX * 2 * delta;
+            
+            // Calculate movement relative to camera angle
+            const moveSpeed = 15 * speedMultiplier * delta;
+            if (input.moveX !== 0 || input.moveY !== 0) {
+                const angle = Math.atan2(input.moveX, input.moveY) + cameraAngle;
+                player.position.x += Math.sin(angle) * moveSpeed;
+                player.position.z += Math.cos(angle) * moveSpeed;
+                
+                // Rotate player to face movement direction
+                player.rotation.y = angle;
+            }
+
+            // Update Camera Position (Pursuit behavior)
+            const targetCamPos = new THREE.Vector3(
+                player.position.x + Math.sin(cameraAngle) * cameraOffset.z,
+                player.position.y + cameraOffset.y,
+                player.position.z + Math.cos(cameraAngle) * cameraOffset.z
+            );
+            camera.position.lerp(targetCamPos, 0.1);
+            camera.lookAt(player.position);
+
+            // --- Combat Mechanics ---
+            const distanceToBoss = player.position.distanceTo(titan.position);
+            
+            // Titan Idle Animation
+            titan.position.y = Math.sin(clock.getElapsedTime()) * 0.5;
+            swordGroup.rotation.z = -Math.PI / 6 + Math.sin(clock.getElapsedTime() * 2) * 0.1;
+
+            if (input.attack && clock.getElapsedTime() - lastAttackTime > 0.5) {
+                lastAttackTime = clock.getElapsedTime();
+                // Simple Attack Animation (Swing sword)
+                pSword.rotation.x = -Math.PI / 2;
+                setTimeout(() => pSword.rotation.x = 0, 200);
+
+                // Hit detection
+                if (distanceToBoss < 15) {
+                    bossHealth -= playerDamage;
+                    const hpPercent = Math.max(0, (bossHealth / bossMaxHealth) * 100);
+                    document.getElementById('health-bar').style.width = hpPercent + '%';
+                    
+                    if (bossHealth <= 0) {
+                        levelUp();
+                    }
+                }
+            }
+
+            // --- Powerup Collection ---
+            for (let i = powerups.length - 1; i >= 0; i--) {
+                const p = powerups[i];
+                p.rotation.y += delta * 2; // Spin animation
+                p.position.y = 1 + Math.sin(clock.getElapsedTime() * 5) * 0.5; // Hover
+
+                if (player.position.distanceTo(p.position) < 3) {
+                    // Collect
+                    scene.remove(p);
+                    powerups.splice(i, 1);
+                    playerDamage += 5;
+                    speedMultiplier = 1.2;
+                    
+                    const notice = document.getElementById('powerup-notice');
+                    notice.style.display = 'block';
+                    setTimeout(() => notice.style.display = 'none', 3000);
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Handle Window Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
