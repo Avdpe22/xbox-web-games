@@ -11,48 +11,60 @@
 
         #hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; text-shadow: 0 2px 6px rgba(0,0,0,.9); }
 
-        /* Boss bar */
-        #boss-wrap { position: absolute; top: 26px; left: 50%; transform: translateX(-50%); width: min(680px, 82vw); text-align: center; }
-        #boss-name { font-size: 15px; letter-spacing: 4px; text-transform: uppercase; opacity: .85; margin-bottom: 6px; }
-        #boss-bar-bg { height: 16px; background: rgba(20,10,14,.75); border: 1px solid rgba(255,255,255,.25); position: relative; overflow: hidden; }
-        #boss-bar-lag { position: absolute; inset: 0; width: 100%; background: #d8b45a; opacity: .35; transition: width .45s ease; }
-        #boss-bar { position: absolute; inset: 0; width: 100%; background: linear-gradient(#ff5a3c, #8b0000); transition: width .12s linear; }
-        #boss-phase { margin-top: 6px; font-size: 12px; letter-spacing: 3px; opacity: .7; }
+        /* ---- Boss bar ---- */
+        #boss-wrap { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: min(700px, 84vw); text-align: center; }
+        #boss-name { font-size: 15px; letter-spacing: 4px; text-transform: uppercase; opacity: .9; margin-bottom: 7px; }
+        #boss-bar-bg { position: relative; height: 20px; background: rgba(24,10,14,.85); border: 1px solid rgba(255,255,255,.35); overflow: hidden; }
+        #boss-bar-lag { position: absolute; top: 0; left: 0; height: 100%; width: 100%; background: #e8c877; opacity: .4; transition: width .5s ease .15s; }
+        #boss-bar { position: absolute; top: 0; left: 0; height: 100%; width: 100%; background: linear-gradient(180deg, #ff6a4a, #a30d0d); transition: width .1s linear; }
+        #boss-hp-text { position: absolute; top: 0; left: 0; width: 100%; height: 100%; line-height: 20px;
+                        font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+        #boss-pips { margin-top: 7px; display: flex; gap: 6px; justify-content: center; align-items: center; font-size: 11px; letter-spacing: 3px; opacity: .8; }
+        .pip { width: 34px; height: 4px; background: rgba(255,255,255,.25); }
+        .pip.done { background: #e8c877; }
+        .pip.active { background: #ff6a4a; }
 
-        /* Player vitals */
+        /* ---- Player vitals ---- */
         #vitals { position: absolute; left: 26px; bottom: 26px; width: 300px; }
-        #hp-bar-bg { height: 20px; background: rgba(10,20,16,.75); border: 1px solid rgba(255,255,255,.25); position: relative; overflow: hidden; }
-        #hp-bar { position: absolute; inset: 0; width: 100%; background: linear-gradient(#3ce07a, #157a3f); transition: width .15s ease; }
-        #hp-text { position: absolute; width: 100%; text-align: center; font-size: 12px; line-height: 20px; font-weight: 700; }
-        #stam-bar-bg { height: 7px; margin-top: 5px; background: rgba(10,14,24,.75); border: 1px solid rgba(255,255,255,.2); position: relative; overflow: hidden; }
-        #stam-bar { position: absolute; inset: 0; width: 100%; background: #58b6ff; transition: width .1s linear; }
+        #hp-bar-bg { position: relative; height: 20px; background: rgba(10,20,16,.8); border: 1px solid rgba(255,255,255,.3); overflow: hidden; }
+        #hp-bar { position: absolute; top: 0; left: 0; height: 100%; width: 100%; background: linear-gradient(180deg, #4ff08a, #157a3f); transition: width .12s ease; }
+        #hp-text { position: absolute; top: 0; left: 0; width: 100%; text-align: center; font-size: 12px; line-height: 20px; font-weight: 700; }
+        #stam-bar-bg { position: relative; height: 7px; margin-top: 5px; background: rgba(10,14,24,.8); border: 1px solid rgba(255,255,255,.22); overflow: hidden; }
+        #stam-bar { position: absolute; top: 0; left: 0; height: 100%; width: 100%; background: #58b6ff; transition: width .08s linear; }
         #combo { margin-top: 10px; font-size: 20px; font-weight: 800; color: #ffd24a; height: 24px; opacity: 0; transition: opacity .2s; }
 
-        #hint { position: absolute; right: 26px; bottom: 26px; text-align: right; font-size: 13px; line-height: 1.7; opacity: .8; transition: opacity 1s; }
+        #hint { position: absolute; right: 26px; bottom: 22px; text-align: right; font-size: 13px; line-height: 1.65; opacity: .85; transition: opacity 1.2s; }
         #hint b { color: #ffd24a; }
+        #music-tag { position: absolute; left: 26px; top: 26px; font-size: 12px; letter-spacing: 2px; opacity: .55; }
 
         #flash { position: absolute; inset: 0; background: #ff2a2a; opacity: 0; pointer-events: none; z-index: 9; }
 
-        #overlay { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
-                   background: rgba(0,0,0,.72); z-index: 20; text-align: center; }
-        #overlay h1 { font-size: 58px; margin: 0 0 10px; letter-spacing: 6px; }
-        #overlay p { font-size: 18px; opacity: .85; margin: 4px 0; }
-        #overlay .key { display: inline-block; margin-top: 22px; padding: 10px 22px; border: 1px solid rgba(255,255,255,.4); font-size: 16px; letter-spacing: 2px; }
-        .win h1 { color: #ffd24a; text-shadow: 0 0 30px rgba(255,210,74,.6); }
-        .lose h1 { color: #ff5a3c; text-shadow: 0 0 30px rgba(255,90,60,.6); }
+        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                   background: rgba(4,2,6,.86); z-index: 20; text-align: center; padding: 20px; }
+        #overlay h1 { font-size: 54px; margin: 0 0 12px; letter-spacing: 7px; }
+        #overlay p { font-size: 17px; opacity: .85; margin: 5px 0; max-width: 620px; line-height: 1.6; }
+        #overlay .key { display: inline-block; margin-top: 26px; padding: 12px 26px; border: 1px solid rgba(255,255,255,.45); font-size: 15px; letter-spacing: 3px; }
+        .win h1 { color: #ffd24a; text-shadow: 0 0 34px rgba(255,210,74,.6); }
+        .lose h1 { color: #ff5a3c; text-shadow: 0 0 34px rgba(255,90,60,.6); }
+        .title h1 { color: #e8c877; text-shadow: 0 0 40px rgba(232,200,119,.5); }
 
         #dmg-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 8; }
-        .dmg { position: absolute; font-weight: 800; font-size: 22px; transform: translate(-50%,-50%); text-shadow: 0 2px 4px #000; }
+        .dmg { position: absolute; font-weight: 800; font-size: 22px; transform: translate(-50%,-50%); text-shadow: 0 2px 4px #000; white-space: nowrap; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
     <div id="dmg-layer"></div>
     <div id="hud">
+        <div id="music-tag">♪ DUST &amp; THUNDER — press M to mute</div>
         <div id="boss-wrap">
             <div id="boss-name">Kaelthar, The Eclipsed Titan</div>
-            <div id="boss-bar-bg"><div id="boss-bar-lag"></div><div id="boss-bar"></div></div>
-            <div id="boss-phase">PHASE 1 / 3</div>
+            <div id="boss-bar-bg">
+                <div id="boss-bar-lag"></div>
+                <div id="boss-bar"></div>
+                <div id="boss-hp-text">130 / 130</div>
+            </div>
+            <div id="boss-pips"><span class="pip active"></span><span class="pip"></span><span class="pip"></span></div>
         </div>
         <div id="vitals">
             <div id="hp-bar-bg"><div id="hp-bar"></div><div id="hp-text">100 / 100</div></div>
@@ -60,21 +72,231 @@
             <div id="combo"></div>
         </div>
         <div id="hint">
-            <b>WASD</b> move &nbsp; <b>Space</b> attack &nbsp; <b>Shift</b> dodge roll<br>
-            <b>Q / E</b> rotate camera &nbsp; <b>L</b> lock-on &nbsp; <b>R</b> restart<br>
-            <span style="opacity:.6">Xbox pad: stick move · A/RT attack · B dodge · LB lock-on</span>
+            <b>WASD</b> move &nbsp; <b>Space</b> attack &nbsp; <b>Shift</b> dodge<br>
+            <b>Mouse</b> or <b>Arrows</b> look up / around &nbsp; <b>Wheel</b> zoom<br>
+            <b>L</b> lock-on &nbsp; <b>M</b> music &nbsp; <b>R</b> restart<br>
+            <span style="opacity:.6">Pad: L-stick move · R-stick look · A/RT attack · B dodge · LB lock-on</span>
         </div>
     </div>
     <div id="flash"></div>
-    <div id="overlay"><h1></h1><p id="ov-sub"></p><div class="key">Press R or ☰ Start</div></div>
+    <div id="overlay" class="title">
+        <h1>TITAN'S ECLIPSE</h1>
+        <p id="ov-sub">Three phases. One knight. Stay out of the red, punish the recovery, and break its poise for the stagger window.</p>
+        <div class="key" id="ov-key">Press any key or click to begin</div>
+    </div>
 
     <script>
     const T = THREE, clamp = T.MathUtils.clamp, lerp = T.MathUtils.lerp;
+    const V = (x, y, z) => new T.Vector3(x, y, z);
+    // frame-rate independent smoothing: 0 = no move, 1 = snap
+    const smooth = (rate, dt) => 1 - Math.exp(-rate * dt);
 
-    // ---------------------------------------------------------------- SCENE
+    // ================================================================ MUSIC
+    // Procedural country backing track: alternating-bass acoustic guitar,
+    // brush kit, and a pedal-steel lead over a I-IV-V progression in G.
+    const Music = (() => {
+        let ctx = null, master, busGtr, busBass, busDrum, busLead, verb;
+        let started = false, muted = false, timer = null;
+        let noiseBuf = null;
+        let step = 0, nextTime = 0, intensity = 0;
+
+        const BPM = 116, SPB = 60 / BPM, SWING = 0.055;
+        const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+        // I-IV-I-V country turnaround in G
+        const PROG = [43, 43, 48, 48, 43, 43, 50, 48];   // G G C C G G D C (bar roots)
+        const triad = r => [r, r + 4, r + 7];
+
+        function makeNoise() {
+            const len = ctx.sampleRate * 1.2;
+            noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = noiseBuf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        }
+        function bus(gain, dest) { const g = ctx.createGain(); g.gain.value = gain; g.connect(dest); return g; }
+
+        function init() {
+            ctx = new (window.AudioContext || window.webkitAudioContext)();
+            master = ctx.createGain(); master.gain.value = 0.0001; master.connect(ctx.destination);
+            // cheap plate reverb from a decaying noise impulse
+            verb = ctx.createConvolver();
+            const dur = 1.6, ir = ctx.createBuffer(2, ctx.sampleRate * dur, ctx.sampleRate);
+            for (let c = 0; c < 2; c++) {
+                const d = ir.getChannelData(c);
+                for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2.6);
+            }
+            verb.buffer = ir;
+            const wet = bus(0.22, master); verb.connect(wet);
+            busGtr = bus(0.5, master); busGtr.connect(verb);
+            busBass = bus(0.62, master);
+            busDrum = bus(0.42, master); busDrum.connect(verb);
+            busLead = bus(0.30, master); busLead.connect(verb);
+            makeNoise();
+            master.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + 1.5);
+        }
+
+        // plucked acoustic string (two detuned oscs into a closing lowpass)
+        function pluck(t, freq, dur, gain, dest) {
+            const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+            lp.frequency.setValueAtTime(4200, t);
+            lp.frequency.exponentialRampToValueAtTime(600, t + dur * 0.9);
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(gain, t + 0.005);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            lp.connect(g); g.connect(dest || busGtr);
+            [[ 'triangle', 1 ], [ 'sawtooth', 1.004 ], [ 'triangle', 2.002 ]].forEach(([type, mul], i) => {
+                const o = ctx.createOscillator(); o.type = type;
+                o.frequency.value = freq * mul;
+                const og = ctx.createGain(); og.gain.value = i === 2 ? 0.22 : 0.5;
+                o.connect(og); og.connect(lp);
+                o.start(t); o.stop(t + dur + 0.02);
+            });
+        }
+        function bassNote(t, freq, dur) {
+            const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = freq;
+            const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = freq * 0.5;
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(0.5, t + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            o.connect(g); o2.connect(g); g.connect(busBass);
+            o.start(t); o2.start(t); o.stop(t + dur); o2.stop(t + dur);
+        }
+        function noiseHit(t, dur, hp, gain, lp) {
+            const s = ctx.createBufferSource(); s.buffer = noiseBuf;
+            const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hp;
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(gain, t);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            s.connect(f);
+            if (lp) { const l = ctx.createBiquadFilter(); l.type = 'lowpass'; l.frequency.value = lp; f.connect(l); l.connect(g); }
+            else f.connect(g);
+            g.connect(busDrum);
+            s.start(t); s.stop(t + dur + 0.02);
+        }
+        function kick(t) {
+            const o = ctx.createOscillator(); o.type = 'sine';
+            o.frequency.setValueAtTime(120, t);
+            o.frequency.exponentialRampToValueAtTime(42, t + 0.11);
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.9, t);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+            o.connect(g); g.connect(busDrum);
+            o.start(t); o.stop(t + 0.26);
+        }
+        // pedal-steel: glides up into the note with vibrato
+        function steel(t, freq, dur) {
+            const o = ctx.createOscillator(); o.type = 'sine';
+            o.frequency.setValueAtTime(freq * 0.891, t);          // a whole step flat
+            o.frequency.exponentialRampToValueAtTime(freq, t + 0.28);
+            const vib = ctx.createOscillator(); vib.type = 'sine'; vib.frequency.value = 5.4;
+            const vibG = ctx.createGain(); vibG.gain.value = freq * 0.012;
+            vib.connect(vibG); vibG.connect(o.frequency);
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(0.42, t + 0.14);
+            g.gain.setValueAtTime(0.42, t + dur * 0.6);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            o.connect(g); g.connect(busLead);
+            o.start(t); vib.start(t); o.stop(t + dur); vib.stop(t + dur);
+        }
+
+        // one 16th step
+        function playStep(s, t) {
+            const bar = Math.floor(s / 16) % PROG.length;
+            const b16 = s % 16, beat = Math.floor(b16 / 4);
+            const root = PROG[bar], chord = triad(root);
+
+            // --- drums
+            if (b16 % 2 === 0) noiseHit(t, 0.05, 7000, 0.16, 0);                  // hi-hat 8ths
+            if (b16 === 0 || b16 === 8) kick(t);
+            if (intensity > 0 && (b16 === 6 || b16 === 14)) kick(t);              // pickup kicks
+            if (b16 === 4 || b16 === 12) {                                        // brush snare on 2 & 4
+                noiseHit(t, 0.16, 1300, 0.5, 6500);
+                noiseHit(t + 0.02, 0.10, 900, 0.22, 4000);
+            }
+            if (intensity > 1 && b16 === 15) noiseHit(t, 0.09, 1500, 0.3, 7000);  // ghost fill
+
+            // --- alternating bass: root on 1, fifth on 3
+            if (b16 === 0) bassNote(t, midi(root - 12), SPB * 0.9);
+            if (b16 === 8) bassNote(t, midi(root - 5), SPB * 0.9);
+            if (intensity > 1 && b16 === 14) bassNote(t, midi(root - 10), SPB * 0.4); // walk-up
+
+            // --- guitar: boom-chick strum, arpeggiated so it "rolls"
+            if (b16 === 0 || b16 === 8) {
+                chord.forEach((n, i) => pluck(t + i * 0.012, midi(n), 0.75, 0.30 - i * 0.05));
+            }
+            if (b16 === 4 || b16 === 12) {
+                chord.slice().reverse().forEach((n, i) => pluck(t + i * 0.010, midi(n + 12), 0.4, 0.20));
+            }
+            // travis-picking off-beats with swing
+            if (b16 === 6 || b16 === 10 || b16 === 14) {
+                pluck(t + SWING, midi(chord[(b16 / 2) % 3] + 12), 0.3, 0.13);
+            }
+
+            // --- pedal steel lead every other bar
+            if (b16 === 0 && bar % 2 === 1) steel(t, midi(chord[2] + 12), SPB * 3.4);
+            if (b16 === 8 && bar === 6) steel(t, midi(chord[1] + 12), SPB * 2.0);
+        }
+
+        function scheduler() {
+            if (!ctx) return;
+            while (nextTime < ctx.currentTime + 0.18) {
+                playStep(step, nextTime);
+                step++;
+                nextTime += SPB / 4;
+            }
+        }
+
+        return {
+            start() {
+                if (started) return;
+                started = true;
+                try { init(); } catch (e) { started = false; return; }
+                nextTime = ctx.currentTime + 0.08;
+                timer = setInterval(scheduler, 25);
+            },
+            toggle() {
+                if (!ctx) { this.start(); return true; }
+                muted = !muted;
+                master.gain.cancelScheduledValues(ctx.currentTime);
+                master.gain.setTargetAtTime(muted ? 0.0001 : 0.5, ctx.currentTime, 0.15);
+                return !muted;
+            },
+            setIntensity(n) { intensity = n; },
+            get on() { return started && !muted; },
+            // --- one-shot SFX share the same graph
+            sfx(kind) {
+                if (!ctx || muted) return;
+                const t = ctx.currentTime;
+                if (kind === 'hit') {
+                    noiseHit(t, 0.09, 2600, 0.5, 9000);
+                    const o = ctx.createOscillator(); o.type = 'square';
+                    o.frequency.setValueAtTime(880, t); o.frequency.exponentialRampToValueAtTime(300, t + 0.12);
+                    const g = ctx.createGain(); g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+                    o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.16);
+                } else if (kind === 'hurt') {
+                    const o = ctx.createOscillator(); o.type = 'sawtooth';
+                    o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(52, t + 0.3);
+                    const g = ctx.createGain(); g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+                    o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.34);
+                } else if (kind === 'whiff') {
+                    noiseHit(t, 0.16, 400, 0.14, 1800);
+                } else if (kind === 'quake') {
+                    const o = ctx.createOscillator(); o.type = 'sine';
+                    o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(28, t + 0.6);
+                    const g = ctx.createGain(); g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+                    o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.72);
+                    noiseHit(t, 0.5, 60, 0.4, 700);
+                }
+            }
+        };
+    })();
+
+    // ================================================================ SCENE
     const scene = new T.Scene();
     scene.background = new T.Color(0x1a1420);
-    scene.fog = new T.FogExp2(0x1a1420, 0.014);
+    scene.fog = new T.FogExp2(0x1a1420, 0.013);
 
     const camera = new T.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 1000);
     const renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -97,42 +319,71 @@
     rimLight.position.set(0, 40, 12);
     scene.add(rimLight);
 
-    // ---------------------------------------------------------------- ARENA
+    // ---- stars, so looking up is worth doing
+    const starN = 700, starPos = new Float32Array(starN * 3);
+    for (let i = 0; i < starN; i++) {
+        const a = Math.random() * Math.PI * 2, e = Math.random() * 0.85, r = 380;
+        starPos[i * 3] = Math.cos(a) * Math.cos(e) * r;
+        starPos[i * 3 + 1] = Math.sin(e) * r + 40;
+        starPos[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r;
+    }
+    const starGeo = new T.BufferGeometry();
+    starGeo.setAttribute('position', new T.BufferAttribute(starPos, 3));
+    scene.add(new T.Points(starGeo, new T.PointsMaterial({ color: 0xbfc8ff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0.75 })));
+
+    // ---- the eclipse itself, overhead
+    const eclipse = new T.Group();
+    eclipse.add(new T.Mesh(new T.CircleGeometry(26, 48), new T.MeshBasicMaterial({ color: 0x120c14 })));
+    const corona = new T.Mesh(new T.RingGeometry(26, 33, 64), new T.MeshBasicMaterial({ color: 0xffb45a, transparent: true, opacity: 0.5, side: T.DoubleSide }));
+    eclipse.add(corona);
+    eclipse.position.set(-40, 190, -230);
+    eclipse.lookAt(0, 20, 0);
+    scene.add(eclipse);
+
+    // ================================================================ ARENA
     const ARENA_R = 60;
     const groundGeo = new T.CircleGeometry(ARENA_R + 6, 96);
-    const gp = groundGeo.attributes.position;
-    for (let i = 0; i < gp.count; i++) gp.setZ(i, (Math.random() - 0.5) * 2.4);
+    const gpAttr = groundGeo.attributes.position;
+    for (let i = 0; i < gpAttr.count; i++) gpAttr.setZ(i, (Math.random() - 0.5) * 2.4);
     groundGeo.computeVertexNormals();
     const ground = new T.Mesh(groundGeo, new T.MeshStandardMaterial({ color: 0x241f26, roughness: 1, metalness: 0.05, flatShading: true }));
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // arena ring wall
     const wall = new T.Mesh(new T.TorusGeometry(ARENA_R + 5, 2.4, 8, 80),
         new T.MeshStandardMaterial({ color: 0x0d0b10, roughness: 1 }));
-    wall.rotation.x = Math.PI / 2;
-    wall.position.y = 1.5;
+    wall.rotation.x = Math.PI / 2; wall.position.y = 1.5;
     scene.add(wall);
 
-    // background peaks
+    // ring of broken pillars — vertical reference so pitch reads
+    for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const h = 14 + Math.random() * 22;
+        const p = new T.Mesh(new T.BoxGeometry(3.4, h, 3.4), new T.MeshStandardMaterial({ color: 0x2a2530, roughness: 0.95, flatShading: true }));
+        p.position.set(Math.cos(a) * (ARENA_R - 3), h / 2, Math.sin(a) * (ARENA_R - 3));
+        p.rotation.y = Math.random() * 0.6;
+        p.rotation.z = (Math.random() - 0.5) * 0.12;
+        p.castShadow = true; p.receiveShadow = true;
+        scene.add(p);
+    }
+
     for (let i = 0; i < 7; i++) {
         const a = (i / 7) * Math.PI * 2 + 0.3;
         const m = new T.Mesh(new T.ConeGeometry(30 + Math.random() * 40, 90 + Math.random() * 90, 4),
             new T.MeshStandardMaterial({ color: 0x100e14, roughness: 1 }));
-        m.position.set(Math.cos(a) * 160, 30, Math.sin(a) * 160);
+        m.position.set(Math.cos(a) * 170, 30, Math.sin(a) * 170);
         m.rotation.y = Math.random();
         scene.add(m);
     }
 
-    // lava hazard pools
     const lavaMat = new T.MeshStandardMaterial({ color: 0xff5a1e, emissive: 0xff3b00, emissiveIntensity: 1.4, roughness: 0.6 });
     const lavaPools = [];
     for (let i = 0; i < 5; i++) {
         const r = 4 + Math.random() * 3.5;
         const p = new T.Mesh(new T.CircleGeometry(r, 24), lavaMat);
         p.rotation.x = -Math.PI / 2;
-        const a = Math.random() * Math.PI * 2, d = 16 + Math.random() * 34;
+        const a = Math.random() * Math.PI * 2, d = 22 + Math.random() * 30;
         p.position.set(Math.cos(a) * d, 0.15, Math.sin(a) * d);
         scene.add(p);
         const glow = new T.PointLight(0xff4400, 1.3, r * 4);
@@ -141,7 +392,6 @@
         lavaPools.push({ mesh: p, r });
     }
 
-    // drifting embers
     const emberN = 260, emberPos = new Float32Array(emberN * 3), emberVel = [];
     for (let i = 0; i < emberN; i++) {
         emberPos[i * 3] = (Math.random() - 0.5) * 150;
@@ -154,14 +404,14 @@
     const embers = new T.Points(emberGeo, new T.PointsMaterial({ color: 0xff8a3c, size: 0.5, transparent: true, opacity: 0.8, depthWrite: false }));
     scene.add(embers);
 
-    // ---------------------------------------------------------------- KNIGHT
+    // ================================================================ KNIGHT
     function mat(c, r, m, e) { return new T.MeshStandardMaterial({ color: c, roughness: r, metalness: m, emissive: e || 0x000000 }); }
     const steel = mat(0x9aa4b2, 0.35, 0.9), darkSteel = mat(0x39414e, 0.5, 0.75),
           cloth = mat(0x8b1a2b, 0.95, 0), gold = mat(0xd9a441, 0.3, 0.95, 0x241800);
 
     function buildKnight() {
         const g = new T.Group();
-        const rig = new T.Group(); g.add(rig);            // rolls during dodge
+        const rig = new T.Group(); g.add(rig);
 
         const chest = new T.Group(); chest.position.y = 2.65; rig.add(chest);
         const torso = new T.Mesh(new T.BoxGeometry(1.5, 1.9, 0.95), steel); torso.castShadow = true; chest.add(torso);
@@ -184,7 +434,6 @@
         }
         const armL = arm(-1), armR = arm(1);
 
-        // sword in right hand
         const sword = new T.Group();
         const blade = new T.Mesh(new T.BoxGeometry(0.16, 2.7, 0.42), mat(0xdfe6ef, 0.15, 0.95, 0x141414));
         blade.position.y = 1.55; blade.castShadow = true; sword.add(blade);
@@ -195,7 +444,6 @@
         sword.position.set(0, -1.05, 0.1);
         armR.fore.add(sword);
 
-        // shield on left forearm
         const shield = new T.Mesh(new T.BoxGeometry(0.14, 1.5, 1.15), steel);
         shield.position.set(-0.15, -0.7, 0); shield.castShadow = true;
         shield.add(new T.Mesh(new T.SphereGeometry(0.18, 10, 10), gold).translateX(-0.12));
@@ -218,7 +466,8 @@
     const player = buildKnight();
     scene.add(player);
 
-    // ---------------------------------------------------------------- TITAN
+    // ================================================================ TITAN
+    const TITAN_R = 6.5;                       // body radius used for combat range
     function buildTitan() {
         const g = new T.Group();
         const stone = mat(0x4a4750, 0.85, 0.15);
@@ -243,7 +492,6 @@
         const legL = limb(4, 14, -3, 15);
         const legR = limb(4, 14, 3, 15);
 
-        // greatsword in right hand
         const sword = new T.Group();
         sword.add(new T.Mesh(new T.BoxGeometry(2.2, 34, 1), stone).translateY(17));
         sword.add(new T.Mesh(new T.BoxGeometry(13, 2.4, 1.4), stone).translateY(2));
@@ -257,7 +505,13 @@
     const titan = buildTitan();
     scene.add(titan);
 
-    // ---------------------------------------------------------------- FX POOLS
+    // lock-on / in-range reticle over the Titan
+    const reticle = new T.Mesh(new T.RingGeometry(1.5, 2.1, 4),
+        new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthTest: false }));
+    reticle.renderOrder = 999;
+    scene.add(reticle);
+
+    // ================================================================ FX
     const sparkGeo = new T.OctahedronGeometry(0.16);
     const particles = [];
     function burst(pos, color, n, spd, grav = 40) {
@@ -265,7 +519,7 @@
             const m = new T.Mesh(sparkGeo, new T.MeshBasicMaterial({ color }));
             m.position.copy(pos);
             const a = Math.random() * Math.PI * 2, e = Math.random() * Math.PI;
-            const v = new T.Vector3(Math.sin(e) * Math.cos(a), Math.abs(Math.cos(e)) + 0.4, Math.sin(e) * Math.sin(a)).multiplyScalar(spd * (0.4 + Math.random()));
+            const v = V(Math.sin(e) * Math.cos(a), Math.abs(Math.cos(e)) + 0.4, Math.sin(e) * Math.sin(a)).multiplyScalar(spd * (0.4 + Math.random()));
             scene.add(m);
             particles.push({ m, v, life: 0.5 + Math.random() * 0.4, max: 0.9, grav });
         }
@@ -277,8 +531,7 @@
             p.v.y -= p.grav * dt;
             p.m.position.addScaledVector(p.v, dt);
             if (p.m.position.y < 0.1) { p.m.position.y = 0.1; p.v.y *= -0.3; p.v.x *= 0.6; p.v.z *= 0.6; }
-            const k = clamp(p.life / p.max, 0, 1);
-            p.m.scale.setScalar(k);
+            p.m.scale.setScalar(clamp(p.life / p.max, 0, 1));
             if (p.life <= 0) { scene.remove(p.m); p.m.material.dispose(); particles.splice(i, 1); }
         }
     }
@@ -291,9 +544,9 @@
         shockwaves.push({ ring, x, z, r: 1, maxR, speed, dmg, band, hit: false });
     }
 
-    const telegraphs = [];   // ground warning decals -> eruption
+    const telegraphs = [];
     function spawnTelegraph(x, z, r, delay, dmg) {
-        const ring = new T.Mesh(new T.RingGeometry(r * 0.82, r, 40), new T.MeshBasicMaterial({ color: 0xff3b2a, transparent: true, opacity: 0.0, side: T.DoubleSide }));
+        const ring = new T.Mesh(new T.RingGeometry(r * 0.82, r, 40), new T.MeshBasicMaterial({ color: 0xff3b2a, transparent: true, opacity: 0, side: T.DoubleSide }));
         ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.28, z);
         const fill = new T.Mesh(new T.CircleGeometry(r, 32), new T.MeshBasicMaterial({ color: 0xff3b2a, transparent: true, opacity: 0.12, side: T.DoubleSide }));
         fill.rotation.x = -Math.PI / 2; fill.position.set(x, 0.26, z);
@@ -301,14 +554,13 @@
         telegraphs.push({ ring, fill, x, z, r, t: 0, delay, dmg });
     }
 
-    // floating damage numbers
     const dmgLayer = document.getElementById('dmg-layer');
     const dmgNums = [];
     function dmgNumber(worldPos, text, color) {
-        const el = document.createElement('div');
-        el.className = 'dmg'; el.textContent = text; el.style.color = color;
-        dmgLayer.appendChild(el);
-        dmgNums.push({ el, pos: worldPos.clone(), life: 0.9, max: 0.9 });
+        const e = document.createElement('div');
+        e.className = 'dmg'; e.textContent = text; e.style.color = color;
+        dmgLayer.appendChild(e);
+        dmgNums.push({ el: e, pos: worldPos.clone(), life: 0.9, max: 0.9 });
     }
     function updateDmgNumbers(dt) {
         for (let i = dmgNums.length - 1; i >= 0; i--) {
@@ -324,115 +576,162 @@
         }
     }
 
-    // ---------------------------------------------------------------- INPUT
+    // ================================================================ INPUT
     const keys = {};
+    let began = false;
+    function begin() {
+        if (began) return;
+        began = true;
+        Music.start();
+        overlay.style.display = 'none';
+        clock.getDelta();                       // drop the accumulated menu time
+    }
+
     addEventListener('keydown', e => {
+        if (!began) { begin(); return; }
         keys[e.code] = true;
         if (e.code === 'KeyR') resetGame();
         if (e.code === 'KeyL') toggleLock();
-        if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
+        if (e.code === 'KeyM') Music.toggle();
+        if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     });
     addEventListener('keyup', e => keys[e.code] = false);
 
-    const pad = { mx: 0, my: 0, cx: 0, attack: false, dodge: false, lock: false, start: false };
-    let padLockPrev = false, padStartPrev = false;
+    // --- mouse look (drag, or pointer lock after a click on the canvas)
+    const mouse = { dx: 0, dy: 0, down: false };
+    renderer.domElement.addEventListener('mousedown', e => {
+        if (!began) { begin(); return; }
+        mouse.down = true;
+        if (e.button === 0 && !document.pointerLockElement) renderer.domElement.requestPointerLock?.();
+    });
+    addEventListener('mouseup', () => mouse.down = false);
+    addEventListener('mousemove', e => {
+        if (document.pointerLockElement === renderer.domElement || mouse.down) {
+            mouse.dx += e.movementX || 0;
+            mouse.dy += e.movementY || 0;
+        }
+    });
+    addEventListener('wheel', e => { if (S) S.cam.dist = clamp(S.cam.dist + e.deltaY * 0.02, 9, 46); }, { passive: true });
+    document.getElementById('overlay').addEventListener('click', begin);
+
+    const pad = { mx: 0, my: 0, cx: 0, cy: 0, attack: false, dodge: false };
+    let padLockPrev = false, padStartPrev = false, padAnyPrev = false;
     function pollGamepad() {
         const gps = navigator.getGamepads ? navigator.getGamepads() : [];
-        pad.mx = pad.my = pad.cx = 0; pad.attack = pad.dodge = false;
+        pad.mx = pad.my = pad.cx = pad.cy = 0; pad.attack = pad.dodge = false;
         for (const gp of gps) {
             if (!gp || !gp.connected) continue;
-            const dz = v => Math.abs(v) > 0.18 ? v : 0;
-            pad.mx = dz(gp.axes[0]); pad.my = dz(gp.axes[1]); pad.cx = dz(gp.axes[2] || 0);
+            const dz = v => Math.abs(v) > 0.18 ? (v - Math.sign(v) * 0.18) / 0.82 : 0;
+            pad.mx = dz(gp.axes[0] || 0); pad.my = dz(gp.axes[1] || 0);
+            pad.cx = dz(gp.axes[2] || 0); pad.cy = dz(gp.axes[3] || 0);
             pad.attack = gp.buttons[0]?.pressed || (gp.buttons[7]?.value > 0.5);
             pad.dodge = gp.buttons[1]?.pressed || gp.buttons[5]?.pressed;
-            const lb = gp.buttons[4]?.pressed; if (lb && !padLockPrev) toggleLock(); padLockPrev = lb;
-            const st = gp.buttons[9]?.pressed; if (st && !padStartPrev) resetGame(); padStartPrev = st;
+            const any = gp.buttons.some(b => b.pressed);
+            if (any && !padAnyPrev && !began) begin();
+            padAnyPrev = any;
+            const lb = gp.buttons[4]?.pressed; if (lb && !padLockPrev && began) toggleLock(); padLockPrev = lb;
+            const st = gp.buttons[9]?.pressed; if (st && !padStartPrev && began) resetGame(); padStartPrev = st;
             break;
         }
     }
 
-    // ---------------------------------------------------------------- GAME STATE
+    // ================================================================ STATE
     const PHASES = [
-        { hp: 130, speed: 3.0, atkCd: 2.6, moves: ['slam', 'sweep'] },
-        { hp: 210, speed: 3.8, atkCd: 2.1, moves: ['slam', 'sweep', 'erupt'] },
-        { hp: 320, speed: 4.6, atkCd: 1.6, moves: ['slam', 'sweep', 'erupt', 'stomp'] },
+        { hp: 220, speed: 3.4, atkCd: 2.6, moves: ['slam', 'sweep'] },
+        { hp: 340, speed: 4.2, atkCd: 2.1, moves: ['slam', 'sweep', 'erupt'] },
+        { hp: 480, speed: 5.0, atkCd: 1.6, moves: ['slam', 'sweep', 'erupt', 'stomp'] },
     ];
+    // movement tuning
+    const MOVE = { maxSpeed: 15, accel: 70, decel: 55, attackSpeed: 4, turnRate: 13, dodgeSpeed: 34 };
+
+    const overlay = document.getElementById('overlay');
     let S;
     function resetGame() {
         S = {
             over: false, phase: 0,
             p: { hp: 100, maxHp: 100, dmg: 14, stam: 100, maxStam: 100,
-                 vel: new T.Vector3(), knock: new T.Vector3(),
-                 state: 'idle', atkT: 0, atkHit: false, dodgeT: 0, dodgeCd: 0, hurtT: 0, invT: 0,
-                 walkPhase: 0, combo: 0, comboT: 0, yaw: Math.PI },
-            t: { hp: PHASES[0].hp, maxHp: PHASES[0].hp, state: 'idle', stateT: 0, atkCd: 1.5,
-                 yaw: 0, move: null, poise: 0, poiseMax: 6, flinch: 0, walkPhase: 0, invT: 1.2 },
-            cam: { angle: 0, shake: 0 },
-            lock: false, hitStop: 0,
+                 vel: V(0, 0, 0), knock: V(0, 0, 0), speed: 0,
+                 state: 'idle', atkT: 0, atkHit: false, dodgeT: 0, dodgeDir: 0, dodgeCd: 0, hurtT: 0, invT: 0,
+                 walkPhase: 0, combo: 0, comboT: 0, yaw: Math.PI, bufferedAtk: 0 },
+            t: { hp: PHASES[0].hp, maxHp: PHASES[0].hp, state: 'idle', stateT: 0, atkCd: 1.8,
+                 move: null, struck: false, poise: 0, poiseMax: 6, flinch: 0, walkPhase: 0, invT: 1.0 },
+            cam: { yaw: 0, pitch: 0.14, dist: 21, shake: 0, manualT: 0 },
+            lock: true, hitStop: 0,
         };
         player.position.set(0, 0, 30); player.rotation.set(0, Math.PI, 0);
         player.userData.rig.rotation.set(0, 0, 0);
-        titan.position.set(0, 0, -22); titan.rotation.set(0, 0, 0);
-        camera.position.set(0, 9.5, 49); camera.lookAt(0, 6, 0);
+        titan.position.set(0, 0, -18); titan.rotation.set(0, 0, 0);
         titan.userData.armR.rotation.set(0, 0, 0); titan.userData.armL.rotation.set(0, 0, 0);
-        [...shockwaves].forEach(s => scene.remove(s.ring)); shockwaves.length = 0;
-        [...telegraphs].forEach(t => { scene.remove(t.ring); scene.remove(t.fill); }); telegraphs.length = 0;
-        [...particles].forEach(p => scene.remove(p.m)); particles.length = 0;
-        dmgNums.forEach(d => d.el.remove()); dmgNums.length = 0;
         titan.userData.headMat.emissive.setHex(0x0a3346);
-        overlay.style.display = 'none';
+        titan.userData.coreMat.emissiveIntensity = 1.2;
+        rimLight.color.setHex(0x33ccff);
+        camera.position.set(0, 12, 50);
+        shockwaves.forEach(s => scene.remove(s.ring)); shockwaves.length = 0;
+        telegraphs.forEach(t => { scene.remove(t.ring); scene.remove(t.fill); }); telegraphs.length = 0;
+        particles.forEach(p => scene.remove(p.m)); particles.length = 0;
+        dmgNums.forEach(d => d.el.remove()); dmgNums.length = 0;
+        Music.setIntensity(0);
+        if (began) overlay.style.display = 'none';
         syncUI();
     }
     const toggleLock = () => { if (S) S.lock = !S.lock; };
 
-    const overlay = document.getElementById('overlay');
     function endGame(win) {
         S.over = true;
         overlay.style.display = 'flex';
         overlay.className = win ? 'win' : 'lose';
         overlay.querySelector('h1').textContent = win ? 'ECLIPSE BROKEN' : 'YOU DIED';
-        document.getElementById('ov-sub').textContent = win
-            ? 'Kaelthar falls. The sky clears.'
-            : 'The Titan stands unbroken.';
+        el('ov-sub').textContent = win ? 'Kaelthar falls. The sky clears over the ash plain.'
+                                       : 'The Titan stands unbroken.';
+        el('ov-key').textContent = 'Press R or ☰ Start to fight again';
     }
 
-    // ---------------------------------------------------------------- UI
+    // ================================================================ UI
     const el = id => document.getElementById(id);
+    const pips = [...document.querySelectorAll('.pip')];
     function syncUI() {
         const p = S.p, t = S.t;
         el('hp-bar').style.width = clamp(p.hp / p.maxHp * 100, 0, 100) + '%';
         el('hp-text').textContent = Math.ceil(Math.max(0, p.hp)) + ' / ' + p.maxHp;
         el('stam-bar').style.width = clamp(p.stam / p.maxStam * 100, 0, 100) + '%';
-        el('boss-bar').style.width = clamp(t.hp / t.maxHp * 100, 0, 100) + '%';
-        el('boss-bar-lag').style.width = el('boss-bar').style.width;
-        el('boss-phase').textContent = `PHASE ${S.phase + 1} / 3`;
+
+        const bossPct = clamp(t.hp / t.maxHp * 100, 0, 100);
+        el('boss-bar').style.width = bossPct + '%';
+        el('boss-bar-lag').style.width = bossPct + '%';
+        el('boss-hp-text').textContent = Math.max(0, Math.ceil(t.hp)) + ' / ' + t.maxHp;
+        pips.forEach((el2, i) => {
+            el2.className = 'pip' + (i < S.phase ? ' done' : i === S.phase ? ' active' : '');
+        });
+
         const c = el('combo');
         if (p.combo > 1) { c.textContent = p.combo + ' HIT' + (p.combo >= 5 ? '!' : ''); c.style.opacity = 1; }
         else c.style.opacity = 0;
     }
     let flashT = 0;
-    function screenFlash(a) { flashT = a; }
+    const screenFlash = a => flashT = Math.max(flashT, a);
+    setTimeout(() => el('hint').style.opacity = 0.25, 16000);
 
-    setTimeout(() => el('hint').style.opacity = 0, 11000);
-
-    // ---------------------------------------------------------------- HELPERS
-    const V = (x, y, z) => new T.Vector3(x, y, z);
-    function horizDist(a, b) { const dx = a.x - b.x, dz = a.z - b.z; return Math.hypot(dx, dz); }
+    // ================================================================ HELPERS
+    function horizDist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
     function angleTo(from, to) { return Math.atan2(to.x - from.x, to.z - from.z); }
     function angDiff(a, b) { let d = a - b; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; }
+    // player is in sword range of the Titan's body, not its origin point
+    const PLAYER_REACH = 7.5;
+    const inSwordRange = () => horizDist(player.position, titan.position) < TITAN_R + PLAYER_REACH;
 
     function hurtPlayer(amount, sourcePos) {
         const p = S.p;
-        if (p.invT > 0 || (p.state === 'dodge' && p.dodgeT < 0.34) || S.over) return;
+        if (S.over || p.invT > 0 || (p.state === 'dodge' && p.dodgeT < 0.34)) return;
         p.hp -= amount;
-        p.invT = 0.7; p.hurtT = 0.35; p.state = 'hurt';
-        p.combo = 0;
+        p.invT = 0.7; p.hurtT = 0.35; p.state = 'hurt'; p.combo = 0;
         if (sourcePos) {
-            const dir = V(player.position.x - sourcePos.x, 0, player.position.z - sourcePos.z).normalize();
-            p.knock.copy(dir.multiplyScalar(amount > 22 ? 26 : 14));
+            const dir = V(player.position.x - sourcePos.x, 0, player.position.z - sourcePos.z);
+            if (dir.lengthSq() < 0.001) dir.set(0, 0, 1);
+            p.knock.copy(dir.normalize().multiplyScalar(amount > 22 ? 26 : 15));
         }
         S.cam.shake = Math.min(1, amount / 22);
         screenFlash(0.55);
+        Music.sfx('hurt');
         burst(V(player.position.x, 2.4, player.position.z), 0xff4444, 14, 10);
         dmgNumber(V(player.position.x, 4, player.position.z), Math.round(amount), '#ff6a4a');
         if (p.hp <= 0) { p.hp = 0; p.state = 'dead'; endGame(false); }
@@ -440,270 +739,286 @@
 
     function hitTitan(contact) {
         const p = S.p, t = S.t;
-        if (t.invT > 0) return;
+        if (t.invT > 0) { dmgNumber(contact, 'GUARDED', '#8fa3b8'); return; }
         const staggered = t.state === 'stagger';
         let dmg = p.dmg * (1 + p.combo * 0.06) * (staggered ? 2.2 : 1);
-        if (p.combo > 0 && p.combo % 3 === 0) dmg *= 1.6;
+        if (p.combo > 0 && p.combo % 3 === 0) dmg *= 1.45;   // every 3rd hit is a finisher
         dmg = Math.round(dmg);
         t.hp -= dmg;
         t.flinch = 0.12;
-        p.combo++; p.comboT = 1.4;
-        t.poise += staggered ? 0 : 1;
+        p.combo++; p.comboT = 1.5;
+        if (!staggered) t.poise += 1;
         S.cam.shake = Math.max(S.cam.shake, staggered ? 0.5 : 0.22);
         S.hitStop = 0.045;
+        Music.sfx('hit');
         burst(contact, staggered ? 0xffe27a : 0xbfe9ff, staggered ? 22 : 12, 14);
         dmgNumber(contact.clone().setY(contact.y + 1), dmg, staggered ? '#ffd24a' : '#dff2ff');
         if (!staggered && t.poise >= t.poiseMax) {
-            t.state = 'stagger'; t.stateT = 0; t.poise = 0; t.move = null;
-            t.headMat = titan.userData.headMat;
+            t.state = 'stagger'; t.stateT = 0; t.poise = 0; t.move = null; t.struck = false;
             titan.userData.headMat.emissive.setHex(0x552200);
             dmgNumber(V(titan.position.x, 30, titan.position.z), 'STAGGERED', '#ffd24a');
         }
-        if (t.hp <= 0) advancePhase();
+        if (t.hp <= 0) { t.hp = 0; advancePhase(); }
+        syncUI();
     }
 
     function advancePhase() {
         const t = S.t;
-        if (S.phase >= PHASES.length - 1) { t.hp = 0; endGame(true); return; }
+        if (S.phase >= PHASES.length - 1) { endGame(true); return; }
         S.phase++;
         const cfg = PHASES[S.phase];
         t.maxHp = cfg.hp; t.hp = cfg.hp;
         t.poiseMax = 6 + S.phase * 2;
-        t.state = 'roar'; t.stateT = 0; t.move = null; t.invT = 1.6;
+        t.state = 'roar'; t.stateT = 0; t.move = null; t.struck = false; t.invT = 1.6;
         titan.userData.headMat.emissive.setHex(0xff2a00);
         titan.userData.coreMat.emissiveIntensity = 1.5 + S.phase;
         rimLight.color.setHex(0xff3b00);
         S.cam.shake = 1;
+        Music.setIntensity(S.phase);
+        Music.sfx('quake');
         spawnShock(titan.position.x, titan.position.z, 46, 60, 0, 4);
         burst(V(titan.position.x, 20, titan.position.z), 0xff5a1e, 40, 22, 20);
     }
 
-    // ---------------------------------------------------------------- PLAYER UPDATE
+    // ================================================================ PLAYER
     function updatePlayer(dt) {
         const p = S.p, ud = player.userData;
         p.dodgeCd = Math.max(0, p.dodgeCd - dt);
         p.invT = Math.max(0, p.invT - dt);
-        p.stam = Math.min(p.maxStam, p.stam + 22 * dt);
+        p.stam = Math.min(p.maxStam, p.stam + 24 * dt);
         if (p.comboT > 0) { p.comboT -= dt; if (p.comboT <= 0) p.combo = 0; }
+        p.bufferedAtk = Math.max(0, p.bufferedAtk - dt);
 
-        // desired move vector from input
-        let ix = (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0) - (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) + pad.mx;
-        let iz = (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0) - (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) + pad.my;
-        ix = clamp(ix, -1, 1); iz = clamp(iz, -1, 1);
-        const moving = Math.hypot(ix, iz) > 0.15;
+        // ---- raw input
+        let ix = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0) + pad.mx;
+        let iz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0) + pad.my;
+        const mag = Math.hypot(ix, iz);
+        if (mag > 1) { ix /= mag; iz /= mag; }
+        const inputMag = Math.min(1, mag);
+        const moving = inputMag > 0.12;
 
         const wantAttack = keys['Space'] || pad.attack;
         const wantDodge = keys['ShiftLeft'] || keys['ShiftRight'] || pad.dodge;
+        if (wantAttack) p.bufferedAtk = 0.22;              // input buffering: queue the next swing
 
-        // camera rotate (free cam only)
-        if (!S.lock) {
-            const cr = (keys['KeyE'] ? 1 : 0) - (keys['KeyQ'] ? 1 : 0) + pad.cx;
-            S.cam.angle -= cr * 2.4 * dt;
-        } else {
-            S.cam.angle = angleTo(titan.position, player.position);
+        // ---- camera orientation (mouse / arrows / right stick)
+        const lookX = (keys['ArrowRight'] ? 1 : 0) - (keys['ArrowLeft'] ? 1 : 0) + (keys['KeyE'] ? 1 : 0) - (keys['KeyQ'] ? 1 : 0);
+        const lookY = (keys['ArrowDown'] ? 1 : 0) - (keys['ArrowUp'] ? 1 : 0);
+        const yawIn = lookX * 2.2 * dt + pad.cx * 2.6 * dt + mouse.dx * 0.0026;
+        S.cam.yaw -= yawIn;
+        S.cam.pitch += lookY * 1.5 * dt + pad.cy * 1.8 * dt + mouse.dy * 0.0022;
+        S.cam.pitch = clamp(S.cam.pitch, -0.62, 1.15);     // negative = crane down and look UP
+        mouse.dx = mouse.dy = 0;
+        // manual look suspends lock-on recentering, so the camera never fights the player
+        if (Math.abs(yawIn) > 0.0008) S.cam.manualT = 1.1;
+        else S.cam.manualT = Math.max(0, S.cam.manualT - dt);
+        if (S.lock && S.cam.manualT <= 0) {
+            S.cam.yaw += angDiff(angleTo(titan.position, player.position), S.cam.yaw) * smooth(3.5, dt);
         }
 
-        // movement basis
-        let moveDir = null;
-        if (moving) {
-            if (S.lock) {
-                const toBoss = angleTo(player.position, titan.position);
-                // iz forward/back toward boss, ix strafe
-                moveDir = toBoss + Math.atan2(ix, -iz);
-                if (Math.hypot(ix, iz) < 0.05) moveDir = null;
-            } else {
-                moveDir = Math.atan2(-ix, iz) + S.cam.angle;
-            }
-        }
+        // ---- movement basis from the camera (or the Titan when locked)
+        const baseYaw = S.lock ? angleTo(player.position, titan.position) + Math.PI : S.cam.yaw;
+        const fwd = V(-Math.sin(baseYaw), 0, -Math.cos(baseYaw));   // away from camera
+        const right = V(-fwd.z, 0, fwd.x);
+        const wish = V(0, 0, 0);
+        if (moving) wish.addScaledVector(right, ix).addScaledVector(fwd, -iz);
+        const wishLen = wish.length();
+        if (wishLen > 0.0001) wish.divideScalar(wishLen);
+        const moveDir = wishLen > 0.0001 ? Math.atan2(wish.x, wish.z) : null;
 
-        // state machine
-        if (p.state === 'dead') { /* frozen */ }
-        else if (p.state === 'hurt') {
-            p.hurtT -= dt; if (p.hurtT <= 0) p.state = 'idle';
+        // ---- state machine
+        if (p.state === 'dead') {
+            p.vel.multiplyScalar(1 - smooth(9, dt));
+        } else if (p.state === 'hurt') {
+            p.hurtT -= dt;
+            p.vel.multiplyScalar(1 - smooth(5, dt));
+            if (p.hurtT <= 0) p.state = 'idle';
         } else if (p.state === 'dodge') {
             p.dodgeT += dt;
-            const k = 1 - p.dodgeT / 0.45;
-            player.position.x += Math.sin(p.dodgeDir) * 34 * k * dt;
-            player.position.z += Math.cos(p.dodgeDir) * 34 * k * dt;
-            ud.rig.rotation.x = -p.dodgeT / 0.45 * Math.PI * 2;
+            const k = Math.max(0, 1 - p.dodgeT / 0.45);
+            p.vel.set(Math.sin(p.dodgeDir), 0, Math.cos(p.dodgeDir)).multiplyScalar(MOVE.dodgeSpeed * (0.35 + k));
+            ud.rig.rotation.x = -(p.dodgeT / 0.45) * Math.PI * 2;
             if (p.dodgeT >= 0.45) { p.state = 'idle'; ud.rig.rotation.x = 0; }
         } else if (p.state === 'attack') {
             p.atkT += dt;
-            const d = 0.5;
-            const sh = ud.armR.sh, fore = ud.armR.fore;
-            if (p.atkT < 0.14) {                      // windup
-                sh.rotation.x = lerp(0, -2.4, p.atkT / 0.14);
-                sh.rotation.z = lerp(0, -0.5, p.atkT / 0.14);
-            } else if (p.atkT < 0.30) {               // swing
-                const k = (p.atkT - 0.14) / 0.16;
-                sh.rotation.x = lerp(-2.4, 1.1, k);
-                sh.rotation.z = lerp(-0.5, 0.3, k);
-                if (!p.atkHit) {                       // hit check at swing
-                    const reach = 6.2, fdir = V(Math.sin(p.yaw), 0, Math.cos(p.yaw));
-                    const cp = V(player.position.x + fdir.x * reach, 3, player.position.z + fdir.z * reach);
+            const sh = ud.armR.sh;
+            const WIND = 0.13, SWING_END = 0.29, TOTAL = 0.48;
+            if (p.atkT < WIND) {
+                const k = p.atkT / WIND;
+                sh.rotation.x = lerp(0, -2.4, k); sh.rotation.z = lerp(0, -0.5, k);
+            } else if (p.atkT < SWING_END) {
+                const k = (p.atkT - WIND) / (SWING_END - WIND);
+                sh.rotation.x = lerp(-2.4, 1.1, k); sh.rotation.z = lerp(-0.5, 0.3, k);
+                if (!p.atkHit) {
                     const toT = angleTo(player.position, titan.position);
-                    if (horizDist(player.position, titan.position) < reach + 6 && Math.abs(angDiff(toT, p.yaw)) < 1.1) {
+                    if (inSwordRange() && Math.abs(angDiff(toT, p.yaw)) < 1.35) {
                         p.atkHit = true;
-                        hitTitan(cp);
+                        // contact point on the Titan's near face, at torso height
+                        const back = angleTo(titan.position, player.position);
+                        hitTitan(V(titan.position.x + Math.sin(back) * TITAN_R,
+                                   14 + Math.random() * 8,
+                                   titan.position.z + Math.cos(back) * TITAN_R));
                     }
                 }
-            } else if (p.atkT < d) {                  // recover
-                const k = (p.atkT - 0.30) / (d - 0.30);
-                sh.rotation.x = lerp(1.1, 0, k);
-                sh.rotation.z = lerp(0.3, 0, k);
+            } else if (p.atkT < TOTAL) {
+                const k = (p.atkT - SWING_END) / (TOTAL - SWING_END);
+                sh.rotation.x = lerp(1.1, 0, k); sh.rotation.z = lerp(0.3, 0, k);
             } else {
+                if (!p.atkHit) Music.sfx('whiff');
                 p.state = 'idle'; sh.rotation.set(0, 0, 0);
-                // allow buffered chain
-                if (wantAttack) startAttack();
+                if (p.bufferedAtk > 0) startAttack();
             }
-        } else { // idle / walk
+            // slow drift while swinging
+            p.vel.lerp(wish.clone().multiplyScalar(moving ? MOVE.attackSpeed : 0), smooth(8, dt));
+        } else { // idle / running
             if (wantDodge && p.dodgeCd <= 0 && p.stam >= 25) {
-                p.state = 'dodge'; p.dodgeT = 0; p.dodgeCd = 0.7; p.stam -= 25;
+                p.state = 'dodge'; p.dodgeT = 0; p.dodgeCd = 0.62; p.stam -= 25;
                 p.dodgeDir = moveDir != null ? moveDir : p.yaw + Math.PI;
                 p.yaw = p.dodgeDir;
-            } else if (wantAttack) {
+            } else if (p.bufferedAtk > 0) {
                 startAttack();
+            } else {
+                // ---- acceleration-based ground movement
+                const target = wish.clone().multiplyScalar(MOVE.maxSpeed * inputMag);
+                const rate = moving ? MOVE.accel : MOVE.decel;
+                const dv = target.clone().sub(p.vel);
+                const step = rate * dt;
+                if (dv.length() <= step) p.vel.copy(target);
+                else p.vel.add(dv.normalize().multiplyScalar(step));
             }
         }
 
         function startAttack() {
-            p.state = 'attack'; p.atkT = 0; p.atkHit = false;
+            p.state = 'attack'; p.atkT = 0; p.atkHit = false; p.bufferedAtk = 0;
             if (S.lock) p.yaw = angleTo(player.position, titan.position);
             else if (moveDir != null) p.yaw = moveDir;
-            ud.blade.material.emissive.setHex(0x333333);
-            setTimeout(() => ud.blade.material.emissive.setHex(0x141414), 160);
         }
 
-        // apply movement (idle/walk/attack can drift slightly)
-        const canMove = p.state === 'idle' || p.state === 'attack';
-        let spd = 0;
-        if (moving && canMove) {
-            spd = (p.state === 'attack' ? 3 : 12);
-            player.position.x += Math.sin(moveDir) * spd * dt;
-            player.position.z += Math.cos(moveDir) * spd * dt;
-            if (p.state === 'idle') p.yaw = moveDir;
-        }
-        if (S.lock && p.state !== 'dodge') p.yaw = lerp(p.yaw, angleTo(player.position, titan.position), 0.2);
+        // ---- integrate
+        p.knock.multiplyScalar(1 - smooth(6, dt));
+        player.position.x += (p.vel.x + p.knock.x) * dt;
+        player.position.z += (p.vel.z + p.knock.z) * dt;
+        p.speed = p.vel.length();
 
-        // knockback + friction
-        player.position.x += p.knock.x * dt;
-        player.position.z += p.knock.z * dt;
-        p.knock.multiplyScalar(1 - Math.min(1, 6 * dt));
+        // ---- facing: smooth turn toward heading
+        let faceTarget = p.yaw;
+        if (S.lock && p.state !== 'dodge') faceTarget = angleTo(player.position, titan.position);
+        else if (moveDir != null && (p.state === 'idle')) faceTarget = moveDir;
+        p.yaw += angDiff(faceTarget, p.yaw) * smooth(MOVE.turnRate, dt);
+        player.rotation.y += angDiff(p.yaw, player.rotation.y) * smooth(18, dt);
 
-        // arena clamp
+        // ---- collision: arena edge, and don't walk inside the Titan
         const d0 = Math.hypot(player.position.x, player.position.z);
-        if (d0 > ARENA_R) { player.position.x *= ARENA_R / d0; player.position.z *= ARENA_R / d0; }
+        if (d0 > ARENA_R) {
+            player.position.multiplyScalar(ARENA_R / d0);
+            p.vel.multiplyScalar(0.4);
+        }
+        const dT = horizDist(player.position, titan.position);
+        const MIN_T = TITAN_R - 1.5;
+        if (dT < MIN_T && dT > 0.001) {
+            const a = angleTo(titan.position, player.position);
+            player.position.x = titan.position.x + Math.sin(a) * MIN_T;
+            player.position.z = titan.position.z + Math.cos(a) * MIN_T;
+        }
 
-        // lava damage
+        // ---- lava
         for (const l of lavaPools) {
-            if (horizDist(player.position, l.mesh.position) < l.r + 0.5) {
-                if (p.invT <= 0) { p.hp -= 16 * dt; screenFlash(0.15); if (p.hp <= 0 && p.state !== 'dead') { p.hp = 0; p.state = 'dead'; endGame(false); } }
+            if (horizDist(player.position, l.mesh.position) < l.r + 0.5 && p.state !== 'dead') {
+                p.hp -= 16 * dt; screenFlash(0.12);
+                if (p.hp <= 0) { p.hp = 0; p.state = 'dead'; endGame(false); }
             }
         }
 
-        // facing + walk animation
-        player.rotation.y = lerp(player.rotation.y, p.yaw, 0.25);
-        const wp = p.walkPhase += (moving && canMove ? spd : 0) * dt * 2.2;
-        const sw = moving && canMove ? Math.sin(wp * 3) : 0;
+        // ---- animation driven by actual speed, so it never slides
+        const gait = clamp(p.speed / MOVE.maxSpeed, 0, 1);
+        p.walkPhase += p.speed * dt * 0.75;
+        const sw = Math.sin(p.walkPhase * 3.4) * gait;
         if (p.state !== 'dodge' && p.state !== 'attack') {
-            ud.armL.sh.rotation.x = lerp(ud.armL.sh.rotation.x, sw * 0.5, 0.3);
-            ud.armR.sh.rotation.x = lerp(ud.armR.sh.rotation.x, -sw * 0.5, 0.3);
-            ud.armR.sh.rotation.z = lerp(ud.armR.sh.rotation.z, 0, 0.3);
+            ud.armL.sh.rotation.x += (sw * 0.55 - ud.armL.sh.rotation.x) * smooth(14, dt);
+            ud.armR.sh.rotation.x += (-sw * 0.55 - ud.armR.sh.rotation.x) * smooth(14, dt);
+            ud.armR.sh.rotation.z += (0 - ud.armR.sh.rotation.z) * smooth(14, dt);
         }
-        ud.legL.rotation.x = lerp(ud.legL.rotation.x, -sw * 0.6, 0.3);
-        ud.legR.rotation.x = lerp(ud.legR.rotation.x, sw * 0.6, 0.3);
-        ud.chest.position.y = 2.65 + Math.abs(sw) * 0.12 + (p.state === 'idle' ? Math.sin(clock.elapsedTime * 2) * 0.04 : 0);
-        ud.chest.rotation.z = -sw * 0.05;
-        ud.cape.rotation.x = 0.15 + sw * 0.15 + (moving ? 0.1 : 0);
-        if (p.state === 'hurt') ud.chest.rotation.x = -0.3; else ud.chest.rotation.x = lerp(ud.chest.rotation.x, moving ? 0.12 : 0, 0.2);
-        if (p.state === 'dead') { ud.rig.rotation.z = lerp(ud.rig.rotation.z, Math.PI / 2, 0.08); ud.chest.position.y = 2.65; }
-        else ud.rig.rotation.z = lerp(ud.rig.rotation.z, 0, 0.2);
-
-        // blade trail glow while swinging
+        ud.legL.rotation.x += (-sw * 0.7 - ud.legL.rotation.x) * smooth(16, dt);
+        ud.legR.rotation.x += (sw * 0.7 - ud.legR.rotation.x) * smooth(16, dt);
+        ud.chest.position.y = 2.65 + Math.abs(sw) * 0.14 + (gait < 0.05 ? Math.sin(clock.elapsedTime * 2) * 0.05 : 0);
+        ud.chest.rotation.z = -sw * 0.06;
+        ud.cape.rotation.x = 0.15 + sw * 0.15 + gait * 0.35;
+        const targetLean = p.state === 'hurt' ? -0.3 : gait * 0.18;
+        ud.chest.rotation.x += (targetLean - ud.chest.rotation.x) * smooth(12, dt);
+        if (p.state === 'dead') ud.rig.rotation.z += (Math.PI / 2 - ud.rig.rotation.z) * smooth(3, dt);
+        else ud.rig.rotation.z += (0 - ud.rig.rotation.z) * smooth(10, dt);
         ud.blade.material.emissiveIntensity = p.state === 'attack' ? 1 : 0;
+        ud.blade.material.emissive.setHex(p.state === 'attack' ? 0x556677 : 0x141414);
     }
 
-    // ---------------------------------------------------------------- TITAN AI
+    // ================================================================ TITAN AI
     function updateTitan(dt) {
-        if (S.over && S.t.hp <= 0) return;
         const t = S.t, ud = titan.userData, cfg = PHASES[S.phase];
+        if (S.over) return;
         t.invT = Math.max(0, t.invT - dt);
         t.flinch = Math.max(0, t.flinch - dt);
         t.stateT += dt;
         const dist = horizDist(titan.position, player.position);
         const faceAng = angleTo(titan.position, player.position);
 
-        // core / eye pulse
         ud.coreMat.emissiveIntensity = 1.2 + S.phase + Math.sin(clock.elapsedTime * 4) * 0.4;
         ud.eye.material.emissiveIntensity = 0.8 + Math.sin(clock.elapsedTime * 6) * 0.3;
 
-        // idle sword sway back to rest
         const restArm = () => {
-            ud.armR.rotation.x = lerp(ud.armR.rotation.x, 0.1, 0.08);
-            ud.armR.rotation.z = lerp(ud.armR.rotation.z, 0, 0.08);
-            ud.armL.rotation.x = lerp(ud.armL.rotation.x, 0.1, 0.08);
+            ud.armR.rotation.x += (0.1 - ud.armR.rotation.x) * smooth(3, dt);
+            ud.armR.rotation.z += (0 - ud.armR.rotation.z) * smooth(3, dt);
+            ud.armL.rotation.x += (0.1 - ud.armL.rotation.x) * smooth(3, dt);
         };
+        const calmHead = () => ud.headMat.emissive.setHex(S.phase === 0 ? 0x0a3346 : S.phase === 1 ? 0x2a2a46 : 0x4a1a2a);
 
         if (t.state === 'roar') {
-            titan.rotation.y = lerp(titan.rotation.y, faceAng, 0.05);
+            titan.rotation.y += angDiff(faceAng, titan.rotation.y) * smooth(2, dt);
             ud.armL.rotation.x = -1.6 + Math.sin(t.stateT * 20) * 0.2;
             ud.armR.rotation.x = -1.6 + Math.sin(t.stateT * 20 + 1) * 0.2;
             titan.position.y = Math.sin(t.stateT * 15) * 0.6;
-            if (t.stateT > 1.6) {
-                t.state = 'idle'; t.stateT = 0; t.atkCd = 1.2;
-                titan.userData.headMat.emissive.setHex(0x0a3346 + S.phase * 0x110000);
-                titan.position.y = 0;
-            }
+            if (t.stateT > 1.6) { t.state = 'idle'; t.stateT = 0; t.atkCd = 1.2; titan.position.y = 0; calmHead(); }
             return;
         }
 
         if (t.state === 'stagger') {
-            titan.userData.torso.rotation.x = lerp(titan.userData.torso.rotation.x, 0.5, 0.15);
-            titan.userData.head.position.y = lerp(titan.userData.head.position.y, 30, 0.15);
-            ud.armR.rotation.x = lerp(ud.armR.rotation.x, 1.2, 0.15);
-            ud.armL.rotation.x = lerp(ud.armL.rotation.x, 1.2, 0.15);
-            titan.position.y = lerp(titan.position.y, -3, 0.1);
-            if (t.stateT > 2.8) {
-                t.state = 'idle'; t.stateT = 0; t.atkCd = 1.0;
-                titan.userData.headMat.emissive.setHex(0x0a3346 + S.phase * 0x110000);
-            }
+            ud.torso.rotation.x += (0.5 - ud.torso.rotation.x) * smooth(8, dt);
+            ud.head.position.y += (30 - ud.head.position.y) * smooth(8, dt);
+            ud.armR.rotation.x += (1.2 - ud.armR.rotation.x) * smooth(8, dt);
+            ud.armL.rotation.x += (1.2 - ud.armL.rotation.x) * smooth(8, dt);
+            titan.position.y += (-3 - titan.position.y) * smooth(5, dt);
+            if (t.stateT > 2.8) { t.state = 'idle'; t.stateT = 0; t.atkCd = 1.0; calmHead(); }
             return;
-        } else {
-            titan.userData.torso.rotation.x = lerp(titan.userData.torso.rotation.x, 0, 0.1);
-            titan.userData.head.position.y = lerp(titan.userData.head.position.y, 34.5, 0.1);
-            titan.position.y = lerp(titan.position.y, t.flinch > 0 ? -0.4 : 0, 0.2);
         }
+        ud.torso.rotation.x += (0 - ud.torso.rotation.x) * smooth(5, dt);
+        ud.head.position.y += (34.5 - ud.head.position.y) * smooth(5, dt);
 
         if (t.state === 'idle') {
-            // face + approach
-            titan.rotation.y = lerp(titan.rotation.y, faceAng, 0.04 + S.phase * 0.01);
+            titan.rotation.y += angDiff(faceAng, titan.rotation.y) * smooth(2.2 + S.phase * 0.5, dt);
             restArm();
+            // close to just inside the player's sword range so the fight actually happens
+            const STOP = TITAN_R + 4;
             let walking = false;
-            if (dist > 20) {
-                titan.position.x += Math.sin(faceAng) * cfg.speed * dt;
-                titan.position.z += Math.cos(faceAng) * cfg.speed * dt;
+            if (dist > STOP) {
+                const step = Math.min(cfg.speed * dt, dist - STOP);
+                titan.position.x += Math.sin(faceAng) * step;
+                titan.position.z += Math.cos(faceAng) * step;
                 walking = true;
             }
-            // leg walk cycle
             t.walkPhase += (walking ? cfg.speed : 0) * dt * 1.4;
             const s = walking ? Math.sin(t.walkPhase * 3) : 0;
-            ud.legL.rotation.x = lerp(ud.legL.rotation.x, -s * 0.5, 0.2);
-            ud.legR.rotation.x = lerp(ud.legR.rotation.x, s * 0.5, 0.2);
+            ud.legL.rotation.x += (-s * 0.5 - ud.legL.rotation.x) * smooth(10, dt);
+            ud.legR.rotation.x += (s * 0.5 - ud.legR.rotation.x) * smooth(10, dt);
             titan.position.y = Math.abs(s) * 0.5 + Math.sin(clock.elapsedTime * 1.5) * 0.3;
 
             t.atkCd -= dt;
             if (t.atkCd <= 0) {
-                // choose move
-                let pool = cfg.moves.slice();
-                if (dist > 30) pool = pool.filter(m => m === 'erupt' || m === 'slam');
-                if (dist < 16) pool = pool.filter(m => m !== 'erupt');
+                let pool = cfg.moves.filter(m => (dist > 26 ? (m === 'erupt' || m === 'slam') : dist < 14 ? m !== 'erupt' : true));
                 if (!pool.length) pool = ['slam'];
-                t.move = pool[Math.floor(Math.random() * pool.length)];
-                t.state = 'tele'; t.stateT = 0;
-                titan.userData.headMat.emissive.setHex(0xff6a00);
+                t.move = pool[(Math.random() * pool.length) | 0];
+                t.state = 'tele'; t.stateT = 0; t.struck = false;
+                ud.headMat.emissive.setHex(0xff6a00);
                 if (t.move === 'erupt') {
-                    // mark where player is now (+ lead)
-                    const lead = V(player.position.x + S.p.vel.x * 0.3, 0, player.position.z + S.p.vel.z * 0.3);
+                    const lead = V(player.position.x + S.p.vel.x * 0.35, 0, player.position.z + S.p.vel.z * 0.35);
                     spawnTelegraph(lead.x, lead.z, 7 + S.phase, 1.0, 20 + S.phase * 4);
                 }
             }
@@ -711,84 +1026,79 @@
         }
 
         if (t.state === 'tele') {
-            // lock facing, wind up
             const telDur = t.move === 'sweep' ? 0.75 : t.move === 'stomp' ? 0.5 : 0.85;
             if (t.move === 'slam' || t.move === 'stomp') {
-                ud.armR.rotation.x = lerp(ud.armR.rotation.x, -2.3, 0.2);
-                ud.armR.rotation.z = lerp(ud.armR.rotation.z, -0.3, 0.2);
+                ud.armR.rotation.x += (-2.3 - ud.armR.rotation.x) * smooth(12, dt);
+                ud.armR.rotation.z += (-0.3 - ud.armR.rotation.z) * smooth(12, dt);
             } else if (t.move === 'sweep') {
-                ud.armR.rotation.x = lerp(ud.armR.rotation.x, -0.2, 0.2);
-                ud.armR.rotation.z = lerp(ud.armR.rotation.z, -1.4, 0.2);
-            } else { // erupt: raise both arms
-                ud.armL.rotation.x = lerp(ud.armL.rotation.x, -2.0, 0.2);
-                ud.armR.rotation.x = lerp(ud.armR.rotation.x, -2.0, 0.2);
+                ud.armR.rotation.x += (-0.2 - ud.armR.rotation.x) * smooth(12, dt);
+                ud.armR.rotation.z += (-1.4 - ud.armR.rotation.z) * smooth(12, dt);
+                titan.rotation.y += angDiff(faceAng - 0.9, titan.rotation.y) * smooth(6, dt);
+            } else {
+                ud.armL.rotation.x += (-2.0 - ud.armL.rotation.x) * smooth(12, dt);
+                ud.armR.rotation.x += (-2.0 - ud.armR.rotation.x) * smooth(12, dt);
             }
             if (t.stateT >= telDur) { t.state = 'strike'; t.stateT = 0; }
             return;
         }
 
         if (t.state === 'strike') {
-            titan.userData.headMat.emissive.setHex(0x0a3346 + S.phase * 0x110000);
+            calmHead();
             if (t.move === 'slam') {
-                ud.armR.rotation.x = lerp(ud.armR.rotation.x, 1.2, 0.4);
+                ud.armR.rotation.x += (1.2 - ud.armR.rotation.x) * smooth(26, dt);
                 if (t.stateT > 0.12 && !t.struck) {
                     t.struck = true;
-                    const fx = titan.position.x + Math.sin(titan.rotation.y) * 14;
-                    const fz = titan.position.z + Math.cos(titan.rotation.y) * 14;
+                    const fx = titan.position.x + Math.sin(titan.rotation.y) * 13;
+                    const fz = titan.position.z + Math.cos(titan.rotation.y) * 13;
                     spawnShock(fx, fz, 24, 42, 22 + S.phase * 3, 3.5);
                     burst(V(fx, 1, fz), 0xffb14a, 26, 20, 22);
-                    S.cam.shake = 0.6;
+                    S.cam.shake = 0.6; Music.sfx('quake');
                 }
             } else if (t.move === 'stomp') {
-                ud.legR.rotation.x = lerp(ud.legR.rotation.x, 0.8, 0.5);
+                ud.legR.rotation.x += (0.8 - ud.legR.rotation.x) * smooth(30, dt);
                 if (t.stateT > 0.1 && !t.struck) {
                     t.struck = true;
-                    spawnShock(titan.position.x, titan.position.z, 20, 55, 18 + S.phase * 3, 4);
-                    S.cam.shake = 0.55;
+                    spawnShock(titan.position.x, titan.position.z, 22, 55, 18 + S.phase * 3, 4);
+                    S.cam.shake = 0.55; Music.sfx('quake');
                 }
             } else if (t.move === 'sweep') {
-                // fast yaw sweep
-                titan.rotation.y += 5 * dt;
-                ud.armR.rotation.z = lerp(ud.armR.rotation.z, 0.6, 0.3);
+                titan.rotation.y += 5.2 * dt;
+                ud.armR.rotation.z += (0.6 - ud.armR.rotation.z) * smooth(14, dt);
                 if (!t.struck && t.stateT > 0.08) {
                     const toP = angleTo(titan.position, player.position);
-                    if (dist < 22 && Math.abs(angDiff(toP, titan.rotation.y)) < 1.2) {
+                    if (dist < 24 && Math.abs(angDiff(toP, titan.rotation.y)) < 1.2) {
                         t.struck = true;
                         hurtPlayer(20 + S.phase * 3, titan.position);
                     }
                 }
-            } else if (t.move === 'erupt') {
-                ud.armL.rotation.x = lerp(ud.armL.rotation.x, 0.5, 0.3);
-                ud.armR.rotation.x = lerp(ud.armR.rotation.x, 0.5, 0.3);
+            } else {
+                ud.armL.rotation.x += (0.5 - ud.armL.rotation.x) * smooth(14, dt);
+                ud.armR.rotation.x += (0.5 - ud.armR.rotation.x) * smooth(14, dt);
             }
-            const dur = t.move === 'sweep' ? 0.45 : 0.55;
-            if (t.stateT >= dur) {
-                t.state = 'recover'; t.stateT = 0; t.struck = false;
-            }
+            if (t.stateT >= (t.move === 'sweep' ? 0.45 : 0.55)) { t.state = 'recover'; t.stateT = 0; }
             return;
         }
 
         if (t.state === 'recover') {
             restArm();
-            ud.armR.rotation.z = lerp(ud.armR.rotation.z, 0, 0.1);
-            ud.legR.rotation.x = lerp(ud.legR.rotation.x, 0, 0.15);
+            ud.armR.rotation.z += (0 - ud.armR.rotation.z) * smooth(6, dt);
+            ud.legR.rotation.x += (0 - ud.legR.rotation.x) * smooth(9, dt);
             if (t.stateT >= 0.6) {
-                t.state = 'idle'; t.stateT = 0;
+                t.state = 'idle'; t.stateT = 0; t.struck = false;
                 t.atkCd = cfg.atkCd * (0.8 + Math.random() * 0.5);
             }
         }
     }
 
-    // ---------------------------------------------------------------- FX UPDATE
+    // ================================================================ FX UPDATE
     function updateShockwaves(dt) {
         for (let i = shockwaves.length - 1; i >= 0; i--) {
             const s = shockwaves[i];
             s.r += s.speed * dt;
             s.ring.scale.setScalar(s.r);
             s.ring.material.opacity = clamp(1 - s.r / s.maxR, 0, 1) * 0.9;
-            if (!s.hit && s.dmg > 0) {
-                const d = horizDist(player.position, V(s.x, 0, s.z));
-                if (Math.abs(d - s.r) < s.band) { s.hit = true; hurtPlayer(s.dmg, V(s.x, 0, s.z)); }
+            if (!s.hit && s.dmg > 0 && Math.abs(horizDist(player.position, V(s.x, 0, s.z)) - s.r) < s.band) {
+                s.hit = true; hurtPlayer(s.dmg, V(s.x, 0, s.z));
             }
             if (s.r >= s.maxR) { scene.remove(s.ring); s.ring.material.dispose(); shockwaves.splice(i, 1); }
         }
@@ -806,6 +1116,7 @@
                 burst(V(tg.x, 0.5, tg.z), 0xff5a1e, 34, 26, 26);
                 spawnShock(tg.x, tg.z, tg.r + 6, 40, 0, 3);
                 S.cam.shake = Math.max(S.cam.shake, 0.35);
+                Music.sfx('quake');
                 scene.remove(tg.ring); scene.remove(tg.fill);
                 tg.ring.material.dispose(); tg.fill.material.dispose();
                 telegraphs.splice(i, 1);
@@ -813,29 +1124,41 @@
         }
     }
 
-    // ---------------------------------------------------------------- CAMERA
+    // ================================================================ CAMERA
     function updateCamera(dt) {
-        const a = S.cam.angle;
-        const off = S.lock ? 22 : 19, hgt = S.lock ? 11 : 9.5;
+        const c = S.cam;
+        const cp = Math.cos(c.pitch), sp = Math.sin(c.pitch);
         const tgt = V(
-            player.position.x + Math.sin(a) * off,
-            hgt,
-            player.position.z + Math.cos(a) * off
+            player.position.x + Math.sin(c.yaw) * cp * c.dist,
+            4.2 + sp * c.dist,
+            player.position.z + Math.cos(c.yaw) * cp * c.dist
         );
-        camera.position.lerp(tgt, 1 - Math.pow(0.0015, dt));
-        // look target: always keep the Titan roughly in frame
-        const look = player.position.clone().add(V(0, 3.2, 0));
-        look.lerp(titan.position.clone().setY(18), S.lock ? 0.34 : 0.16);
+        tgt.y = Math.max(tgt.y, 1.4);                       // never dip under the ground
+        camera.position.lerp(tgt, smooth(9, dt));
+
+        // look target rises as the camera cranes down, so you can crane UP the Titan
+        const look = player.position.clone().add(V(0, 3.4 - c.pitch * 11, 0));
+        if (S.lock) look.lerp(titan.position.clone().setY(16), 0.34);
         camera.lookAt(look);
-        // shake
-        if (S.cam.shake > 0) {
-            S.cam.shake = Math.max(0, S.cam.shake - dt * 2.4);
-            const k = S.cam.shake * S.cam.shake * 1.4;
+
+        if (c.shake > 0) {
+            c.shake = Math.max(0, c.shake - dt * 2.4);
+            const k = c.shake * c.shake * 1.4;
             camera.position.x += (Math.random() - 0.5) * k;
             camera.position.y += (Math.random() - 0.5) * k;
             camera.position.z += (Math.random() - 0.5) * k;
         }
         rimLight.position.set(player.position.x, 30, player.position.z + 6);
+
+        // reticle: white when locked, gold the moment you can actually connect
+        const ready = inSwordRange();
+        reticle.visible = S.lock || ready;
+        reticle.position.set(titan.position.x, titan.position.y + 40, titan.position.z);
+        reticle.quaternion.copy(camera.quaternion);
+        reticle.rotation.z += clock.elapsedTime * 0.6;
+        reticle.material.color.setHex(ready ? 0xffd24a : 0xffffff);
+        reticle.material.opacity = ready ? 0.95 : 0.45;
+        reticle.scale.setScalar(ready ? 1.25 + Math.sin(clock.elapsedTime * 8) * 0.08 : 1);
     }
 
     function updateEmbers(dt) {
@@ -848,39 +1171,37 @@
         pos.needsUpdate = true;
     }
 
-    // ---------------------------------------------------------------- LOOP
+    // ================================================================ LOOP
     const clock = new T.Clock();
     resetGame();
 
     function frame() {
         requestAnimationFrame(frame);
-        let dt = Math.min(clock.getDelta(), 0.05);
+        const dt = Math.min(clock.getDelta(), 0.05);
         pollGamepad();
 
-        // track player velocity for AI leading
-        const prev = player.position.clone();
-
-        if (!S.over && S.hitStop > 0) { S.hitStop -= dt; }
-        else if (!S.over || S.p.state === 'dead') {
-            updatePlayer(dt);
-            updateTitan(dt);
-            updateShockwaves(dt);
-            updateTelegraphs(dt);
+        if (began && !S.over) {
+            if (S.hitStop > 0) S.hitStop -= dt;
+            else {
+                updatePlayer(dt);
+                updateTitan(dt);
+                updateShockwaves(dt);
+                updateTelegraphs(dt);
+            }
+        } else if (began && S.over) {
+            updatePlayer(dt);                                // let the death topple play out
         }
-        S.p.vel.copy(player.position).sub(prev).divideScalar(Math.max(dt, 0.001));
 
-        // flinch pulse on titan
-        const fl = 1 + S.t.flinch * 2.5;
-        titan.userData.core.scale.setScalar(fl);
+        titan.userData.core.scale.setScalar(1 + S.t.flinch * 2.5);
+        corona.material.opacity = 0.4 + Math.sin(clock.elapsedTime * 0.7) * 0.12;
 
         updateParticles(dt);
         updateDmgNumbers(dt);
         updateCamera(dt);
         updateEmbers(dt);
 
-        // screen flash decay
-        if (flashT > 0) { flashT = Math.max(0, flashT - dt * 2); }
-        document.getElementById('flash').style.opacity = flashT;
+        if (flashT > 0) flashT = Math.max(0, flashT - dt * 2);
+        el('flash').style.opacity = flashT;
 
         syncUI();
         renderer.render(scene, camera);
