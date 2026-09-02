@@ -5,300 +5,893 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Titan's Eclipse</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        * { box-sizing: border-box; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #fff; user-select: none; }
         canvas { display: block; width: 100vw; height: 100vh; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); z-index: 10; }
-        #level-display { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
-        #health-bar-container { width: 300px; height: 20px; background: rgba(50,50,50,0.8); border: 2px solid #555; }
-        #health-bar { width: 100%; height: 100%; background: #8b0000; transition: width 0.2s; }
-        #powerup-notice { display: none; color: #00ffcc; font-size: 18px; margin-top: 10px; font-weight: bold; }
+
+        #hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; text-shadow: 0 2px 6px rgba(0,0,0,.9); }
+
+        /* Boss bar */
+        #boss-wrap { position: absolute; top: 26px; left: 50%; transform: translateX(-50%); width: min(680px, 82vw); text-align: center; }
+        #boss-name { font-size: 15px; letter-spacing: 4px; text-transform: uppercase; opacity: .85; margin-bottom: 6px; }
+        #boss-bar-bg { height: 16px; background: rgba(20,10,14,.75); border: 1px solid rgba(255,255,255,.25); position: relative; overflow: hidden; }
+        #boss-bar-lag { position: absolute; inset: 0; width: 100%; background: #d8b45a; opacity: .35; transition: width .45s ease; }
+        #boss-bar { position: absolute; inset: 0; width: 100%; background: linear-gradient(#ff5a3c, #8b0000); transition: width .12s linear; }
+        #boss-phase { margin-top: 6px; font-size: 12px; letter-spacing: 3px; opacity: .7; }
+
+        /* Player vitals */
+        #vitals { position: absolute; left: 26px; bottom: 26px; width: 300px; }
+        #hp-bar-bg { height: 20px; background: rgba(10,20,16,.75); border: 1px solid rgba(255,255,255,.25); position: relative; overflow: hidden; }
+        #hp-bar { position: absolute; inset: 0; width: 100%; background: linear-gradient(#3ce07a, #157a3f); transition: width .15s ease; }
+        #hp-text { position: absolute; width: 100%; text-align: center; font-size: 12px; line-height: 20px; font-weight: 700; }
+        #stam-bar-bg { height: 7px; margin-top: 5px; background: rgba(10,14,24,.75); border: 1px solid rgba(255,255,255,.2); position: relative; overflow: hidden; }
+        #stam-bar { position: absolute; inset: 0; width: 100%; background: #58b6ff; transition: width .1s linear; }
+        #combo { margin-top: 10px; font-size: 20px; font-weight: 800; color: #ffd24a; height: 24px; opacity: 0; transition: opacity .2s; }
+
+        #hint { position: absolute; right: 26px; bottom: 26px; text-align: right; font-size: 13px; line-height: 1.7; opacity: .8; transition: opacity 1s; }
+        #hint b { color: #ffd24a; }
+
+        #flash { position: absolute; inset: 0; background: #ff2a2a; opacity: 0; pointer-events: none; z-index: 9; }
+
+        #overlay { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+                   background: rgba(0,0,0,.72); z-index: 20; text-align: center; }
+        #overlay h1 { font-size: 58px; margin: 0 0 10px; letter-spacing: 6px; }
+        #overlay p { font-size: 18px; opacity: .85; margin: 4px 0; }
+        #overlay .key { display: inline-block; margin-top: 22px; padding: 10px 22px; border: 1px solid rgba(255,255,255,.4); font-size: 16px; letter-spacing: 2px; }
+        .win h1 { color: #ffd24a; text-shadow: 0 0 30px rgba(255,210,74,.6); }
+        .lose h1 { color: #ff5a3c; text-shadow: 0 0 30px rgba(255,90,60,.6); }
+
+        #dmg-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 8; }
+        .dmg { position: absolute; font-weight: 800; font-size: 22px; transform: translate(-50%,-50%); text-shadow: 0 2px 4px #000; }
     </style>
-    <!-- Import Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-
-    <div id="ui">
-        <div id="level-display">Level: 1 | Boss Phase: 1</div>
-        <div id="health-bar-container"><div id="health-bar"></div></div>
-        <div id="powerup-notice">POWER UP: Damage Boosted!</div>
+    <div id="dmg-layer"></div>
+    <div id="hud">
+        <div id="boss-wrap">
+            <div id="boss-name">Kaelthar, The Eclipsed Titan</div>
+            <div id="boss-bar-bg"><div id="boss-bar-lag"></div><div id="boss-bar"></div></div>
+            <div id="boss-phase">PHASE 1 / 3</div>
+        </div>
+        <div id="vitals">
+            <div id="hp-bar-bg"><div id="hp-bar"></div><div id="hp-text">100 / 100</div></div>
+            <div id="stam-bar-bg"><div id="stam-bar"></div></div>
+            <div id="combo"></div>
+        </div>
+        <div id="hint">
+            <b>WASD</b> move &nbsp; <b>Space</b> attack &nbsp; <b>Shift</b> dodge roll<br>
+            <b>Q / E</b> rotate camera &nbsp; <b>L</b> lock-on &nbsp; <b>R</b> restart<br>
+            <span style="opacity:.6">Xbox pad: stick move · A/RT attack · B dodge · LB lock-on</span>
+        </div>
     </div>
+    <div id="flash"></div>
+    <div id="overlay"><h1></h1><p id="ov-sub"></p><div class="key">Press R or ☰ Start</div></div>
 
     <script>
-        // --- 1. SCENE SETUP (Next-Gen Atmosphere) ---
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a1a24);
-        scene.fog = new THREE.FogExp2(0x1a1a24, 0.015); // Gloomy volcanic fog
+    const T = THREE, clamp = T.MathUtils.clamp, lerp = T.MathUtils.lerp;
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        
-        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        renderer.toneMapping = THREE.ACESFilmicToneMapping; // Cinematic color grading
-        renderer.toneMappingExposure = 1.0;
-        document.body.appendChild(renderer.domElement);
+    // ---------------------------------------------------------------- SCENE
+    const scene = new T.Scene();
+    scene.background = new T.Color(0x1a1420);
+    scene.fog = new T.FogExp2(0x1a1420, 0.014);
 
-        // --- 2. LIGHTING ---
-        const ambientLight = new THREE.AmbientLight(0x404050, 0.6); // Cool ambient
-        scene.add(ambientLight);
+    const camera = new T.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 1000);
+    const renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = T.PCFSoftShadowMap;
+    renderer.toneMapping = T.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    document.body.appendChild(renderer.domElement);
 
-        const dirLight = new THREE.DirectionalLight(0xffaa55, 1.5); // Volcanic sunset light
-        dirLight.position.set(-50, 100, -50);
-        dirLight.castShadow = true;
-        dirLight.shadow.camera.top = 100;
-        dirLight.shadow.camera.bottom = -100;
-        dirLight.shadow.camera.left = -100;
-        dirLight.shadow.camera.right = 100;
-        dirLight.shadow.camera.near = 0.1;
-        dirLight.shadow.camera.far = 500;
-        dirLight.shadow.mapSize.width = 2048; // High-res shadows
-        dirLight.shadow.mapSize.height = 2048;
-        scene.add(dirLight);
+    scene.add(new T.AmbientLight(0x4a4560, 0.7));
+    const dirLight = new T.DirectionalLight(0xffb066, 1.6);
+    dirLight.position.set(-60, 110, -40);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    Object.assign(dirLight.shadow.camera, { top: 90, bottom: -90, left: -90, right: 90, near: 0.5, far: 400 });
+    scene.add(dirLight);
+    const rimLight = new T.PointLight(0x33ccff, 2.2, 90);
+    rimLight.position.set(0, 40, 12);
+    scene.add(rimLight);
 
-        const rimLight = new THREE.PointLight(0x00ccff, 2, 50); // Glowing crystal eye light
-        rimLight.position.set(0, 35, 10);
-        scene.add(rimLight);
+    // ---------------------------------------------------------------- ARENA
+    const ARENA_R = 60;
+    const groundGeo = new T.CircleGeometry(ARENA_R + 6, 96);
+    const gp = groundGeo.attributes.position;
+    for (let i = 0; i < gp.count; i++) gp.setZ(i, (Math.random() - 0.5) * 2.4);
+    groundGeo.computeVertexNormals();
+    const ground = new T.Mesh(groundGeo, new T.MeshStandardMaterial({ color: 0x241f26, roughness: 1, metalness: 0.05, flatShading: true }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
 
-        // --- 3. ENVIRONMENT (Ash/Rock Terrain) ---
-        const planeGeo = new THREE.PlaneGeometry(500, 500, 64, 64);
-        // Perturb vertices slightly for rocky terrain
-        const posAttribute = planeGeo.attributes.position;
-        for (let i = 0; i < posAttribute.count; i++) {
-            posAttribute.setZ(i, Math.random() * 2);
+    // arena ring wall
+    const wall = new T.Mesh(new T.TorusGeometry(ARENA_R + 5, 2.4, 8, 80),
+        new T.MeshStandardMaterial({ color: 0x0d0b10, roughness: 1 }));
+    wall.rotation.x = Math.PI / 2;
+    wall.position.y = 1.5;
+    scene.add(wall);
+
+    // background peaks
+    for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2 + 0.3;
+        const m = new T.Mesh(new T.ConeGeometry(30 + Math.random() * 40, 90 + Math.random() * 90, 4),
+            new T.MeshStandardMaterial({ color: 0x100e14, roughness: 1 }));
+        m.position.set(Math.cos(a) * 160, 30, Math.sin(a) * 160);
+        m.rotation.y = Math.random();
+        scene.add(m);
+    }
+
+    // lava hazard pools
+    const lavaMat = new T.MeshStandardMaterial({ color: 0xff5a1e, emissive: 0xff3b00, emissiveIntensity: 1.4, roughness: 0.6 });
+    const lavaPools = [];
+    for (let i = 0; i < 5; i++) {
+        const r = 4 + Math.random() * 3.5;
+        const p = new T.Mesh(new T.CircleGeometry(r, 24), lavaMat);
+        p.rotation.x = -Math.PI / 2;
+        const a = Math.random() * Math.PI * 2, d = 16 + Math.random() * 34;
+        p.position.set(Math.cos(a) * d, 0.15, Math.sin(a) * d);
+        scene.add(p);
+        const glow = new T.PointLight(0xff4400, 1.3, r * 4);
+        glow.position.set(p.position.x, 1.5, p.position.z);
+        scene.add(glow);
+        lavaPools.push({ mesh: p, r });
+    }
+
+    // drifting embers
+    const emberN = 260, emberPos = new Float32Array(emberN * 3), emberVel = [];
+    for (let i = 0; i < emberN; i++) {
+        emberPos[i * 3] = (Math.random() - 0.5) * 150;
+        emberPos[i * 3 + 1] = Math.random() * 45;
+        emberPos[i * 3 + 2] = (Math.random() - 0.5) * 150;
+        emberVel.push(2 + Math.random() * 5);
+    }
+    const emberGeo = new T.BufferGeometry();
+    emberGeo.setAttribute('position', new T.BufferAttribute(emberPos, 3));
+    const embers = new T.Points(emberGeo, new T.PointsMaterial({ color: 0xff8a3c, size: 0.5, transparent: true, opacity: 0.8, depthWrite: false }));
+    scene.add(embers);
+
+    // ---------------------------------------------------------------- KNIGHT
+    function mat(c, r, m, e) { return new T.MeshStandardMaterial({ color: c, roughness: r, metalness: m, emissive: e || 0x000000 }); }
+    const steel = mat(0x9aa4b2, 0.35, 0.9), darkSteel = mat(0x39414e, 0.5, 0.75),
+          cloth = mat(0x8b1a2b, 0.95, 0), gold = mat(0xd9a441, 0.3, 0.95, 0x241800);
+
+    function buildKnight() {
+        const g = new T.Group();
+        const rig = new T.Group(); g.add(rig);            // rolls during dodge
+
+        const chest = new T.Group(); chest.position.y = 2.65; rig.add(chest);
+        const torso = new T.Mesh(new T.BoxGeometry(1.5, 1.9, 0.95), steel); torso.castShadow = true; chest.add(torso);
+        const tabard = new T.Mesh(new T.BoxGeometry(0.9, 1.7, 0.12), cloth); tabard.position.set(0, -0.35, 0.55); chest.add(tabard);
+        const belt = new T.Mesh(new T.BoxGeometry(1.55, 0.28, 1), gold); belt.position.y = -1.0; chest.add(belt);
+        [-1, 1].forEach(s => { const pa = new T.Mesh(new T.BoxGeometry(0.7, 0.5, 1.05), steel); pa.position.set(0.95 * s, 0.75, 0); pa.castShadow = true; chest.add(pa); });
+
+        const head = new T.Group(); head.position.y = 1.3; chest.add(head);
+        const skull = new T.Mesh(new T.BoxGeometry(0.72, 0.78, 0.72), steel); skull.castShadow = true; head.add(skull);
+        const visor = new T.Mesh(new T.BoxGeometry(0.74, 0.16, 0.12), mat(0x05070c, 0.3, 0.2, 0x00131f)); visor.position.set(0, 0.02, 0.34); head.add(visor);
+        const crest = new T.Mesh(new T.ConeGeometry(0.16, 0.7, 4), gold); crest.position.y = 0.62; head.add(crest);
+        const plume = new T.Mesh(new T.BoxGeometry(0.12, 0.5, 0.9), cloth); plume.position.set(0, 0.55, -0.35); head.add(plume);
+
+        function arm(side) {
+            const sh = new T.Group(); sh.position.set(0.92 * side, 0.55, 0); chest.add(sh);
+            const up = new T.Mesh(new T.BoxGeometry(0.42, 1.05, 0.42), darkSteel); up.position.y = -0.5; up.castShadow = true; sh.add(up);
+            const fore = new T.Group(); fore.position.y = -1.0; sh.add(fore);
+            const fm = new T.Mesh(new T.BoxGeometry(0.4, 1.0, 0.4), steel); fm.position.y = -0.5; fm.castShadow = true; fore.add(fm);
+            return { sh, fore };
         }
-        planeGeo.computeVertexNormals();
+        const armL = arm(-1), armR = arm(1);
 
-        const planeMat = new THREE.MeshStandardMaterial({ 
-            color: 0x222222, 
-            roughness: 0.9, 
-            metalness: 0.1,
-            flatShading: true 
-        });
-        const ground = new THREE.Mesh(planeGeo, planeMat);
-        ground.rotation.x = -Math.PI / 2;
-        ground.receiveShadow = true;
-        scene.add(ground);
+        // sword in right hand
+        const sword = new T.Group();
+        const blade = new T.Mesh(new T.BoxGeometry(0.16, 2.7, 0.42), mat(0xdfe6ef, 0.15, 0.95, 0x141414));
+        blade.position.y = 1.55; blade.castShadow = true; sword.add(blade);
+        sword.add(new T.Mesh(new T.ConeGeometry(0.22, 0.5, 4), mat(0xeef2f7, 0.15, 0.95)).translateY(3.15));
+        const guard = new T.Mesh(new T.BoxGeometry(0.95, 0.18, 0.24), gold); guard.position.y = 0.15; sword.add(guard);
+        sword.add(new T.Mesh(new T.CylinderGeometry(0.09, 0.09, 0.55, 8), darkSteel).translateY(-0.15));
+        sword.add(new T.Mesh(new T.SphereGeometry(0.13, 8, 8), gold).translateY(-0.45));
+        sword.position.set(0, -1.05, 0.1);
+        armR.fore.add(sword);
 
-        // Background Volcano/Mountains
-        const mtnGeo = new THREE.ConeGeometry(80, 100, 4);
-        const mtnMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1.0 });
-        const mountain = new THREE.Mesh(mtnGeo, mtnMat);
-        mountain.position.set(-100, 50, -150);
-        scene.add(mountain);
+        // shield on left forearm
+        const shield = new T.Mesh(new T.BoxGeometry(0.14, 1.5, 1.15), steel);
+        shield.position.set(-0.15, -0.7, 0); shield.castShadow = true;
+        shield.add(new T.Mesh(new T.SphereGeometry(0.18, 10, 10), gold).translateX(-0.12));
+        armL.fore.add(shield);
 
-        // --- 4. ENTITIES ---
-        
-        // A. The Titan (Boss)
-        const titan = new THREE.Group();
-        const stoneMat = new THREE.MeshStandardMaterial({ color: 0x444448, roughness: 0.8, metalness: 0.2 });
-        
-        // Titan Body
-        const torso = new THREE.Mesh(new THREE.BoxGeometry(10, 20, 5), stoneMat);
-        torso.position.y = 20;
-        torso.castShadow = true;
-        titan.add(torso);
-        
-        // Titan Head (Crystal)
-        const headMat = new THREE.MeshStandardMaterial({ color: 0x00ccff, roughness: 0.2, metalness: 0.8, emissive: 0x004466 });
-        const head = new THREE.Mesh(new THREE.OctahedronGeometry(4), headMat);
-        head.position.y = 35;
-        head.castShadow = true;
-        titan.add(head);
+        function leg(side) {
+            const hip = new T.Group(); hip.position.set(0.34 * side, 1.72, 0); rig.add(hip);
+            const th = new T.Mesh(new T.BoxGeometry(0.5, 1.7, 0.5), darkSteel); th.position.y = -0.85; th.castShadow = true; hip.add(th);
+            const boot = new T.Mesh(new T.BoxGeometry(0.56, 0.4, 0.85), steel); boot.position.set(0, -1.75, 0.12); hip.add(boot);
+            return hip;
+        }
+        const legL = leg(-1), legR = leg(1);
 
-        // Titan Sword (Cross-like as in sketch)
-        const swordGroup = new THREE.Group();
-        const blade = new THREE.Mesh(new THREE.BoxGeometry(2, 40, 1), stoneMat);
-        const crossguard = new THREE.Mesh(new THREE.BoxGeometry(15, 2, 1), stoneMat);
-        crossguard.position.y = 5;
-        swordGroup.add(blade);
-        swordGroup.add(crossguard);
-        swordGroup.position.set(12, 15, 5);
-        swordGroup.rotation.z = -Math.PI / 6;
-        swordGroup.castShadow = true;
-        titan.add(swordGroup);
+        const cape = new T.Mesh(new T.PlaneGeometry(1.5, 2.5, 1, 6), new T.MeshStandardMaterial({ color: 0x6e1421, roughness: 1, side: T.DoubleSide }));
+        cape.position.set(0, 0.1, -0.55); cape.rotation.x = 0.15; chest.add(cape);
 
-        titan.position.set(0, 0, -40);
-        scene.add(titan);
+        g.userData = { rig, chest, head, armL, armR, legL, legR, cape, sword, blade };
+        return g;
+    }
+    const player = buildKnight();
+    scene.add(player);
 
-        // B. The Player (Knight)
-        const player = new THREE.Group();
-        const armorMat = new THREE.MeshStandardMaterial({ color: 0x888899, roughness: 0.4, metalness: 0.7 });
-        
-        const pBody = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 3, 16), armorMat);
-        pBody.position.y = 1.5;
-        pBody.castShadow = true;
-        player.add(pBody);
-        
-        const pSword = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 0.5), new THREE.MeshStandardMaterial({color: 0xeeeeee}));
-        pSword.position.set(1.5, 2, 0);
-        player.add(pSword);
+    // ---------------------------------------------------------------- TITAN
+    function buildTitan() {
+        const g = new T.Group();
+        const stone = mat(0x4a4750, 0.85, 0.15);
+        const coreMat = mat(0x1b3a2a, 0.4, 0.3, 0x00ff88);
+        const headMat = mat(0x2aa8d8, 0.2, 0.85, 0x0a3346);
 
-        player.position.set(0, 0, 20);
-        scene.add(player);
+        const torso = new T.Mesh(new T.BoxGeometry(11, 16, 6), stone); torso.position.y = 24; torso.castShadow = true; g.add(torso);
+        const hips = new T.Mesh(new T.BoxGeometry(9, 5, 6), stone); hips.position.y = 15; hips.castShadow = true; g.add(hips);
+        const core = new T.Mesh(new T.OctahedronGeometry(2.1), coreMat); core.position.set(0, 24, 3.1); g.add(core);
 
-        // C. Powerups Group
-        const powerups = [];
-        const powerupGeo = new THREE.OctahedronGeometry(1);
-        const powerupMat = new THREE.MeshStandardMaterial({ color: 0x00ffcc, emissive: 0x00ffcc, emissiveIntensity: 0.5 });
+        const head = new T.Mesh(new T.OctahedronGeometry(3.6), headMat); head.position.y = 34.5; head.castShadow = true; g.add(head);
+        const eye = new T.Mesh(new T.SphereGeometry(0.9, 12, 12), mat(0xffffff, 0.1, 0.2, 0x66e0ff)); eye.position.set(0, 34.6, 3.2); g.add(eye);
 
-        // --- 5. GAME STATE & MECHANICS ---
-        let level = 1;
-        let bossHealth = 100;
-        let bossMaxHealth = 100;
-        let playerDamage = 10;
-        let speedMultiplier = 1;
-        
-        // GTA-style Third Person Camera Offsets
-        const cameraOffset = new THREE.Vector3(0, 5, 12);
-        let cameraAngle = 0;
+        function limb(w, h, x, y, big) {
+            const sh = new T.Group(); sh.position.set(x, y, 0); g.add(sh);
+            const m = new T.Mesh(new T.BoxGeometry(w, h, w), stone); m.position.y = -h / 2; m.castShadow = true; sh.add(m);
+            if (big) { const fist = new T.Mesh(new T.BoxGeometry(w * 1.35, w * 1.35, w * 1.35), stone); fist.position.y = -h; sh.add(fist); }
+            return sh;
+        }
+        const armL = limb(3.4, 13, -7.5, 30, true);
+        const armR = limb(3.4, 13, 7.5, 30, true);
+        const legL = limb(4, 14, -3, 15);
+        const legR = limb(4, 14, 3, 15);
 
-        // --- 6. XBOX CONTROLLER INPUT (Gamepad API) ---
-        const input = {
-            moveX: 0, moveY: 0, 
-            camX: 0, camY: 0, 
-            attack: false
+        // greatsword in right hand
+        const sword = new T.Group();
+        sword.add(new T.Mesh(new T.BoxGeometry(2.2, 34, 1), stone).translateY(17));
+        sword.add(new T.Mesh(new T.BoxGeometry(13, 2.4, 1.4), stone).translateY(2));
+        sword.add(new T.Mesh(new T.BoxGeometry(1.6, 5, 1.6), mat(0x2f2c34, 0.7, 0.3)).translateY(-2));
+        sword.position.y = -13;
+        armR.add(sword);
+
+        g.userData = { torso, hips, core, coreMat, head, headMat, eye, armL, armR, legL, legR, sword };
+        return g;
+    }
+    const titan = buildTitan();
+    scene.add(titan);
+
+    // ---------------------------------------------------------------- FX POOLS
+    const sparkGeo = new T.OctahedronGeometry(0.16);
+    const particles = [];
+    function burst(pos, color, n, spd, grav = 40) {
+        for (let i = 0; i < n; i++) {
+            const m = new T.Mesh(sparkGeo, new T.MeshBasicMaterial({ color }));
+            m.position.copy(pos);
+            const a = Math.random() * Math.PI * 2, e = Math.random() * Math.PI;
+            const v = new T.Vector3(Math.sin(e) * Math.cos(a), Math.abs(Math.cos(e)) + 0.4, Math.sin(e) * Math.sin(a)).multiplyScalar(spd * (0.4 + Math.random()));
+            scene.add(m);
+            particles.push({ m, v, life: 0.5 + Math.random() * 0.4, max: 0.9, grav });
+        }
+    }
+    function updateParticles(dt) {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.life -= dt;
+            p.v.y -= p.grav * dt;
+            p.m.position.addScaledVector(p.v, dt);
+            if (p.m.position.y < 0.1) { p.m.position.y = 0.1; p.v.y *= -0.3; p.v.x *= 0.6; p.v.z *= 0.6; }
+            const k = clamp(p.life / p.max, 0, 1);
+            p.m.scale.setScalar(k);
+            if (p.life <= 0) { scene.remove(p.m); p.m.material.dispose(); particles.splice(i, 1); }
+        }
+    }
+
+    const shockwaves = [];
+    function spawnShock(x, z, maxR, speed, dmg, band = 3) {
+        const ring = new T.Mesh(new T.RingGeometry(0.9, 1, 40), new T.MeshBasicMaterial({ color: 0xffb14a, transparent: true, opacity: 0.9, side: T.DoubleSide }));
+        ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.3, z);
+        scene.add(ring);
+        shockwaves.push({ ring, x, z, r: 1, maxR, speed, dmg, band, hit: false });
+    }
+
+    const telegraphs = [];   // ground warning decals -> eruption
+    function spawnTelegraph(x, z, r, delay, dmg) {
+        const ring = new T.Mesh(new T.RingGeometry(r * 0.82, r, 40), new T.MeshBasicMaterial({ color: 0xff3b2a, transparent: true, opacity: 0.0, side: T.DoubleSide }));
+        ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.28, z);
+        const fill = new T.Mesh(new T.CircleGeometry(r, 32), new T.MeshBasicMaterial({ color: 0xff3b2a, transparent: true, opacity: 0.12, side: T.DoubleSide }));
+        fill.rotation.x = -Math.PI / 2; fill.position.set(x, 0.26, z);
+        scene.add(ring, fill);
+        telegraphs.push({ ring, fill, x, z, r, t: 0, delay, dmg });
+    }
+
+    // floating damage numbers
+    const dmgLayer = document.getElementById('dmg-layer');
+    const dmgNums = [];
+    function dmgNumber(worldPos, text, color) {
+        const el = document.createElement('div');
+        el.className = 'dmg'; el.textContent = text; el.style.color = color;
+        dmgLayer.appendChild(el);
+        dmgNums.push({ el, pos: worldPos.clone(), life: 0.9, max: 0.9 });
+    }
+    function updateDmgNumbers(dt) {
+        for (let i = dmgNums.length - 1; i >= 0; i--) {
+            const d = dmgNums[i];
+            d.life -= dt; d.pos.y += dt * 4;
+            const v = d.pos.clone().project(camera);
+            const k = clamp(d.life / d.max, 0, 1);
+            d.el.style.left = (v.x * 0.5 + 0.5) * innerWidth + 'px';
+            d.el.style.top = (-v.y * 0.5 + 0.5) * innerHeight + 'px';
+            d.el.style.opacity = k;
+            d.el.style.fontSize = (18 + (1 - k) * 14) + 'px';
+            if (d.life <= 0 || v.z > 1) { d.el.remove(); dmgNums.splice(i, 1); }
+        }
+    }
+
+    // ---------------------------------------------------------------- INPUT
+    const keys = {};
+    addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if (e.code === 'KeyR') resetGame();
+        if (e.code === 'KeyL') toggleLock();
+        if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
+    });
+    addEventListener('keyup', e => keys[e.code] = false);
+
+    const pad = { mx: 0, my: 0, cx: 0, attack: false, dodge: false, lock: false, start: false };
+    let padLockPrev = false, padStartPrev = false;
+    function pollGamepad() {
+        const gps = navigator.getGamepads ? navigator.getGamepads() : [];
+        pad.mx = pad.my = pad.cx = 0; pad.attack = pad.dodge = false;
+        for (const gp of gps) {
+            if (!gp || !gp.connected) continue;
+            const dz = v => Math.abs(v) > 0.18 ? v : 0;
+            pad.mx = dz(gp.axes[0]); pad.my = dz(gp.axes[1]); pad.cx = dz(gp.axes[2] || 0);
+            pad.attack = gp.buttons[0]?.pressed || (gp.buttons[7]?.value > 0.5);
+            pad.dodge = gp.buttons[1]?.pressed || gp.buttons[5]?.pressed;
+            const lb = gp.buttons[4]?.pressed; if (lb && !padLockPrev) toggleLock(); padLockPrev = lb;
+            const st = gp.buttons[9]?.pressed; if (st && !padStartPrev) resetGame(); padStartPrev = st;
+            break;
+        }
+    }
+
+    // ---------------------------------------------------------------- GAME STATE
+    const PHASES = [
+        { hp: 130, speed: 3.0, atkCd: 2.6, moves: ['slam', 'sweep'] },
+        { hp: 210, speed: 3.8, atkCd: 2.1, moves: ['slam', 'sweep', 'erupt'] },
+        { hp: 320, speed: 4.6, atkCd: 1.6, moves: ['slam', 'sweep', 'erupt', 'stomp'] },
+    ];
+    let S;
+    function resetGame() {
+        S = {
+            over: false, phase: 0,
+            p: { hp: 100, maxHp: 100, dmg: 14, stam: 100, maxStam: 100,
+                 vel: new T.Vector3(), knock: new T.Vector3(),
+                 state: 'idle', atkT: 0, atkHit: false, dodgeT: 0, dodgeCd: 0, hurtT: 0, invT: 0,
+                 walkPhase: 0, combo: 0, comboT: 0, yaw: Math.PI },
+            t: { hp: PHASES[0].hp, maxHp: PHASES[0].hp, state: 'idle', stateT: 0, atkCd: 1.5,
+                 yaw: 0, move: null, poise: 0, poiseMax: 6, flinch: 0, walkPhase: 0, invT: 1.2 },
+            cam: { angle: 0, shake: 0 },
+            lock: false, hitStop: 0,
         };
+        player.position.set(0, 0, 30); player.rotation.set(0, Math.PI, 0);
+        player.userData.rig.rotation.set(0, 0, 0);
+        titan.position.set(0, 0, -22); titan.rotation.set(0, 0, 0);
+        camera.position.set(0, 9.5, 49); camera.lookAt(0, 6, 0);
+        titan.userData.armR.rotation.set(0, 0, 0); titan.userData.armL.rotation.set(0, 0, 0);
+        [...shockwaves].forEach(s => scene.remove(s.ring)); shockwaves.length = 0;
+        [...telegraphs].forEach(t => { scene.remove(t.ring); scene.remove(t.fill); }); telegraphs.length = 0;
+        [...particles].forEach(p => scene.remove(p.m)); particles.length = 0;
+        dmgNums.forEach(d => d.el.remove()); dmgNums.length = 0;
+        titan.userData.headMat.emissive.setHex(0x0a3346);
+        overlay.style.display = 'none';
+        syncUI();
+    }
+    const toggleLock = () => { if (S) S.lock = !S.lock; };
 
-        function updateGamepad() {
-            const gamepads = navigator.getGamepads();
-            if (!gamepads) return;
-            
-            for (let i = 0; i < gamepads.length; i++) {
-                const gp = gamepads[i];
-                if (gp && gp.connected) {
-                    // Left Stick: Movement
-                    input.moveX = Math.abs(gp.axes[0]) > 0.1 ? gp.axes[0] : 0;
-                    input.moveY = Math.abs(gp.axes[1]) > 0.1 ? gp.axes[1] : 0;
-                    
-                    // Right Stick: Camera Rotation
-                    input.camX = Math.abs(gp.axes[2]) > 0.1 ? gp.axes[2] : 0;
-                    
-                    // A Button or Right Trigger for Attack
-                    input.attack = gp.buttons[0].pressed || gp.buttons[7].value > 0.5;
-                    break;
-                }
+    const overlay = document.getElementById('overlay');
+    function endGame(win) {
+        S.over = true;
+        overlay.style.display = 'flex';
+        overlay.className = win ? 'win' : 'lose';
+        overlay.querySelector('h1').textContent = win ? 'ECLIPSE BROKEN' : 'YOU DIED';
+        document.getElementById('ov-sub').textContent = win
+            ? 'Kaelthar falls. The sky clears.'
+            : 'The Titan stands unbroken.';
+    }
+
+    // ---------------------------------------------------------------- UI
+    const el = id => document.getElementById(id);
+    function syncUI() {
+        const p = S.p, t = S.t;
+        el('hp-bar').style.width = clamp(p.hp / p.maxHp * 100, 0, 100) + '%';
+        el('hp-text').textContent = Math.ceil(Math.max(0, p.hp)) + ' / ' + p.maxHp;
+        el('stam-bar').style.width = clamp(p.stam / p.maxStam * 100, 0, 100) + '%';
+        el('boss-bar').style.width = clamp(t.hp / t.maxHp * 100, 0, 100) + '%';
+        el('boss-bar-lag').style.width = el('boss-bar').style.width;
+        el('boss-phase').textContent = `PHASE ${S.phase + 1} / 3`;
+        const c = el('combo');
+        if (p.combo > 1) { c.textContent = p.combo + ' HIT' + (p.combo >= 5 ? '!' : ''); c.style.opacity = 1; }
+        else c.style.opacity = 0;
+    }
+    let flashT = 0;
+    function screenFlash(a) { flashT = a; }
+
+    setTimeout(() => el('hint').style.opacity = 0, 11000);
+
+    // ---------------------------------------------------------------- HELPERS
+    const V = (x, y, z) => new T.Vector3(x, y, z);
+    function horizDist(a, b) { const dx = a.x - b.x, dz = a.z - b.z; return Math.hypot(dx, dz); }
+    function angleTo(from, to) { return Math.atan2(to.x - from.x, to.z - from.z); }
+    function angDiff(a, b) { let d = a - b; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; }
+
+    function hurtPlayer(amount, sourcePos) {
+        const p = S.p;
+        if (p.invT > 0 || (p.state === 'dodge' && p.dodgeT < 0.34) || S.over) return;
+        p.hp -= amount;
+        p.invT = 0.7; p.hurtT = 0.35; p.state = 'hurt';
+        p.combo = 0;
+        if (sourcePos) {
+            const dir = V(player.position.x - sourcePos.x, 0, player.position.z - sourcePos.z).normalize();
+            p.knock.copy(dir.multiplyScalar(amount > 22 ? 26 : 14));
+        }
+        S.cam.shake = Math.min(1, amount / 22);
+        screenFlash(0.55);
+        burst(V(player.position.x, 2.4, player.position.z), 0xff4444, 14, 10);
+        dmgNumber(V(player.position.x, 4, player.position.z), Math.round(amount), '#ff6a4a');
+        if (p.hp <= 0) { p.hp = 0; p.state = 'dead'; endGame(false); }
+    }
+
+    function hitTitan(contact) {
+        const p = S.p, t = S.t;
+        if (t.invT > 0) return;
+        const staggered = t.state === 'stagger';
+        let dmg = p.dmg * (1 + p.combo * 0.06) * (staggered ? 2.2 : 1);
+        if (p.combo > 0 && p.combo % 3 === 0) dmg *= 1.6;
+        dmg = Math.round(dmg);
+        t.hp -= dmg;
+        t.flinch = 0.12;
+        p.combo++; p.comboT = 1.4;
+        t.poise += staggered ? 0 : 1;
+        S.cam.shake = Math.max(S.cam.shake, staggered ? 0.5 : 0.22);
+        S.hitStop = 0.045;
+        burst(contact, staggered ? 0xffe27a : 0xbfe9ff, staggered ? 22 : 12, 14);
+        dmgNumber(contact.clone().setY(contact.y + 1), dmg, staggered ? '#ffd24a' : '#dff2ff');
+        if (!staggered && t.poise >= t.poiseMax) {
+            t.state = 'stagger'; t.stateT = 0; t.poise = 0; t.move = null;
+            t.headMat = titan.userData.headMat;
+            titan.userData.headMat.emissive.setHex(0x552200);
+            dmgNumber(V(titan.position.x, 30, titan.position.z), 'STAGGERED', '#ffd24a');
+        }
+        if (t.hp <= 0) advancePhase();
+    }
+
+    function advancePhase() {
+        const t = S.t;
+        if (S.phase >= PHASES.length - 1) { t.hp = 0; endGame(true); return; }
+        S.phase++;
+        const cfg = PHASES[S.phase];
+        t.maxHp = cfg.hp; t.hp = cfg.hp;
+        t.poiseMax = 6 + S.phase * 2;
+        t.state = 'roar'; t.stateT = 0; t.move = null; t.invT = 1.6;
+        titan.userData.headMat.emissive.setHex(0xff2a00);
+        titan.userData.coreMat.emissiveIntensity = 1.5 + S.phase;
+        rimLight.color.setHex(0xff3b00);
+        S.cam.shake = 1;
+        spawnShock(titan.position.x, titan.position.z, 46, 60, 0, 4);
+        burst(V(titan.position.x, 20, titan.position.z), 0xff5a1e, 40, 22, 20);
+    }
+
+    // ---------------------------------------------------------------- PLAYER UPDATE
+    function updatePlayer(dt) {
+        const p = S.p, ud = player.userData;
+        p.dodgeCd = Math.max(0, p.dodgeCd - dt);
+        p.invT = Math.max(0, p.invT - dt);
+        p.stam = Math.min(p.maxStam, p.stam + 22 * dt);
+        if (p.comboT > 0) { p.comboT -= dt; if (p.comboT <= 0) p.combo = 0; }
+
+        // desired move vector from input
+        let ix = (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0) - (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) + pad.mx;
+        let iz = (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0) - (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) + pad.my;
+        ix = clamp(ix, -1, 1); iz = clamp(iz, -1, 1);
+        const moving = Math.hypot(ix, iz) > 0.15;
+
+        const wantAttack = keys['Space'] || pad.attack;
+        const wantDodge = keys['ShiftLeft'] || keys['ShiftRight'] || pad.dodge;
+
+        // camera rotate (free cam only)
+        if (!S.lock) {
+            const cr = (keys['KeyE'] ? 1 : 0) - (keys['KeyQ'] ? 1 : 0) + pad.cx;
+            S.cam.angle -= cr * 2.4 * dt;
+        } else {
+            S.cam.angle = angleTo(titan.position, player.position);
+        }
+
+        // movement basis
+        let moveDir = null;
+        if (moving) {
+            if (S.lock) {
+                const toBoss = angleTo(player.position, titan.position);
+                // iz forward/back toward boss, ix strafe
+                moveDir = toBoss + Math.atan2(ix, -iz);
+                if (Math.hypot(ix, iz) < 0.05) moveDir = null;
+            } else {
+                moveDir = Math.atan2(-ix, iz) + S.cam.angle;
             }
         }
 
-        // --- 7. GAME LOOP & LOGIC ---
-        const clock = new THREE.Clock();
-        let lastAttackTime = 0;
-
-        function spawnPowerup() {
-            const p = new THREE.Mesh(powerupGeo, powerupMat);
-            p.position.set(
-                (Math.random() - 0.5) * 40,
-                1,
-                (Math.random() - 0.5) * 40 - 20
-            );
-            scene.add(p);
-            powerups.push(p);
-        }
-
-        function levelUp() {
-            level++;
-            bossMaxHealth = 100 + (level * 50);
-            bossHealth = bossMaxHealth;
-            document.getElementById('level-display').innerText = `Level: ${level} | Boss Phase: ${level}`;
-            document.getElementById('health-bar').style.width = '100%';
-            spawnPowerup();
-            
-            // Make Titan angry (change crystal color)
-            headMat.emissive.setHex(0xff0000);
-            rimLight.color.setHex(0xff0000);
-            setTimeout(() => {
-                headMat.emissive.setHex(0x004466);
-                rimLight.color.setHex(0x00ccff);
-            }, 2000);
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            const delta = clock.getDelta();
-
-            updateGamepad();
-
-            // --- Player Movement & Camera Navigation ---
-            // Rotate camera around player
-            cameraAngle -= input.camX * 2 * delta;
-            
-            // Calculate movement relative to camera angle
-            const moveSpeed = 15 * speedMultiplier * delta;
-            if (input.moveX !== 0 || input.moveY !== 0) {
-                const angle = Math.atan2(input.moveX, input.moveY) + cameraAngle;
-                player.position.x += Math.sin(angle) * moveSpeed;
-                player.position.z += Math.cos(angle) * moveSpeed;
-                
-                // Rotate player to face movement direction
-                player.rotation.y = angle;
-            }
-
-            // Update Camera Position (Pursuit behavior)
-            const targetCamPos = new THREE.Vector3(
-                player.position.x + Math.sin(cameraAngle) * cameraOffset.z,
-                player.position.y + cameraOffset.y,
-                player.position.z + Math.cos(cameraAngle) * cameraOffset.z
-            );
-            camera.position.lerp(targetCamPos, 0.1);
-            camera.lookAt(player.position);
-
-            // --- Combat Mechanics ---
-            const distanceToBoss = player.position.distanceTo(titan.position);
-            
-            // Titan Idle Animation
-            titan.position.y = Math.sin(clock.getElapsedTime()) * 0.5;
-            swordGroup.rotation.z = -Math.PI / 6 + Math.sin(clock.getElapsedTime() * 2) * 0.1;
-
-            if (input.attack && clock.getElapsedTime() - lastAttackTime > 0.5) {
-                lastAttackTime = clock.getElapsedTime();
-                // Simple Attack Animation (Swing sword)
-                pSword.rotation.x = -Math.PI / 2;
-                setTimeout(() => pSword.rotation.x = 0, 200);
-
-                // Hit detection
-                if (distanceToBoss < 15) {
-                    bossHealth -= playerDamage;
-                    const hpPercent = Math.max(0, (bossHealth / bossMaxHealth) * 100);
-                    document.getElementById('health-bar').style.width = hpPercent + '%';
-                    
-                    if (bossHealth <= 0) {
-                        levelUp();
+        // state machine
+        if (p.state === 'dead') { /* frozen */ }
+        else if (p.state === 'hurt') {
+            p.hurtT -= dt; if (p.hurtT <= 0) p.state = 'idle';
+        } else if (p.state === 'dodge') {
+            p.dodgeT += dt;
+            const k = 1 - p.dodgeT / 0.45;
+            player.position.x += Math.sin(p.dodgeDir) * 34 * k * dt;
+            player.position.z += Math.cos(p.dodgeDir) * 34 * k * dt;
+            ud.rig.rotation.x = -p.dodgeT / 0.45 * Math.PI * 2;
+            if (p.dodgeT >= 0.45) { p.state = 'idle'; ud.rig.rotation.x = 0; }
+        } else if (p.state === 'attack') {
+            p.atkT += dt;
+            const d = 0.5;
+            const sh = ud.armR.sh, fore = ud.armR.fore;
+            if (p.atkT < 0.14) {                      // windup
+                sh.rotation.x = lerp(0, -2.4, p.atkT / 0.14);
+                sh.rotation.z = lerp(0, -0.5, p.atkT / 0.14);
+            } else if (p.atkT < 0.30) {               // swing
+                const k = (p.atkT - 0.14) / 0.16;
+                sh.rotation.x = lerp(-2.4, 1.1, k);
+                sh.rotation.z = lerp(-0.5, 0.3, k);
+                if (!p.atkHit) {                       // hit check at swing
+                    const reach = 6.2, fdir = V(Math.sin(p.yaw), 0, Math.cos(p.yaw));
+                    const cp = V(player.position.x + fdir.x * reach, 3, player.position.z + fdir.z * reach);
+                    const toT = angleTo(player.position, titan.position);
+                    if (horizDist(player.position, titan.position) < reach + 6 && Math.abs(angDiff(toT, p.yaw)) < 1.1) {
+                        p.atkHit = true;
+                        hitTitan(cp);
                     }
                 }
+            } else if (p.atkT < d) {                  // recover
+                const k = (p.atkT - 0.30) / (d - 0.30);
+                sh.rotation.x = lerp(1.1, 0, k);
+                sh.rotation.z = lerp(0.3, 0, k);
+            } else {
+                p.state = 'idle'; sh.rotation.set(0, 0, 0);
+                // allow buffered chain
+                if (wantAttack) startAttack();
             }
-
-            // --- Powerup Collection ---
-            for (let i = powerups.length - 1; i >= 0; i--) {
-                const p = powerups[i];
-                p.rotation.y += delta * 2; // Spin animation
-                p.position.y = 1 + Math.sin(clock.getElapsedTime() * 5) * 0.5; // Hover
-
-                if (player.position.distanceTo(p.position) < 3) {
-                    // Collect
-                    scene.remove(p);
-                    powerups.splice(i, 1);
-                    playerDamage += 5;
-                    speedMultiplier = 1.2;
-                    
-                    const notice = document.getElementById('powerup-notice');
-                    notice.style.display = 'block';
-                    setTimeout(() => notice.style.display = 'none', 3000);
-                }
+        } else { // idle / walk
+            if (wantDodge && p.dodgeCd <= 0 && p.stam >= 25) {
+                p.state = 'dodge'; p.dodgeT = 0; p.dodgeCd = 0.7; p.stam -= 25;
+                p.dodgeDir = moveDir != null ? moveDir : p.yaw + Math.PI;
+                p.yaw = p.dodgeDir;
+            } else if (wantAttack) {
+                startAttack();
             }
-
-            renderer.render(scene, camera);
         }
 
-        // Handle Window Resize
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        function startAttack() {
+            p.state = 'attack'; p.atkT = 0; p.atkHit = false;
+            if (S.lock) p.yaw = angleTo(player.position, titan.position);
+            else if (moveDir != null) p.yaw = moveDir;
+            ud.blade.material.emissive.setHex(0x333333);
+            setTimeout(() => ud.blade.material.emissive.setHex(0x141414), 160);
+        }
 
-        animate();
+        // apply movement (idle/walk/attack can drift slightly)
+        const canMove = p.state === 'idle' || p.state === 'attack';
+        let spd = 0;
+        if (moving && canMove) {
+            spd = (p.state === 'attack' ? 3 : 12);
+            player.position.x += Math.sin(moveDir) * spd * dt;
+            player.position.z += Math.cos(moveDir) * spd * dt;
+            if (p.state === 'idle') p.yaw = moveDir;
+        }
+        if (S.lock && p.state !== 'dodge') p.yaw = lerp(p.yaw, angleTo(player.position, titan.position), 0.2);
+
+        // knockback + friction
+        player.position.x += p.knock.x * dt;
+        player.position.z += p.knock.z * dt;
+        p.knock.multiplyScalar(1 - Math.min(1, 6 * dt));
+
+        // arena clamp
+        const d0 = Math.hypot(player.position.x, player.position.z);
+        if (d0 > ARENA_R) { player.position.x *= ARENA_R / d0; player.position.z *= ARENA_R / d0; }
+
+        // lava damage
+        for (const l of lavaPools) {
+            if (horizDist(player.position, l.mesh.position) < l.r + 0.5) {
+                if (p.invT <= 0) { p.hp -= 16 * dt; screenFlash(0.15); if (p.hp <= 0 && p.state !== 'dead') { p.hp = 0; p.state = 'dead'; endGame(false); } }
+            }
+        }
+
+        // facing + walk animation
+        player.rotation.y = lerp(player.rotation.y, p.yaw, 0.25);
+        const wp = p.walkPhase += (moving && canMove ? spd : 0) * dt * 2.2;
+        const sw = moving && canMove ? Math.sin(wp * 3) : 0;
+        if (p.state !== 'dodge' && p.state !== 'attack') {
+            ud.armL.sh.rotation.x = lerp(ud.armL.sh.rotation.x, sw * 0.5, 0.3);
+            ud.armR.sh.rotation.x = lerp(ud.armR.sh.rotation.x, -sw * 0.5, 0.3);
+            ud.armR.sh.rotation.z = lerp(ud.armR.sh.rotation.z, 0, 0.3);
+        }
+        ud.legL.rotation.x = lerp(ud.legL.rotation.x, -sw * 0.6, 0.3);
+        ud.legR.rotation.x = lerp(ud.legR.rotation.x, sw * 0.6, 0.3);
+        ud.chest.position.y = 2.65 + Math.abs(sw) * 0.12 + (p.state === 'idle' ? Math.sin(clock.elapsedTime * 2) * 0.04 : 0);
+        ud.chest.rotation.z = -sw * 0.05;
+        ud.cape.rotation.x = 0.15 + sw * 0.15 + (moving ? 0.1 : 0);
+        if (p.state === 'hurt') ud.chest.rotation.x = -0.3; else ud.chest.rotation.x = lerp(ud.chest.rotation.x, moving ? 0.12 : 0, 0.2);
+        if (p.state === 'dead') { ud.rig.rotation.z = lerp(ud.rig.rotation.z, Math.PI / 2, 0.08); ud.chest.position.y = 2.65; }
+        else ud.rig.rotation.z = lerp(ud.rig.rotation.z, 0, 0.2);
+
+        // blade trail glow while swinging
+        ud.blade.material.emissiveIntensity = p.state === 'attack' ? 1 : 0;
+    }
+
+    // ---------------------------------------------------------------- TITAN AI
+    function updateTitan(dt) {
+        if (S.over && S.t.hp <= 0) return;
+        const t = S.t, ud = titan.userData, cfg = PHASES[S.phase];
+        t.invT = Math.max(0, t.invT - dt);
+        t.flinch = Math.max(0, t.flinch - dt);
+        t.stateT += dt;
+        const dist = horizDist(titan.position, player.position);
+        const faceAng = angleTo(titan.position, player.position);
+
+        // core / eye pulse
+        ud.coreMat.emissiveIntensity = 1.2 + S.phase + Math.sin(clock.elapsedTime * 4) * 0.4;
+        ud.eye.material.emissiveIntensity = 0.8 + Math.sin(clock.elapsedTime * 6) * 0.3;
+
+        // idle sword sway back to rest
+        const restArm = () => {
+            ud.armR.rotation.x = lerp(ud.armR.rotation.x, 0.1, 0.08);
+            ud.armR.rotation.z = lerp(ud.armR.rotation.z, 0, 0.08);
+            ud.armL.rotation.x = lerp(ud.armL.rotation.x, 0.1, 0.08);
+        };
+
+        if (t.state === 'roar') {
+            titan.rotation.y = lerp(titan.rotation.y, faceAng, 0.05);
+            ud.armL.rotation.x = -1.6 + Math.sin(t.stateT * 20) * 0.2;
+            ud.armR.rotation.x = -1.6 + Math.sin(t.stateT * 20 + 1) * 0.2;
+            titan.position.y = Math.sin(t.stateT * 15) * 0.6;
+            if (t.stateT > 1.6) {
+                t.state = 'idle'; t.stateT = 0; t.atkCd = 1.2;
+                titan.userData.headMat.emissive.setHex(0x0a3346 + S.phase * 0x110000);
+                titan.position.y = 0;
+            }
+            return;
+        }
+
+        if (t.state === 'stagger') {
+            titan.userData.torso.rotation.x = lerp(titan.userData.torso.rotation.x, 0.5, 0.15);
+            titan.userData.head.position.y = lerp(titan.userData.head.position.y, 30, 0.15);
+            ud.armR.rotation.x = lerp(ud.armR.rotation.x, 1.2, 0.15);
+            ud.armL.rotation.x = lerp(ud.armL.rotation.x, 1.2, 0.15);
+            titan.position.y = lerp(titan.position.y, -3, 0.1);
+            if (t.stateT > 2.8) {
+                t.state = 'idle'; t.stateT = 0; t.atkCd = 1.0;
+                titan.userData.headMat.emissive.setHex(0x0a3346 + S.phase * 0x110000);
+            }
+            return;
+        } else {
+            titan.userData.torso.rotation.x = lerp(titan.userData.torso.rotation.x, 0, 0.1);
+            titan.userData.head.position.y = lerp(titan.userData.head.position.y, 34.5, 0.1);
+            titan.position.y = lerp(titan.position.y, t.flinch > 0 ? -0.4 : 0, 0.2);
+        }
+
+        if (t.state === 'idle') {
+            // face + approach
+            titan.rotation.y = lerp(titan.rotation.y, faceAng, 0.04 + S.phase * 0.01);
+            restArm();
+            let walking = false;
+            if (dist > 20) {
+                titan.position.x += Math.sin(faceAng) * cfg.speed * dt;
+                titan.position.z += Math.cos(faceAng) * cfg.speed * dt;
+                walking = true;
+            }
+            // leg walk cycle
+            t.walkPhase += (walking ? cfg.speed : 0) * dt * 1.4;
+            const s = walking ? Math.sin(t.walkPhase * 3) : 0;
+            ud.legL.rotation.x = lerp(ud.legL.rotation.x, -s * 0.5, 0.2);
+            ud.legR.rotation.x = lerp(ud.legR.rotation.x, s * 0.5, 0.2);
+            titan.position.y = Math.abs(s) * 0.5 + Math.sin(clock.elapsedTime * 1.5) * 0.3;
+
+            t.atkCd -= dt;
+            if (t.atkCd <= 0) {
+                // choose move
+                let pool = cfg.moves.slice();
+                if (dist > 30) pool = pool.filter(m => m === 'erupt' || m === 'slam');
+                if (dist < 16) pool = pool.filter(m => m !== 'erupt');
+                if (!pool.length) pool = ['slam'];
+                t.move = pool[Math.floor(Math.random() * pool.length)];
+                t.state = 'tele'; t.stateT = 0;
+                titan.userData.headMat.emissive.setHex(0xff6a00);
+                if (t.move === 'erupt') {
+                    // mark where player is now (+ lead)
+                    const lead = V(player.position.x + S.p.vel.x * 0.3, 0, player.position.z + S.p.vel.z * 0.3);
+                    spawnTelegraph(lead.x, lead.z, 7 + S.phase, 1.0, 20 + S.phase * 4);
+                }
+            }
+            return;
+        }
+
+        if (t.state === 'tele') {
+            // lock facing, wind up
+            const telDur = t.move === 'sweep' ? 0.75 : t.move === 'stomp' ? 0.5 : 0.85;
+            if (t.move === 'slam' || t.move === 'stomp') {
+                ud.armR.rotation.x = lerp(ud.armR.rotation.x, -2.3, 0.2);
+                ud.armR.rotation.z = lerp(ud.armR.rotation.z, -0.3, 0.2);
+            } else if (t.move === 'sweep') {
+                ud.armR.rotation.x = lerp(ud.armR.rotation.x, -0.2, 0.2);
+                ud.armR.rotation.z = lerp(ud.armR.rotation.z, -1.4, 0.2);
+            } else { // erupt: raise both arms
+                ud.armL.rotation.x = lerp(ud.armL.rotation.x, -2.0, 0.2);
+                ud.armR.rotation.x = lerp(ud.armR.rotation.x, -2.0, 0.2);
+            }
+            if (t.stateT >= telDur) { t.state = 'strike'; t.stateT = 0; }
+            return;
+        }
+
+        if (t.state === 'strike') {
+            titan.userData.headMat.emissive.setHex(0x0a3346 + S.phase * 0x110000);
+            if (t.move === 'slam') {
+                ud.armR.rotation.x = lerp(ud.armR.rotation.x, 1.2, 0.4);
+                if (t.stateT > 0.12 && !t.struck) {
+                    t.struck = true;
+                    const fx = titan.position.x + Math.sin(titan.rotation.y) * 14;
+                    const fz = titan.position.z + Math.cos(titan.rotation.y) * 14;
+                    spawnShock(fx, fz, 24, 42, 22 + S.phase * 3, 3.5);
+                    burst(V(fx, 1, fz), 0xffb14a, 26, 20, 22);
+                    S.cam.shake = 0.6;
+                }
+            } else if (t.move === 'stomp') {
+                ud.legR.rotation.x = lerp(ud.legR.rotation.x, 0.8, 0.5);
+                if (t.stateT > 0.1 && !t.struck) {
+                    t.struck = true;
+                    spawnShock(titan.position.x, titan.position.z, 20, 55, 18 + S.phase * 3, 4);
+                    S.cam.shake = 0.55;
+                }
+            } else if (t.move === 'sweep') {
+                // fast yaw sweep
+                titan.rotation.y += 5 * dt;
+                ud.armR.rotation.z = lerp(ud.armR.rotation.z, 0.6, 0.3);
+                if (!t.struck && t.stateT > 0.08) {
+                    const toP = angleTo(titan.position, player.position);
+                    if (dist < 22 && Math.abs(angDiff(toP, titan.rotation.y)) < 1.2) {
+                        t.struck = true;
+                        hurtPlayer(20 + S.phase * 3, titan.position);
+                    }
+                }
+            } else if (t.move === 'erupt') {
+                ud.armL.rotation.x = lerp(ud.armL.rotation.x, 0.5, 0.3);
+                ud.armR.rotation.x = lerp(ud.armR.rotation.x, 0.5, 0.3);
+            }
+            const dur = t.move === 'sweep' ? 0.45 : 0.55;
+            if (t.stateT >= dur) {
+                t.state = 'recover'; t.stateT = 0; t.struck = false;
+            }
+            return;
+        }
+
+        if (t.state === 'recover') {
+            restArm();
+            ud.armR.rotation.z = lerp(ud.armR.rotation.z, 0, 0.1);
+            ud.legR.rotation.x = lerp(ud.legR.rotation.x, 0, 0.15);
+            if (t.stateT >= 0.6) {
+                t.state = 'idle'; t.stateT = 0;
+                t.atkCd = cfg.atkCd * (0.8 + Math.random() * 0.5);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- FX UPDATE
+    function updateShockwaves(dt) {
+        for (let i = shockwaves.length - 1; i >= 0; i--) {
+            const s = shockwaves[i];
+            s.r += s.speed * dt;
+            s.ring.scale.setScalar(s.r);
+            s.ring.material.opacity = clamp(1 - s.r / s.maxR, 0, 1) * 0.9;
+            if (!s.hit && s.dmg > 0) {
+                const d = horizDist(player.position, V(s.x, 0, s.z));
+                if (Math.abs(d - s.r) < s.band) { s.hit = true; hurtPlayer(s.dmg, V(s.x, 0, s.z)); }
+            }
+            if (s.r >= s.maxR) { scene.remove(s.ring); s.ring.material.dispose(); shockwaves.splice(i, 1); }
+        }
+    }
+    function updateTelegraphs(dt) {
+        for (let i = telegraphs.length - 1; i >= 0; i--) {
+            const tg = telegraphs[i];
+            tg.t += dt;
+            const k = tg.t / tg.delay;
+            tg.ring.material.opacity = 0.3 + Math.abs(Math.sin(tg.t * 14)) * 0.5;
+            tg.fill.material.opacity = 0.1 + k * 0.35;
+            tg.fill.scale.setScalar(clamp(k, 0.2, 1));
+            if (tg.t >= tg.delay) {
+                if (horizDist(player.position, V(tg.x, 0, tg.z)) < tg.r) hurtPlayer(tg.dmg, V(tg.x, 0, tg.z));
+                burst(V(tg.x, 0.5, tg.z), 0xff5a1e, 34, 26, 26);
+                spawnShock(tg.x, tg.z, tg.r + 6, 40, 0, 3);
+                S.cam.shake = Math.max(S.cam.shake, 0.35);
+                scene.remove(tg.ring); scene.remove(tg.fill);
+                tg.ring.material.dispose(); tg.fill.material.dispose();
+                telegraphs.splice(i, 1);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- CAMERA
+    function updateCamera(dt) {
+        const a = S.cam.angle;
+        const off = S.lock ? 22 : 19, hgt = S.lock ? 11 : 9.5;
+        const tgt = V(
+            player.position.x + Math.sin(a) * off,
+            hgt,
+            player.position.z + Math.cos(a) * off
+        );
+        camera.position.lerp(tgt, 1 - Math.pow(0.0015, dt));
+        // look target: always keep the Titan roughly in frame
+        const look = player.position.clone().add(V(0, 3.2, 0));
+        look.lerp(titan.position.clone().setY(18), S.lock ? 0.34 : 0.16);
+        camera.lookAt(look);
+        // shake
+        if (S.cam.shake > 0) {
+            S.cam.shake = Math.max(0, S.cam.shake - dt * 2.4);
+            const k = S.cam.shake * S.cam.shake * 1.4;
+            camera.position.x += (Math.random() - 0.5) * k;
+            camera.position.y += (Math.random() - 0.5) * k;
+            camera.position.z += (Math.random() - 0.5) * k;
+        }
+        rimLight.position.set(player.position.x, 30, player.position.z + 6);
+    }
+
+    function updateEmbers(dt) {
+        const pos = embers.geometry.attributes.position;
+        for (let i = 0; i < emberN; i++) {
+            let y = pos.getY(i) + emberVel[i] * dt;
+            if (y > 46) { y = 0; pos.setX(i, player.position.x + (Math.random() - 0.5) * 120); pos.setZ(i, player.position.z + (Math.random() - 0.5) * 120); }
+            pos.setY(i, y);
+        }
+        pos.needsUpdate = true;
+    }
+
+    // ---------------------------------------------------------------- LOOP
+    const clock = new T.Clock();
+    resetGame();
+
+    function frame() {
+        requestAnimationFrame(frame);
+        let dt = Math.min(clock.getDelta(), 0.05);
+        pollGamepad();
+
+        // track player velocity for AI leading
+        const prev = player.position.clone();
+
+        if (!S.over && S.hitStop > 0) { S.hitStop -= dt; }
+        else if (!S.over || S.p.state === 'dead') {
+            updatePlayer(dt);
+            updateTitan(dt);
+            updateShockwaves(dt);
+            updateTelegraphs(dt);
+        }
+        S.p.vel.copy(player.position).sub(prev).divideScalar(Math.max(dt, 0.001));
+
+        // flinch pulse on titan
+        const fl = 1 + S.t.flinch * 2.5;
+        titan.userData.core.scale.setScalar(fl);
+
+        updateParticles(dt);
+        updateDmgNumbers(dt);
+        updateCamera(dt);
+        updateEmbers(dt);
+
+        // screen flash decay
+        if (flashT > 0) { flashT = Math.max(0, flashT - dt * 2); }
+        document.getElementById('flash').style.opacity = flashT;
+
+        syncUI();
+        renderer.render(scene, camera);
+    }
+    frame();
+
+    addEventListener('resize', () => {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+    });
     </script>
 </body>
 </html>
