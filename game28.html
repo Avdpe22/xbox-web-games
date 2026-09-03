@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Planet Rebuild 3D - Xbox Edition</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        
+        /* UI Overlays */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        
+        /* HUD */
+        #hud { position: absolute; top: 20px; left: 20px; color: white; text-shadow: 2px 2px 0 #000; display: none; background: rgba(0,0,0,0.6); padding: 15px; border: 2px solid #555; border-radius: 8px; }
+        .hud-stat { font-size: 24px; margin: 5px 0; font-weight: bold; color: #4DA6FF; }
+        #ff-indicator { position: absolute; top: 20px; right: 20px; color: #FF3366; font-size: 30px; font-weight: bold; display: none; text-shadow: 2px 2px 0 #000; animation: blink 1s infinite; }
+        
+        /* Start Screen */
+        #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; pointer-events: auto; }
+        h1 { font-size: 48px; color: #FFAA00; text-transform: uppercase; letter-spacing: 2px; }
+        .instructions { background: rgba(255,255,255,0.1); padding: 30px; border-radius: 10px; border: 1px solid #555; max-width: 600px; text-align: left; font-size: 20px; line-height: 1.6; }
+        .btn { margin-top: 30px; padding: 15px 40px; font-size: 24px; background: #0078D7; border: none; color: white; border-radius: 5px; cursor: pointer; }
+        .btn:hover { background: #1084E3; }
+        
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+    </style>
+    <!-- Load Three.js for 3D Graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="hud">
+            <div class="hud-stat">Population: <span id="pop-val">14,876</span></div>
+            <div class="hud-stat">Funds: $<span id="funds-val">321,500</span></div>
+            <div class="hud-stat">Year: <span id="year-val">34</span></div>
+        </div>
+        <div id="ff-indicator">▶▶ FAST FORWARDING</div>
+        
+        <div id="start-screen">
+            <h1>Planet Rebuild 3D</h1>
+            <div class="instructions">
+                <h3>Commander Instructions:</h3>
+                <p>Welcome to Aethelgard. Your objective is to oversee the expansion of the colony. The base foundation is laid.</p>
+                <hr style="border-color: #555; margin: 15px 0;">
+                <b>Xbox Controller Setup:</b><br>
+                🎮 <b>Left Stick:</b> Pan Camera (Google Earth view)<br>
+                🎮 <b>Right Stick:</b> Rotate & Pitch Camera<br>
+                🎮 <b>LT / RT (Triggers):</b> Zoom In / Out<br>
+                🎮 <b>RB (Right Bumper):</b> FAST FORWARD Simulation<br>
+                🎮 <b>Start (Menu Button):</b> Begin Operation
+            </div>
+            <button class="btn" onclick="startGame()">PRESS START (or Click Here)</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. GAME STATE & SETUP ---
+        let gameActive = false;
+        let isFastForward = false;
+        let population = 14876;
+        let funds = 321500;
+        let year = 34;
+        let timeTick = 0;
+        let buildings = [];
+
+        // UI Elements
+        const startScreen = document.getElementById('start-screen');
+        const hud = document.getElementById('hud');
+        const ffIndicator = document.getElementById('ff-indicator');
+        const popEl = document.getElementById('pop-val');
+        const fundsEl = document.getElementById('funds-val');
+        const yearEl = document.getElementById('year-val');
+
+        // --- 2. THREE.JS SCENE (Next-Gen Vibe) ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050510); // Deep space
+        scene.fog = new THREE.FogExp2(0x050510, 0.002);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        // Initial Google-earth style vantage point
+        let camTarget = new THREE.Vector3(0, 0, 0);
+        let camRadius = 150;
+        let camTheta = Math.PI / 4; // Angle around Y axis
+        let camPhi = Math.PI / 3;   // Angle up from XZ plane
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting (PBR readiness)
+        const ambientLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffddaa, 1.2);
+        dirLight.position.set(100, 200, -50);
+        dirLight.castShadow = true;
+        dirLight.shadow.camera.left = -200;
+        dirLight.shadow.camera.right = 200;
+        dirLight.shadow.camera.top = 200;
+        dirLight.shadow.camera.bottom = -200;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+
+        // --- 3. SCENE GENERATION (Replicating the Image) ---
+        // Terrain (Mars-like Red/Brown)
+        const geoTerrain = new THREE.PlaneGeometry(500, 500, 32, 32);
+        // Add some noise to terrain for 3D effect
+        const posAttribute = geoTerrain.attributes.position;
+        for (let i = 0; i < posAttribute.count; i++) {
+            let z = posAttribute.getZ(i);
+            posAttribute.setZ(i, z + (Math.random() * 2 - 1));
+        }
+        geoTerrain.computeVertexNormals();
+        
+        const matTerrain = new THREE.MeshStandardMaterial({ 
+            color: 0x8B3A22, 
+            roughness: 0.9, 
+            metalness: 0.1 
+        });
+        const terrain = new THREE.Mesh(geoTerrain, matTerrain);
+        terrain.rotation.x = -Math.PI / 2;
+        terrain.receiveShadow = true;
+        scene.add(terrain);
+
+        // Water/River
+        const geoRiver = new THREE.PlaneGeometry(400, 20);
+        const matRiver = new THREE.MeshStandardMaterial({ color: 0x005577, roughness: 0.1, metalness: 0.8 });
+        const river = new THREE.Mesh(geoRiver, matRiver);
+        river.rotation.x = -Math.PI / 2;
+        river.rotation.z = Math.PI / 4;
+        river.position.y = 0.5;
+        river.receiveShadow = true;
+        scene.add(river);
+
+        // Generate City Base
+        const colors = [0xaaaaaa, 0x4466ff, 0x55aa55, 0xffaa33]; // Concrete, Glass, Parks, Ind.
+        for(let i=0; i<150; i++) {
+            let width = 2 + Math.random() * 4;
+            let depth = 2 + Math.random() * 4;
+            let height = 2 + Math.random() * 10;
+            
+            // Keep buildings near center
+            let x = (Math.random() - 0.5) * 120;
+            let z = (Math.random() - 0.5) * 120;
+
+            const geoBldg = new THREE.BoxGeometry(width, height, depth);
+            const matBldg = new THREE.MeshStandardMaterial({ 
+                color: colors[Math.floor(Math.random() * colors.length)],
+                roughness: 0.4,
+                metalness: 0.3
+            });
+            const bldg = new THREE.Mesh(geoBldg, matBldg);
+            bldg.position.set(x, height/2, z);
+            bldg.castShadow = true;
+            bldg.receiveShadow = true;
+            
+            // Store for fast-forward animation
+            bldg.userData = { targetHeight: height, originalY: height/2 };
+            buildings.push(bldg);
+            scene.add(bldg);
+        }
+
+        // --- 4. GAMEPAD / XBOX CONTROLLER INPUT ---
+        function updateGamepad() {
+            const gamepads = navigator.getGamepads();
+            if (!gamepads || !gamepads[0]) return;
+            const gp = gamepads[0];
+
+            // START BUTTON (Button 9)
+            if (gp.buttons[9].pressed && !gameActive) {
+                startGame();
+            }
+
+            if (!gameActive) return;
+
+            // RIGHT BUMPER (Button 5) - FAST FORWARD
+            isFastForward = gp.buttons[5].pressed;
+            ffIndicator.style.display = isFastForward ? 'block' : 'none';
+
+            // LEFT STICK (Axes 0, 1) - PANNING (Google Earth Style)
+            const deadzone = 0.15;
+            let panX = gp.axes[0];
+            let panY = gp.axes[1];
+            
+            if (Math.abs(panX) > deadzone || Math.abs(panY) > deadzone) {
+                // Calculate movement relative to camera angle
+                let forward = new THREE.Vector3(camTarget.x - camera.position.x, 0, camTarget.z - camera.position.z).normalize();
+                let right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).normalize();
+                
+                let speed = camRadius * 0.01; 
+                camTarget.add(right.multiplyScalar(panX * speed));
+                camTarget.add(forward.multiplyScalar(-panY * speed)); // Invert Y for standard stick feel
+            }
+
+            // RIGHT STICK (Axes 2, 3) - ROTATION / VANTAGE
+            let rotX = gp.axes[2];
+            let rotY = gp.axes[3];
+            if (Math.abs(rotX) > deadzone) camTheta -= rotX * 0.03;
+            if (Math.abs(rotY) > deadzone) {
+                camPhi -= rotY * 0.03;
+                // Clamp vantage point so we don't go under ground or straight down
+                camPhi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, camPhi)); 
+            }
+
+            // TRIGGERS (Axes or Buttons depending on OS, usually Buttons 6 and 7)
+            let zoomIn = gp.buttons[7].value; // RT
+            let zoomOut = gp.buttons[6].value; // LT
+            if (zoomIn > 0.1) camRadius -= zoomIn * 2;
+            if (zoomOut > 0.1) camRadius += zoomOut * 2;
+            camRadius = Math.max(20, Math.min(300, camRadius)); // Clamp Zoom
+        }
+
+        function updateCamera() {
+            // Spherical to Cartesian for Orbit/Vantage View
+            camera.position.x = camTarget.x + camRadius * Math.sin(camPhi) * Math.sin(camTheta);
+            camera.position.y = camTarget.y + camRadius * Math.cos(camPhi);
+            camera.position.z = camTarget.z + camRadius * Math.sin(camPhi) * Math.cos(camTheta);
+            camera.lookAt(camTarget);
+        }
+
+        // --- 5. GAME LOGIC ---
+        function startGame() {
+            gameActive = true;
+            startScreen.style.display = 'none';
+            hud.style.display = 'block';
+        }
+
+        function runSimulation() {
+            if (!gameActive) return;
+            
+            // Normal speed vs Fast Forward speed
+            let speedMult = isFastForward ? 50 : 1;
+            timeTick += speedMult;
+
+            if (timeTick > 100) {
+                timeTick = 0;
+                // Increase Stats
+                year += isFastForward ? 1 : 0; // Years only pass quickly in FF
+                population += Math.floor(Math.random() * 50 * speedMult);
+                funds += Math.floor(Math.random() * 2000 * speedMult);
+                
+                popEl.innerText = population.toLocaleString();
+                fundsEl.innerText = funds.toLocaleString();
+                yearEl.innerText = year;
+
+                // Visual simulation (Buildings grow when fast forwarding)
+                if (isFastForward) {
+                    buildings.forEach(b => {
+                        if (Math.random() > 0.95) { // Random chance for a building to upgrade
+                            b.userData.targetHeight += Math.random() * 5;
+                        }
+                    });
+                }
+            }
+
+            // Animate building growth smoothly
+            buildings.forEach(b => {
+                if (b.scale.y * b.geometry.parameters.height < b.userData.targetHeight) {
+                    b.scale.y += 0.05;
+                    b.position.y = (b.geometry.parameters.height * b.scale.y) / 2;
+                }
+            });
+        }
+
+        // --- 6. RENDER LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            updateGamepad();
+            updateCamera();
+            runSimulation();
+            renderer.render(scene, camera);
+        }
+
+        // Handle browser resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>

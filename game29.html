@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Zombie Cure: City Redemption</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #0d1117;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* UI Overlays replicating watermarked_img_17785213977564147785.png */
+        .ui-panel {
+            position: absolute;
+            background: rgba(16, 24, 32, 0.85);
+            border: 2px solid #2e4a55;
+            padding: 10px 15px;
+            border-radius: 4px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+        }
+
+        #top-left-stats {
+            top: 20px;
+            left: 20px;
+        }
+
+        #top-left-stats h1 {
+            margin: 0 0 5px 0;
+            font-size: 20px;
+            color: #7df9ff;
+            text-transform: uppercase;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .stat-healthy { color: #4ade80; }
+        .stat-infected { color: #f87171; }
+        .stat-supplies { color: #cbd5e1; }
+        .stat-doses { color: #38bdf8; }
+
+        #bottom-left-buildings {
+            bottom: 20px;
+            left: 20px;
+            width: 200px;
+        }
+        
+        #bottom-left-buildings h2 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            border-bottom: 1px solid #2e4a55;
+            padding-bottom: 5px;
+        }
+
+        .building-item {
+            padding: 5px 0;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #bottom-right-minimap {
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 200px;
+            border: 2px solid #2e4a55;
+            background: rgba(0,0,0,0.8);
+        }
+
+        #wave-alert {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 24px;
+            font-weight: bold;
+            color: #fca5a5;
+            text-shadow: 0 0 10px red;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI Overlay matching the provided image -->
+    <div id="top-left-stats" class="ui-panel">
+        <h1>Zombie Cure: City Redemption</h1>
+        <div class="stat-row stat-healthy"><span>Healthy:</span> <span id="ui-healthy">1</span></div>
+        <div class="stat-row stat-infected"><span>Infected:</span> <span id="ui-infected">999,999</span></div>
+        <div class="stat-row stat-supplies"><span>⚙ Supplies:</span> <span id="ui-supplies">145</span></div>
+        <div class="stat-row stat-doses"><span>🧪 Doses:</span> <span id="ui-doses">18</span></div>
+    </div>
+
+    <div id="bottom-left-buildings" class="ui-panel">
+        <h2>Buildings</h2>
+        <div class="building-item">🧪 Antidote Lab</div>
+        <div class="building-item">📦 Supply Depot</div>
+        <div class="building-item">🚧 Barriers</div>
+    </div>
+
+    <div id="bottom-right-minimap">
+        <!-- Minimap rendering handled by canvas or left as placeholder -->
+    </div>
+
+    <div id="wave-alert">WAVE 1 APPROACHING</div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Dynamic Resizing
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Game State
+        const gameState = {
+            healthy: 1, // Start with Dr. Thorne
+            infected: 999999,
+            supplies: 145,
+            doses: 18,
+            wave: 1,
+            zombiesToSpawn: 50,
+            activeZombies: 0
+        };
+
+        // Camera / Zoom System
+        const camera = {
+            x: 0,
+            y: 0,
+            zoom: 1.0,
+            minZoom: 0.5,
+            maxZoom: 2.5
+        };
+
+        // Entities
+        const player = {
+            x: 0, y: 0, speed: 5, radius: 15,
+            color: '#fff',
+            cooldown: 0
+        };
+
+        const zombies = [];
+        const recovered = [];
+        const projectiles = []; // Healing beams/antidotes
+        const mapSize = 2000;
+
+        // Base/Resistance Lab Walls (Simplified for structural physics)
+        const walls = [
+            { x: -200, y: -200, w: 400, h: 20 },
+            { x: -200, y: 180, w: 150, h: 20 }, // Gap for entrance
+            { x: 50, y: 180, w: 150, h: 20 },
+            { x: -200, y: -200, w: 20, h: 400 },
+            { x: 180, y: -200, w: 20, h: 400 }
+        ];
+
+        // Input Handling (Gamepad + Keyboard fallback)
+        const keys = { w: false, a: false, s: false, d: false };
+        window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key)) keys[e.key] = true; });
+        window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+
+        function handleInput() {
+            let dx = 0, dy = 0;
+            let firing = false;
+            let aimX = 0, aimY = 0;
+
+            // Edge / Xbox Gamepad API
+            const gamepads = navigator.getGamepads();
+            const gp = gamepads[0]; // Assuming Player 1
+
+            if (gp) {
+                // Left Stick Movement (Deadzone check)
+                if (Math.abs(gp.axes[0]) > 0.2) dx = gp.axes[0];
+                if (Math.abs(gp.axes[1]) > 0.2) dy = gp.axes[1];
+
+                // Right Stick Aiming
+                if (Math.abs(gp.axes[2]) > 0.2) aimX = gp.axes[2];
+                if (Math.abs(gp.axes[3]) > 0.2) aimY = gp.axes[3];
+
+                // RT (Button 7) or A Button (Button 0) to fire antidote
+                if (gp.buttons[7].pressed || gp.buttons[0].pressed) {
+                    firing = true;
+                }
+
+                // LB / RB for Zoom Mechanic
+                if (gp.buttons[4].pressed) camera.zoom = Math.max(camera.minZoom, camera.zoom - 0.05); // Zoom out
+                if (gp.buttons[5].pressed) camera.zoom = Math.min(camera.maxZoom, camera.zoom + 0.05); // Zoom in
+            } else {
+                // Keyboard Fallback
+                if (keys.w) dy = -1;
+                if (keys.s) dy = 1;
+                if (keys.a) dx = -1;
+                if (keys.d) dx = 1;
+            }
+
+            // Normalize movement
+            if (dx !== 0 || dy !== 0) {
+                const len = Math.sqrt(dx*dx + dy*dy);
+                player.x += (dx/len) * player.speed;
+                player.y += (dy/len) * player.speed;
+            }
+
+            // Fire Healing Beam
+            if (firing && player.cooldown <= 0 && gameState.doses > 0 && (aimX !== 0 || aimY !== 0)) {
+                const angle = Math.atan2(aimY, aimX);
+                projectiles.push({
+                    x: player.x,
+                    y: player.y,
+                    vx: Math.cos(angle) * 15,
+                    vy: Math.sin(angle) * 15,
+                    life: 60
+                });
+                gameState.doses--;
+                player.cooldown = 15;
+            }
+
+            if (player.cooldown > 0) player.cooldown--;
+
+            // Camera smoothly follows player
+            camera.x += (player.x - camera.x) * 0.1;
+            camera.y += (player.y - camera.y) * 0.1;
+        }
+
+        // Wave Management
+        function spawnZombies() {
+            if (gameState.activeZombies < gameState.zombiesToSpawn && Math.random() < 0.05) {
+                // Spawn on edges of map
+                const angle = Math.random() * Math.PI * 2;
+                const dist = mapSize / 2;
+                zombies.push({
+                    x: Math.cos(angle) * dist,
+                    y: Math.sin(angle) * dist,
+                    speed: 1 + (gameState.wave * 0.2),
+                    hp: 1
+                });
+                gameState.activeZombies++;
+            }
+        }
+
+        // Update Logic
+        function update() {
+            handleInput();
+            spawnZombies();
+
+            // Projectiles
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                let p = projectiles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                
+                if (p.life <= 0) {
+                    projectiles.splice(i, 1);
+                    continue;
+                }
+
+                // Collision with Zombies
+                for (let j = zombies.length - 1; j >= 0; j--) {
+                    let z = zombies[j];
+                    let dist = Math.hypot(p.x - z.x, p.y - z.y);
+                    if (dist < 20) {
+                        // Cure Zombie
+                        gameState.infected--;
+                        gameState.healthy++;
+                        
+                        // Rare drop: New Scientist (Supplies multiplier)
+                        if (Math.random() < 0.05) {
+                            recovered.push({x: z.x, y: z.y, type: 'scientist'});
+                        } else {
+                            recovered.push({x: z.x, y: z.y, type: 'worker'});
+                        }
+
+                        zombies.splice(j, 1);
+                        projectiles.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+
+            // Zombie AI (Move towards center/player)
+            zombies.forEach(z => {
+                const angle = Math.atan2(player.y - z.y, player.x - z.x);
+                z.x += Math.cos(angle) * z.speed;
+                z.y += Math.sin(angle) * z.speed;
+            });
+
+            // Recovered AI (Passive supply gen & auto-heal)
+            recovered.forEach(r => {
+                // Wander slowly inside base
+                if (r.type === 'scientist' && Math.random() < 0.01) {
+                    gameState.supplies += 1;
+                }
+                if (r.type === 'worker' && gameState.supplies >= 5 && Math.random() < 0.005) {
+                    gameState.supplies -= 5;
+                    gameState.doses += 1; // Workers craft doses
+                }
+            });
+
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('ui-healthy').innerText = gameState.healthy.toLocaleString();
+            document.getElementById('ui-infected').innerText = gameState.infected.toLocaleString();
+            document.getElementById('ui-supplies').innerText = gameState.supplies.toLocaleString();
+            document.getElementById('ui-doses').innerText = gameState.doses.toLocaleString();
+        }
+
+        // Next-Gen Simulated Rendering (Lighting/Shadows)
+        function draw() {
+            ctx.fillStyle = '#1a1c23'; // Dark asphalt color
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            // Apply Camera Transform (handles the Zoom in/out)
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.scale(camera.zoom, camera.zoom);
+            ctx.translate(-camera.x, -camera.y);
+
+            // Draw Grid/Streets
+            ctx.strokeStyle = '#2d3748';
+            ctx.lineWidth = 2;
+            for(let i = -mapSize/2; i < mapSize/2; i+=100) {
+                ctx.beginPath(); ctx.moveTo(i, -mapSize/2); ctx.lineTo(i, mapSize/2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-mapSize/2, i); ctx.lineTo(mapSize/2, i); ctx.stroke();
+            }
+
+            // Draw Base/Walls
+            ctx.fillStyle = '#4a5568';
+            ctx.shadowColor = '#000';
+            ctx.shadowBlur = 15;
+            walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
+            ctx.shadowBlur = 0; // Reset
+
+            // Draw Recovered/Scientists
+            recovered.forEach(r => {
+                ctx.fillStyle = r.type === 'scientist' ? '#e2e8f0' : '#3b82f6';
+                ctx.beginPath();
+                ctx.arc(r.x, r.y, 12, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw Zombies
+            ctx.fillStyle = '#22c55e';
+            zombies.forEach(z => {
+                ctx.beginPath();
+                ctx.arc(z.x, z.y, 12, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw Player (Scientist)
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#fff';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Draw Projectiles (Glowing Healing Beams)
+            ctx.fillStyle = '#38bdf8';
+            ctx.shadowColor = '#7df9ff';
+            ctx.shadowBlur = 20;
+            projectiles.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            ctx.restore();
+        }
+
+        // Main Game Loop
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // Start
+        loop();
+    </script>
+</body>
+</html>
