@@ -54,7 +54,7 @@
         <div id="build-menu">
             <div id="tool-name">Road</div>
             <div id="tool-cost">Cost: $10</div>
-            <div class="controls-hint">◀ Keyboard Arrows ▶ : Change Tool | Space : Build | Backspace : Demolish</div>
+            <div class="controls-hint">◀ D-Pad ▶ : Change Tool | Ⓐ : Build | Ⓧ : Demolish</div>
         </div>
 
         <div id="ff-indicator">▶▶ SIMULATING (FAST FORWARD)</div>
@@ -64,15 +64,6 @@
             <div class="instructions">
                 <h3>Governor Override Activated:</h3>
                 <p>Take direct control of colonial zoning. Lay down roads, power, and RCI zones. Hold Fast Forward to watch your citizens build upon your foundations.</p>
-                <hr style="border-color: #555; margin: 15px 0;">
-                <b>Keyboard & Mouse Setup:</b><br>
-                ⌨️ <b>W/A/S/D:</b> Move Cursor & Camera<br>
-                ⌨️ <b>Mouse Drag:</b> Rotate Camera<br>
-                ⌨️ <b>Mouse Wheel:</b> Zoom Camera<br>
-                ⌨️ <b>Left/Right Arrows:</b> Select Zoning Tool<br>
-                ⌨️ <b>Spacebar:</b> Place Zone / Build<br>
-                ⌨️ <b>Backspace:</b> Bulldoze / Demolish<br>
-                ⌨️ <b>Shift (Hold):</b> FAST FORWARD Simulation<br>
                 <hr style="border-color: #555; margin: 15px 0;">
                 <b>Xbox Controller Setup:</b><br>
                 🎮 <b>Left Stick:</b> Move Cursor & Camera<br>
@@ -204,48 +195,24 @@
             ui.toolCost.innerText = `Cost: $${tool.cost}`;
         }
 
-        // Keyboard & Mouse Listeners
-        window.addEventListener('keydown', (e) => { keys[e.code] = true; });
-        window.addEventListener('keyup', (e) => { keys[e.code] = false; });
-        
-        // Mouse Controls for Camera
-        let isDragging = false;
-        let previousMousePosition = { x: 0, y: 0 };
-        
-        window.addEventListener('mousedown', () => { isDragging = true; });
-        window.addEventListener('mouseup', () => { isDragging = false; });
-        window.addEventListener('mousemove', (e) => {
-            if (isDragging && gameActive) {
-                const deltaMove = {
-                    x: e.offsetX - previousMousePosition.x,
-                    y: e.offsetY - previousMousePosition.y
-                };
-                
-                camTheta -= deltaMove.x * 0.01;
-                camPhi -= deltaMove.y * 0.01;
-                camPhi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, camPhi));
-            }
-            previousMousePosition = { x: e.offsetX, y: e.offsetY };
-        });
-
-        window.addEventListener('wheel', (e) => {
-            if (gameActive) {
-                camRadius += e.deltaY * 0.1;
-                camRadius = Math.max(20, Math.min(300, camRadius));
-            }
-        });
-
-        // Handle Input logic (Gamepad + Keyboard)
+        // Handle Input logic (Gamepad ONLY)
         function updateInput() {
-            // Safely fetch gamepads to prevent iframe security crashes
+            // Safely fetch gamepads to prevent crashes
             let gamepads = [];
             try {
                 if (navigator.getGamepads) gamepads = navigator.getGamepads();
             } catch (e) {
-                // Gamepad API blocked by browser/iframe policy
+                // Gamepad API blocked or unavailable
             }
 
-            const gp = gamepads && gamepads.length > 0 ? gamepads[0] : null;
+            // Find the first connected gamepad
+            let gp = null;
+            for (let i = 0; i < gamepads.length; i++) {
+                if (gamepads[i] && gamepads[i].connected) {
+                    gp = gamepads[i];
+                    break;
+                }
+            }
 
             // Safe helper to check button states without crashing if a controller has fewer buttons
             const btn = (index) => gp && gp.buttons && gp.buttons.length > index ? gp.buttons[index].pressed : false;
@@ -260,37 +227,26 @@
             // --- Tool Selection ---
             const dpadLeft = btn(14);
             const dpadRight = btn(15);
-            const keyLeft = keys['ArrowLeft'];
-            const keyRight = keys['ArrowRight'];
             
-            const leftPressed = dpadLeft || keyLeft;
-            const rightPressed = dpadRight || keyRight;
-
-            if (leftPressed && !prevButtons.left) {
+            if (dpadLeft && !prevButtons.left) {
                 currentToolIndex = (currentToolIndex - 1 + tools.length) % tools.length;
                 updateToolUI();
             }
-            if (rightPressed && !prevButtons.right) {
+            if (dpadRight && !prevButtons.right) {
                 currentToolIndex = (currentToolIndex + 1) % tools.length;
                 updateToolUI();
             }
-            prevButtons.left = leftPressed;
-            prevButtons.right = rightPressed;
+            prevButtons.left = dpadLeft;
+            prevButtons.right = dpadRight;
 
             // --- Fast Forward ---
-            isFastForward = btn(5) || keys['ShiftLeft'] || keys['ShiftRight'];
+            isFastForward = btn(5);
             ui.ff.style.display = isFastForward ? 'block' : 'none';
 
             // --- Camera / Cursor Movement ---
             const deadzone = 0.2;
             let panX = axis(0);
             let panY = axis(1);
-
-            // Keyboard overrides
-            if (keys['KeyA']) panX = -1;
-            if (keys['KeyD']) panX = 1;
-            if (keys['KeyW']) panY = -1;
-            if (keys['KeyS']) panY = 1;
             
             if (Math.abs(panX) > deadzone || Math.abs(panY) > deadzone) {
                 // Move based on camera orientation
@@ -324,8 +280,8 @@
             }
 
             // --- Building & Demolishing ---
-            const btnA = btn(0) || keys['Space'];
-            const btnX = btn(2) || keys['Backspace'];
+            const btnA = btn(0);
+            const btnX = btn(2);
             const gridKey = `${cursor.position.x},${cursor.position.z}`;
 
             if (btnA && !prevButtons.btnA) {
