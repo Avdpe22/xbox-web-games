@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Planet Rebuild 3D - Xbox Edition</title>
+    <title>Planet Rebuild 3D - City Builder</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
         canvas { display: block; width: 100vw; height: 100vh; }
@@ -12,78 +12,130 @@
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
         
         /* HUD */
-        #hud { position: absolute; top: 20px; left: 20px; color: white; text-shadow: 2px 2px 0 #000; display: none; background: rgba(0,0,0,0.6); padding: 15px; border: 2px solid #555; border-radius: 8px; }
-        .hud-stat { font-size: 24px; margin: 5px 0; font-weight: bold; color: #4DA6FF; }
-        #ff-indicator { position: absolute; top: 20px; right: 20px; color: #FF3366; font-size: 30px; font-weight: bold; display: none; text-shadow: 2px 2px 0 #000; animation: blink 1s infinite; }
+        #hud { position: absolute; top: 20px; left: 20px; color: white; text-shadow: 2px 2px 0 #000; display: none; background: rgba(0,0,0,0.6); padding: 15px; border: 2px solid #555; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+        .hud-stat { font-size: 22px; margin: 5px 0; font-weight: bold; color: #4DA6FF; }
+        .hud-demand { display: flex; align-items: center; margin-top: 10px; font-size: 14px; color: #ddd; }
+        .demand-bar { height: 10px; width: 50px; background: #333; margin-left: 10px; border: 1px solid #000; }
+        .demand-fill { height: 100%; }
         
+        #ff-indicator { position: absolute; top: 20px; right: 20px; color: #FF3366; font-size: 30px; font-weight: bold; display: none; text-shadow: 2px 2px 0 #000; animation: blink 0.5s infinite; }
+        
+        /* Build Menu */
+        #build-menu { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: none; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 12px; border: 2px solid #555; text-align: center; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        #tool-name { font-size: 28px; font-weight: bold; color: #FFAA00; text-transform: uppercase; margin-bottom: 5px;}
+        #tool-cost { font-size: 18px; color: #aaa; }
+        .controls-hint { margin-top: 10px; font-size: 14px; color: #888; }
+
         /* Start Screen */
         #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; pointer-events: auto; }
-        h1 { font-size: 48px; color: #FFAA00; text-transform: uppercase; letter-spacing: 2px; }
-        .instructions { background: rgba(255,255,255,0.1); padding: 30px; border-radius: 10px; border: 1px solid #555; max-width: 600px; text-align: left; font-size: 20px; line-height: 1.6; }
-        .btn { margin-top: 30px; padding: 15px 40px; font-size: 24px; background: #0078D7; border: none; color: white; border-radius: 5px; cursor: pointer; }
-        .btn:hover { background: #1084E3; }
+        h1 { font-size: 54px; color: #FFAA00; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; text-shadow: 0 0 20px rgba(255,170,0,0.5); }
+        .instructions { background: rgba(255,255,255,0.1); padding: 30px; border-radius: 10px; border: 1px solid #555; max-width: 650px; text-align: left; font-size: 20px; line-height: 1.6; backdrop-filter: blur(5px); }
+        .btn { margin-top: 30px; padding: 15px 40px; font-size: 24px; background: #0078D7; border: none; color: white; border-radius: 5px; cursor: pointer; transition: 0.2s; box-shadow: 0 0 15px rgba(0,120,215,0.5); }
+        .btn:hover { background: #1084E3; transform: scale(1.05); }
         
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
     </style>
-    <!-- Load Three.js for 3D Graphics -->
+    <!-- Load Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
     <div id="ui-layer">
         <div id="hud">
-            <div class="hud-stat">Population: <span id="pop-val">14,876</span></div>
-            <div class="hud-stat">Funds: $<span id="funds-val">321,500</span></div>
-            <div class="hud-stat">Year: <span id="year-val">34</span></div>
+            <div class="hud-stat">Population: <span id="pop-val">0</span></div>
+            <div class="hud-stat">Funds: $<span id="funds-val">50,000</span></div>
+            <div class="hud-stat">Date: Year <span id="year-val">1</span></div>
+            <hr style="border-color:#444; margin: 10px 0;">
+            <div class="hud-demand">R-Demand <div class="demand-bar"><div class="demand-fill" style="width:80%; background:#4CAF50;"></div></div></div>
+            <div class="hud-demand">C-Demand <div class="demand-bar"><div class="demand-fill" style="width:60%; background:#2196F3;"></div></div></div>
+            <div class="hud-demand">I-Demand <div class="demand-bar"><div class="demand-fill" style="width:70%; background:#FFC107;"></div></div></div>
         </div>
-        <div id="ff-indicator">▶▶ FAST FORWARDING</div>
+
+        <div id="build-menu">
+            <div id="tool-name">Road</div>
+            <div id="tool-cost">Cost: $10</div>
+            <div class="controls-hint">◀ Keyboard Arrows ▶ : Change Tool | Space : Build | Backspace : Demolish</div>
+        </div>
+
+        <div id="ff-indicator">▶▶ SIMULATING (FAST FORWARD)</div>
         
         <div id="start-screen">
-            <h1>Planet Rebuild 3D</h1>
+            <h1>Planet Rebuild</h1>
             <div class="instructions">
-                <h3>Commander Instructions:</h3>
-                <p>Welcome to Aethelgard. Your objective is to oversee the expansion of the colony. The base foundation is laid.</p>
+                <h3>Governor Override Activated:</h3>
+                <p>Take direct control of colonial zoning. Lay down roads, power, and RCI zones. Hold Fast Forward to watch your citizens build upon your foundations.</p>
+                <hr style="border-color: #555; margin: 15px 0;">
+                <b>Keyboard & Mouse Setup:</b><br>
+                ⌨️ <b>W/A/S/D:</b> Move Cursor & Camera<br>
+                ⌨️ <b>Mouse Drag:</b> Rotate Camera<br>
+                ⌨️ <b>Mouse Wheel:</b> Zoom Camera<br>
+                ⌨️ <b>Left/Right Arrows:</b> Select Zoning Tool<br>
+                ⌨️ <b>Spacebar:</b> Place Zone / Build<br>
+                ⌨️ <b>Backspace:</b> Bulldoze / Demolish<br>
+                ⌨️ <b>Shift (Hold):</b> FAST FORWARD Simulation<br>
                 <hr style="border-color: #555; margin: 15px 0;">
                 <b>Xbox Controller Setup:</b><br>
-                🎮 <b>Left Stick:</b> Pan Camera (Google Earth view)<br>
-                🎮 <b>Right Stick:</b> Rotate & Pitch Camera<br>
-                🎮 <b>LT / RT (Triggers):</b> Zoom In / Out<br>
-                🎮 <b>RB (Right Bumper):</b> FAST FORWARD Simulation<br>
-                🎮 <b>Start (Menu Button):</b> Begin Operation
+                🎮 <b>Left Stick:</b> Move Cursor & Camera<br>
+                🎮 <b>Right Stick / LT RT:</b> Rotate & Zoom Camera<br>
+                🎮 <b>D-Pad Left/Right:</b> Select Zoning Tool<br>
+                🎮 <b>A Button:</b> Place Zone / Build<br>
+                🎮 <b>X Button:</b> Bulldoze / Demolish<br>
+                🎮 <b>RB (Hold):</b> FAST FORWARD Simulation
             </div>
             <button class="btn" onclick="startGame()">PRESS START (or Click Here)</button>
         </div>
     </div>
 
     <script>
-        // --- 1. GAME STATE & SETUP ---
+        // --- 1. GAME STATE ---
         let gameActive = false;
         let isFastForward = false;
-        let population = 14876;
-        let funds = 321500;
-        let year = 34;
+        let population = 0;
+        let funds = 50000;
+        let year = 1;
         let timeTick = 0;
-        let buildings = [];
+        
+        const GRID_SIZE = 5; // Size of one tile
+        const worldGrid = new Map(); // Stores built objects
+        
+        // Tools Array (SC2000 Vibes)
+        const tools = [
+            { name: "Road", cost: 10, color: 0x333333, type: 'road' },
+            { name: "Residential Zone", cost: 100, color: 0x4CAF50, type: 'R' },
+            { name: "Commercial Zone", cost: 100, color: 0x2196F3, type: 'C' },
+            { name: "Industrial Zone", cost: 100, color: 0xFFC107, type: 'I' },
+            { name: "Power Plant", cost: 1500, color: 0xAAAAAA, type: 'power' }
+        ];
+        let currentToolIndex = 0;
+
+        // Input State Memory
+        let prevButtons = {};
+        const keys = {};
 
         // UI Elements
-        const startScreen = document.getElementById('start-screen');
-        const hud = document.getElementById('hud');
-        const ffIndicator = document.getElementById('ff-indicator');
-        const popEl = document.getElementById('pop-val');
-        const fundsEl = document.getElementById('funds-val');
-        const yearEl = document.getElementById('year-val');
+        const ui = {
+            start: document.getElementById('start-screen'),
+            hud: document.getElementById('hud'),
+            ff: document.getElementById('ff-indicator'),
+            menu: document.getElementById('build-menu'),
+            pop: document.getElementById('pop-val'),
+            funds: document.getElementById('funds-val'),
+            year: document.getElementById('year-val'),
+            toolName: document.getElementById('tool-name'),
+            toolCost: document.getElementById('tool-cost')
+        };
 
-        // --- 2. THREE.JS SCENE (Next-Gen Vibe) ---
+        // --- 2. THREE.JS SETUP ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050510); // Deep space
-        scene.fog = new THREE.FogExp2(0x050510, 0.002);
+        scene.background = new THREE.Color(0x0a0a1a); // Dark space sky
+        scene.fog = new THREE.FogExp2(0x0a0a1a, 0.0015);
 
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        // Initial Google-earth style vantage point
-        let camTarget = new THREE.Vector3(0, 0, 0);
-        let camRadius = 150;
-        let camTheta = Math.PI / 4; // Angle around Y axis
-        let camPhi = Math.PI / 3;   // Angle up from XZ plane
+        
+        let camTarget = new THREE.Vector3(0, 0, 0); // Where cursor is
+        let camRadius = 120;
+        let camTheta = Math.PI / 4; 
+        let camPhi = Math.PI / 3;   
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -91,12 +143,12 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
-        // Lighting (PBR readiness)
-        const ambientLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
+        // Lighting (PBR)
+        const ambientLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
         scene.add(ambientLight);
 
         const dirLight = new THREE.DirectionalLight(0xffddaa, 1.2);
-        dirLight.position.set(100, 200, -50);
+        dirLight.position.set(150, 200, 50);
         dirLight.castShadow = true;
         dirLight.shadow.camera.left = -200;
         dirLight.shadow.camera.right = 200;
@@ -106,177 +158,331 @@
         dirLight.shadow.mapSize.height = 2048;
         scene.add(dirLight);
 
-        // --- 3. SCENE GENERATION (Replicating the Image) ---
-        // Terrain (Mars-like Red/Brown)
-        const geoTerrain = new THREE.PlaneGeometry(500, 500, 32, 32);
-        // Add some noise to terrain for 3D effect
-        const posAttribute = geoTerrain.attributes.position;
-        for (let i = 0; i < posAttribute.count; i++) {
-            let z = posAttribute.getZ(i);
-            posAttribute.setZ(i, z + (Math.random() * 2 - 1));
-        }
-        geoTerrain.computeVertexNormals();
-        
-        const matTerrain = new THREE.MeshStandardMaterial({ 
-            color: 0x8B3A22, 
-            roughness: 0.9, 
-            metalness: 0.1 
-        });
+        // Environment (Mars/Wasteland base)
+        const geoTerrain = new THREE.PlaneGeometry(600, 600, 64, 64);
+        const matTerrain = new THREE.MeshStandardMaterial({ color: 0x7a3a22, roughness: 0.9, metalness: 0.0 });
         const terrain = new THREE.Mesh(geoTerrain, matTerrain);
         terrain.rotation.x = -Math.PI / 2;
         terrain.receiveShadow = true;
         scene.add(terrain);
 
-        // Water/River
-        const geoRiver = new THREE.PlaneGeometry(400, 20);
-        const matRiver = new THREE.MeshStandardMaterial({ color: 0x005577, roughness: 0.1, metalness: 0.8 });
+        // A simple river cutting across
+        const geoRiver = new THREE.PlaneGeometry(800, 40);
+        const matRiver = new THREE.MeshPhysicalMaterial({ color: 0x006688, roughness: 0.1, transmission: 0.5, transparent: true });
         const river = new THREE.Mesh(geoRiver, matRiver);
         river.rotation.x = -Math.PI / 2;
-        river.rotation.z = Math.PI / 4;
-        river.position.y = 0.5;
-        river.receiveShadow = true;
+        river.rotation.z = Math.PI / 6;
+        river.position.y = 0.1;
         scene.add(river);
 
-        // Generate City Base
-        const colors = [0xaaaaaa, 0x4466ff, 0x55aa55, 0xffaa33]; // Concrete, Glass, Parks, Ind.
-        for(let i=0; i<150; i++) {
-            let width = 2 + Math.random() * 4;
-            let depth = 2 + Math.random() * 4;
-            let height = 2 + Math.random() * 10;
-            
-            // Keep buildings near center
-            let x = (Math.random() - 0.5) * 120;
-            let z = (Math.random() - 0.5) * 120;
+        // 3D Grid Helper
+        const gridHelper = new THREE.GridHelper(600, 120, 0x000000, 0x000000);
+        gridHelper.material.opacity = 0.2;
+        gridHelper.material.transparent = true;
+        gridHelper.position.y = 0.2;
+        scene.add(gridHelper);
 
-            const geoBldg = new THREE.BoxGeometry(width, height, depth);
-            const matBldg = new THREE.MeshStandardMaterial({ 
-                color: colors[Math.floor(Math.random() * colors.length)],
-                roughness: 0.4,
-                metalness: 0.3
-            });
-            const bldg = new THREE.Mesh(geoBldg, matBldg);
-            bldg.position.set(x, height/2, z);
-            bldg.castShadow = true;
-            bldg.receiveShadow = true;
-            
-            // Store for fast-forward animation
-            bldg.userData = { targetHeight: height, originalY: height/2 };
-            buildings.push(bldg);
-            scene.add(bldg);
+        // Building Cursor (Highlight Box)
+        const cursorGeo = new THREE.BoxGeometry(GRID_SIZE, 0.5, GRID_SIZE);
+        const cursorMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true, transparent: true, opacity: 0.8 });
+        const cursor = new THREE.Mesh(cursorGeo, cursorMat);
+        cursor.position.set(0, 0.25, 0);
+        scene.add(cursor);
+
+        function startGame() {
+            gameActive = true;
+            ui.start.style.display = 'none';
+            ui.hud.style.display = 'block';
+            ui.menu.style.display = 'block';
+            updateToolUI();
         }
 
-        // --- 4. GAMEPAD / XBOX CONTROLLER INPUT ---
-        function updateGamepad() {
-            const gamepads = navigator.getGamepads();
-            if (!gamepads || !gamepads[0]) return;
-            const gp = gamepads[0];
+        function updateToolUI() {
+            const tool = tools[currentToolIndex];
+            ui.toolName.innerText = tool.name;
+            ui.toolName.style.color = '#' + tool.color.toString(16).padStart(6, '0');
+            ui.toolCost.innerText = `Cost: $${tool.cost}`;
+        }
 
-            // START BUTTON (Button 9)
-            if (gp.buttons[9].pressed && !gameActive) {
-                startGame();
+        // Keyboard & Mouse Listeners
+        window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+        window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+        
+        // Mouse Controls for Camera
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        
+        window.addEventListener('mousedown', () => { isDragging = true; });
+        window.addEventListener('mouseup', () => { isDragging = false; });
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging && gameActive) {
+                const deltaMove = {
+                    x: e.offsetX - previousMousePosition.x,
+                    y: e.offsetY - previousMousePosition.y
+                };
+                
+                camTheta -= deltaMove.x * 0.01;
+                camPhi -= deltaMove.y * 0.01;
+                camPhi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, camPhi));
+            }
+            previousMousePosition = { x: e.offsetX, y: e.offsetY };
+        });
+
+        window.addEventListener('wheel', (e) => {
+            if (gameActive) {
+                camRadius += e.deltaY * 0.1;
+                camRadius = Math.max(20, Math.min(300, camRadius));
+            }
+        });
+
+        // Handle Input logic (Gamepad + Keyboard)
+        function updateInput() {
+            // Safely fetch gamepads to prevent iframe security crashes
+            let gamepads = [];
+            try {
+                if (navigator.getGamepads) gamepads = navigator.getGamepads();
+            } catch (e) {
+                // Gamepad API blocked by browser/iframe policy
             }
 
-            if (!gameActive) return;
+            const gp = gamepads && gamepads.length > 0 ? gamepads[0] : null;
 
-            // RIGHT BUMPER (Button 5) - FAST FORWARD
-            isFastForward = gp.buttons[5].pressed;
-            ffIndicator.style.display = isFastForward ? 'block' : 'none';
+            // Safe helper to check button states without crashing if a controller has fewer buttons
+            const btn = (index) => gp && gp.buttons && gp.buttons.length > index ? gp.buttons[index].pressed : false;
+            const axis = (index) => gp && gp.axes && gp.axes.length > index ? gp.axes[index] : 0;
+            const trigger = (index) => gp && gp.buttons && gp.buttons.length > index ? gp.buttons[index].value : 0;
 
-            // LEFT STICK (Axes 0, 1) - PANNING (Google Earth Style)
-            const deadzone = 0.15;
-            let panX = gp.axes[0];
-            let panY = gp.axes[1];
+            if (!gameActive) {
+                 if (btn(9)) startGame(); // Start button (Menu)
+                 return;
+            }
+
+            // --- Tool Selection ---
+            const dpadLeft = btn(14);
+            const dpadRight = btn(15);
+            const keyLeft = keys['ArrowLeft'];
+            const keyRight = keys['ArrowRight'];
+            
+            const leftPressed = dpadLeft || keyLeft;
+            const rightPressed = dpadRight || keyRight;
+
+            if (leftPressed && !prevButtons.left) {
+                currentToolIndex = (currentToolIndex - 1 + tools.length) % tools.length;
+                updateToolUI();
+            }
+            if (rightPressed && !prevButtons.right) {
+                currentToolIndex = (currentToolIndex + 1) % tools.length;
+                updateToolUI();
+            }
+            prevButtons.left = leftPressed;
+            prevButtons.right = rightPressed;
+
+            // --- Fast Forward ---
+            isFastForward = btn(5) || keys['ShiftLeft'] || keys['ShiftRight'];
+            ui.ff.style.display = isFastForward ? 'block' : 'none';
+
+            // --- Camera / Cursor Movement ---
+            const deadzone = 0.2;
+            let panX = axis(0);
+            let panY = axis(1);
+
+            // Keyboard overrides
+            if (keys['KeyA']) panX = -1;
+            if (keys['KeyD']) panX = 1;
+            if (keys['KeyW']) panY = -1;
+            if (keys['KeyS']) panY = 1;
             
             if (Math.abs(panX) > deadzone || Math.abs(panY) > deadzone) {
-                // Calculate movement relative to camera angle
+                // Move based on camera orientation
                 let forward = new THREE.Vector3(camTarget.x - camera.position.x, 0, camTarget.z - camera.position.z).normalize();
                 let right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).normalize();
                 
-                let speed = camRadius * 0.01; 
+                let speed = 2.0; 
                 camTarget.add(right.multiplyScalar(panX * speed));
-                camTarget.add(forward.multiplyScalar(-panY * speed)); // Invert Y for standard stick feel
+                camTarget.add(forward.multiplyScalar(-panY * speed)); 
+                
+                // Snap cursor to grid
+                cursor.position.x = Math.floor(camTarget.x / GRID_SIZE) * GRID_SIZE + (GRID_SIZE/2);
+                cursor.position.z = Math.floor(camTarget.z / GRID_SIZE) * GRID_SIZE + (GRID_SIZE/2);
             }
 
-            // RIGHT STICK (Axes 2, 3) - ROTATION / VANTAGE
-            let rotX = gp.axes[2];
-            let rotY = gp.axes[3];
-            if (Math.abs(rotX) > deadzone) camTheta -= rotX * 0.03;
-            if (Math.abs(rotY) > deadzone) {
-                camPhi -= rotY * 0.03;
-                // Clamp vantage point so we don't go under ground or straight down
-                camPhi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, camPhi)); 
+            // --- Camera Orbit (Gamepad Right Stick) & Zoom (Triggers) ---
+            if (gp) {
+                let rotX = axis(2);
+                let rotY = axis(3);
+                if (Math.abs(rotX) > deadzone) camTheta -= rotX * 0.04;
+                if (Math.abs(rotY) > deadzone) {
+                    camPhi -= rotY * 0.04;
+                    camPhi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, camPhi)); 
+                }
+
+                let zoomIn = trigger(7); // RT
+                let zoomOut = trigger(6); // LT
+                if (zoomIn > 0.1) camRadius -= zoomIn * 3;
+                if (zoomOut > 0.1) camRadius += zoomOut * 3;
+                camRadius = Math.max(20, Math.min(300, camRadius));
             }
 
-            // TRIGGERS (Axes or Buttons depending on OS, usually Buttons 6 and 7)
-            let zoomIn = gp.buttons[7].value; // RT
-            let zoomOut = gp.buttons[6].value; // LT
-            if (zoomIn > 0.1) camRadius -= zoomIn * 2;
-            if (zoomOut > 0.1) camRadius += zoomOut * 2;
-            camRadius = Math.max(20, Math.min(300, camRadius)); // Clamp Zoom
+            // --- Building & Demolishing ---
+            const btnA = btn(0) || keys['Space'];
+            const btnX = btn(2) || keys['Backspace'];
+            const gridKey = `${cursor.position.x},${cursor.position.z}`;
+
+            if (btnA && !prevButtons.btnA) {
+                const tool = tools[currentToolIndex];
+                if (!worldGrid.has(gridKey) && funds >= tool.cost) {
+                    funds -= tool.cost;
+                    placeObject(cursor.position.x, cursor.position.z, tool);
+                    ui.funds.innerText = funds.toLocaleString();
+                }
+            }
+            if (btnX && !prevButtons.btnX) {
+                if (worldGrid.has(gridKey)) {
+                    const obj = worldGrid.get(gridKey);
+                    scene.remove(obj.mesh);
+                    worldGrid.delete(gridKey);
+                    // Refund a tiny bit
+                    funds += 5;
+                    ui.funds.innerText = funds.toLocaleString();
+                }
+            }
+            prevButtons.btnA = btnA;
+            prevButtons.btnX = btnX;
+        }
+
+        function placeObject(x, z, tool) {
+            let mesh;
+            
+            if (tool.type === 'road') {
+                const geo = new THREE.BoxGeometry(GRID_SIZE, 0.4, GRID_SIZE);
+                const mat = new THREE.MeshStandardMaterial({ color: tool.color, roughness: 0.8 });
+                mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, 0.2, z);
+            } else if (tool.type === 'power') {
+                // Sci-fi Power Plant shape
+                const geo = new THREE.CylinderGeometry(2, 2.5, 8, 8);
+                const mat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.8 });
+                mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, 4, z);
+                mesh.castShadow = true;
+            } else {
+                // R, C, or I Zone (Flat tile waiting to grow)
+                const geo = new THREE.BoxGeometry(GRID_SIZE * 0.9, 0.2, GRID_SIZE * 0.9);
+                const mat = new THREE.MeshStandardMaterial({ color: tool.color });
+                mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, 0.1, z);
+            }
+
+            scene.add(mesh);
+            worldGrid.set(`${x},${z}`, { 
+                type: tool.type, 
+                level: 0, 
+                mesh: mesh,
+                x: x, z: z,
+                color: tool.color
+            });
+        }
+
+        // Simulates the growth of the city
+        function simulateCity() {
+            if (!gameActive) return;
+            
+            // Simulation runs much faster when holding RB/Shift
+            const speed = isFastForward ? 30 : 1;
+            timeTick += speed;
+
+            if (timeTick > 100) {
+                timeTick = 0;
+                year += isFastForward ? 1 : 0;
+                
+                // Collect taxes and grow population
+                let income = 0;
+                let popGrowth = 0;
+
+                // Iterate through built grid
+                worldGrid.forEach((data, key) => {
+                    // Roads and Power don't grow
+                    if (data.type === 'road' || data.type === 'power') return;
+
+                    // Chance for a zone to upgrade/grow based on level
+                    const upgradeChance = isFastForward ? 0.3 : 0.05;
+                    
+                    if (Math.random() < upgradeChance && data.level < 5) {
+                        data.level++;
+                        popGrowth += data.level * 10;
+                        
+                        // Create a new 3D building geometry to replace the flat zone
+                        scene.remove(data.mesh);
+                        
+                        // Height depends on level and zone type (Commercial highest, Residential varied)
+                        let h = (Math.random() * 3 + 2) * data.level;
+                        if (data.type === 'C') h *= 1.5;
+                        if (data.type === 'I') h *= 0.8;
+
+                        // Create building block
+                        const bGeo = new THREE.BoxGeometry(GRID_SIZE * 0.8, h, GRID_SIZE * 0.8);
+                        
+                        // Differentiate visuals based on RCI
+                        let bMat;
+                        if (data.type === 'R') {
+                            bMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.6 }); // White/Grey houses
+                        } else if (data.type === 'C') {
+                            bMat = new THREE.MeshStandardMaterial({ color: 0x4466ff, metalness: 0.8, roughness: 0.2 }); // Glassy offices
+                        } else {
+                            bMat = new THREE.MeshStandardMaterial({ color: 0x887766, roughness: 0.9 }); // Brown/dirty industry
+                        }
+
+                        data.mesh = new THREE.Mesh(bGeo, bMat);
+                        // Pop-up animation start state
+                        data.mesh.scale.y = 0.1;
+                        data.mesh.userData.targetHeight = h;
+                        
+                        data.mesh.position.set(data.x, 0, data.z);
+                        data.mesh.castShadow = true;
+                        data.mesh.receiveShadow = true;
+                        scene.add(data.mesh);
+                    }
+
+                    // Generate income based on level
+                    income += data.level * (data.type === 'C' ? 5 : 2);
+                });
+
+                population += popGrowth;
+                funds += income;
+
+                ui.pop.innerText = population.toLocaleString();
+                ui.funds.innerText = funds.toLocaleString();
+                ui.year.innerText = year;
+            }
+
+            // Animate building growth smoothly (Pop-up effect)
+            worldGrid.forEach((data) => {
+                if (data.level > 0 && data.mesh.scale.y < 1) {
+                    data.mesh.scale.y += 0.1;
+                    data.mesh.position.y = (data.mesh.userData.targetHeight * data.mesh.scale.y) / 2;
+                }
+            });
         }
 
         function updateCamera() {
-            // Spherical to Cartesian for Orbit/Vantage View
             camera.position.x = camTarget.x + camRadius * Math.sin(camPhi) * Math.sin(camTheta);
             camera.position.y = camTarget.y + camRadius * Math.cos(camPhi);
             camera.position.z = camTarget.z + camRadius * Math.sin(camPhi) * Math.cos(camTheta);
             camera.lookAt(camTarget);
         }
 
-        // --- 5. GAME LOGIC ---
-        function startGame() {
-            gameActive = true;
-            startScreen.style.display = 'none';
-            hud.style.display = 'block';
-        }
-
-        function runSimulation() {
-            if (!gameActive) return;
-            
-            // Normal speed vs Fast Forward speed
-            let speedMult = isFastForward ? 50 : 1;
-            timeTick += speedMult;
-
-            if (timeTick > 100) {
-                timeTick = 0;
-                // Increase Stats
-                year += isFastForward ? 1 : 0; // Years only pass quickly in FF
-                population += Math.floor(Math.random() * 50 * speedMult);
-                funds += Math.floor(Math.random() * 2000 * speedMult);
-                
-                popEl.innerText = population.toLocaleString();
-                fundsEl.innerText = funds.toLocaleString();
-                yearEl.innerText = year;
-
-                // Visual simulation (Buildings grow when fast forwarding)
-                if (isFastForward) {
-                    buildings.forEach(b => {
-                        if (Math.random() > 0.95) { // Random chance for a building to upgrade
-                            b.userData.targetHeight += Math.random() * 5;
-                        }
-                    });
-                }
-            }
-
-            // Animate building growth smoothly
-            buildings.forEach(b => {
-                if (b.scale.y * b.geometry.parameters.height < b.userData.targetHeight) {
-                    b.scale.y += 0.05;
-                    b.position.y = (b.geometry.parameters.height * b.scale.y) / 2;
-                }
-            });
-        }
-
-        // --- 6. RENDER LOOP ---
         function animate() {
             requestAnimationFrame(animate);
-            updateGamepad();
+            updateInput();
             updateCamera();
-            runSimulation();
+            simulateCity();
+            
+            // Make cursor pulse
+            cursor.material.opacity = 0.5 + Math.sin(Date.now() * 0.005) * 0.3;
+
             renderer.render(scene, camera);
         }
 
-        // Handle browser resize
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
