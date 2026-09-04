@@ -801,7 +801,7 @@
             let dt = (timestamp - lastTime) / 1000;
             if(dt > 0.1) dt = 0.1; // Cap delta time to prevent physics clipping on lag
             lastTime = timestamp;
-
+//QUICK check
             if (gameState.started) {
                 update(dt);
                 draw();
