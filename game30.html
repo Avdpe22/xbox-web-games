@@ -218,6 +218,25 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
 #travel-ui p { font-size: .75em; margin:8px 0 0; }
 #travel-ui .bar-bg { max-width:500px; margin:8px auto; }
 
+
+#game-container { overflow:hidden; }
+#location-screen { background: #101d2e; overflow:auto; justify-content:center; }
+#location-screen h1 { text-shadow:none; margin:10px 0; font-size:clamp(28px,4vw,52px); }
+.eyebrow { color:#facc15; letter-spacing:4px; font-size:12px; font-weight:900; }
+#location-screen p { background:none; margin:0 0 18px; padding:0; color:#bac9d9; font-size:16px; }
+.room-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; width:min(1050px,100%); }
+.room-card { padding:0; overflow:hidden; border:2px solid #40516a; border-radius:18px; background:#203149; color:white; text-align:left; transition:transform .15s,border-color .15s; }
+.room-card.selected { border-color:#facc15; box-shadow:0 0 0 3px #facc152a; transform:translateY(-5px); }
+.room-card canvas { width:100%; height:auto; aspect-ratio:16/10; }
+.room-copy { display:block; padding:20px; }
+.room-copy small { color:#facc15; letter-spacing:2px; font-size:11px; }
+.room-copy strong { display:block; font-size:24px; margin:8px 0; }
+.room-copy span { display:block; color:#c3d0df; font-size:14px; line-height:1.6; min-height:45px; }
+#deploy-btn { margin:24px 0 12px; font-size:18px; }
+#room-label { position:absolute; top:21vh; left:4vw; background:#102033dd; border-left:3px solid #facc15; padding:8px 12px; font-size:13px; pointer-events:none; }
+.secondary-btn { padding:12px 20px; margin-top:16px; background:#26364b; color:white; border:1px solid #718096; border-radius:12px; }
+@media(max-width:650px) { .room-grid { gap:8px; } .room-copy { padding:10px; } .room-copy strong { font-size:16px; } .room-copy span { font-size:11px; } #location-screen { padding:20px 12px; } #room-label { top:15vh; font-size:11px; } }
+@media(max-height:550px) { #location-screen { justify-content:flex-start; padding:16px; } .room-card canvas { max-height:110px; } .room-copy { padding:10px; } #deploy-btn { margin:12px; } }
 </style>
 </head>
 <body>
@@ -225,8 +244,9 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
 <div id="game-container">
     <canvas id="gameCanvas" aria-label="Toy Room battle scene"></canvas>
 <div id="controller-status" role="status">Press a controller button to connect</div>
-<div id="toolbar"><button id="march-btn" hidden>Stop marching (A)</button><button id="pause-btn">Pause (Y / P)</button><button id="crate-btn">Supply (X)</button><button id="fullscreen-btn">Fullscreen</button></div>
-<div id="pause-screen" class="overlay" hidden><h1>Paused</h1><p>Press A, Y or P to resume.</p><button id="resume-btn" class="btn">Resume</button></div>
+<div id="toolbar"><button id="march-btn" hidden>Stop marching (A)</button><button id="pause-btn">Pause (Y / P)</button><button id="crate-btn">Supply (X)</button><button id="music-btn" aria-pressed="true">Music: on</button><button id="fullscreen-btn">Fullscreen</button></div>
+<div id="room-label" hidden></div>
+<div id="pause-screen" class="overlay" hidden><h1>Paused</h1><p>Press A, Y or P to resume.</p><button id="resume-btn" class="btn">Resume</button><button id="change-room-btn" class="secondary-btn">Choose location · starts a new squad</button></div>
     
     <div id="controls-hint">
         <b>Controller / Keyboard</b><br>
@@ -253,7 +273,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
                 <span id="boss-name" style="font-size: 1.2rem; font-family:'Fredoka One', cursive;">Mech Boss</span>
                 <span id="boss-hp-text">100/100</span>
             </div>
-            <div style="font-size: 0.8rem;">Battery Level</div>
+            <div id="boss-tactic" style="font-size: .8rem; margin-bottom:6px;"></div><div style="font-size: 0.8rem;">Battery Level</div>
             <div class="bar-bg"><div class="hp-fill" id="boss-hp"></div></div>
             <div class="bar-bg" style="height:4px; margin-top:2px;"><div class="atb-fill" id="boss-atb" style="background:#ef4444;"></div></div>
         </div>
@@ -264,14 +284,22 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         </div>
     </div>
 
+    <div id="location-screen" class="overlay" hidden>
+        <div class="eyebrow">TOY ROOM RPG / MISSION SELECT</div>
+        <h1>Small squad. Big adventure.</h1>
+        <p>Choose your location. Three encounters. One room to reclaim.</p>
+        <div id="room-grid" class="room-grid"></div>
+        <button id="deploy-btn" class="btn">Deploy to Playroom</button>
+        <p>← → / D-pad: choose · A / Enter: deploy · B / Esc: title</p>
+    </div>
     <!-- Screens -->
     <div id="start-screen" class="overlay">
         <h1>Toy Room RPG</h1>
         <p class="mb-6 text-xl font-bold bg-black/50 p-4 rounded-xl text-center">
-            March across the playroom and defeat three Mechs! Open crates<br>
+            Choose one of three rooms and defeat its Mechs! Open crates<br>
             to recruit soldiers and call in Artillery. Your squad travels together.<br><small>Xbox: open this page over HTTPS in Edge. Enable game controls<br>in the browser menu if the controller moves the browser cursor.</small>
         </p>
-        <button id="start-btn" class="btn">Start Game (Press A / Space)</button>
+        <button id="start-btn" class="btn">Choose location (A / Space)</button>
     </div>
 
     <div id="game-over-screen" class="overlay" style="display: none;">
@@ -301,7 +329,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    const GameState = { MENU: 0, PLAYING: 1, TURN_WAIT: 2, ANIMATING: 3, GAME_OVER: 4, ROUND_END: 5, TRAVEL: 6 };
+    const GameState = { MENU: 0, PLAYING: 1, TURN_WAIT: 2, ANIMATING: 3, GAME_OVER: 4, ROUND_END: 5, TRAVEL: 6, LOCATIONS: 7 };
     let currentState = GameState.MENU;
     
     let currentRound = 1;
@@ -324,7 +352,45 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
     let lastTime = 0;
     let floatTexts = [];
     let travelProgress = 0, travelLane = 0, marchClock = 0, autoMarch = true;
-    const roomStops = ['Block Fort', 'Crayon Crossing', 'Toy Castle'];
+    // Each location owns its route and art; combat stays shared.
+    const ROOMS = [
+        {name:'Playroom', subtitle:'The original adventure', description:'Green carpet, building blocks, and a kingdom made of toys.', stops:['Block Fort','Crayon Crossing','Toy Castle'], bosses:['Block Guardian','Crayon Crusher','Castle King'], colors:['#f45145','#31aec8','#ffcf43','#7cbf57']},
+        {name:'Starship Bedroom', subtitle:'Room 02 · lights out', description:'Rocket-boost mechs dodge shots. Artillery always gets through.', stops:['Launch Pad','Moonwalk Rug','Star Station'], bosses:['Rocket Scout','Lunar Walker','Cosmic Commander'], colors:['#b58af6','#547ee7','#79ede3','#e6a9f4']},
+        {name:'Garage Workshop', subtitle:'Room 03 · gear up', description:'Rapid-fire mechs hit harder. Keep your medic and supplies ready.', stops:['Starting Grid','Tire Canyon','Workbench HQ'], bosses:['Pit Crew Bot','Torque Titan','Workshop Warden'], colors:['#f18c39','#579b9d','#ffe18b','#8baf72']}
+    ];
+    let selectedRoom = 0, activeRoom = 0;
+    let roomStops = ROOMS[0].stops;
+    function selectRoom(index) {
+        selectedRoom = (index + ROOMS.length) % ROOMS.length;
+        document.querySelectorAll('.room-card').forEach((card,i) => {
+            card.classList.toggle('selected',i===selectedRoom);
+            card.setAttribute('aria-pressed',String(i===selectedRoom));
+        });
+        document.getElementById('deploy-btn').textContent = `Deploy to ${ROOMS[selectedRoom].name}`;
+    }
+    function showLocations() {
+        Music.stop();
+        paused = false; pending.clear(); heldKeys.clear();
+        document.querySelectorAll('.float-text').forEach(el=>el.remove());
+        currentState = GameState.LOCATIONS;
+        document.getElementById('pause-screen').hidden = true;
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('game-over-screen').style.display = 'none';
+        document.getElementById('location-screen').hidden = false;
+        document.getElementById('hud').style.display = 'none';
+        document.getElementById('travel-ui').hidden = true;
+        document.getElementById('toolbar').hidden = true;
+        document.getElementById('room-label').hidden = true;
+        selectRoom(activeRoom);
+        document.querySelectorAll('.room-card')[selectedRoom].focus();
+    }
+    function deployRoom() {
+        SFX.init(); SFX.select();
+        activeRoom = selectedRoom; roomStops = ROOMS[activeRoom].stops;
+        document.getElementById('location-screen').hidden = true;
+        document.getElementById('toolbar').hidden = false;
+        initRound(1);
+    }
     function beginTravel() {
         currentState = GameState.TRAVEL;
         travelProgress = 0; travelLane = 0; marchClock = 0; autoMarch = true;
@@ -445,16 +511,63 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         crate() { this.playTone(200, 'square', 0.1, 0.1); setTimeout(()=>this.playTone(250, 'square', 0.1, 0.1), 100); }
     };
 
+    // Original procedural loops: toy-box waltz, drifting space arpeggio, garage groove.
+    const Music = {
+        enabled: true, room: -1, step: 0, next: 0, bus: null, nodes: new Set(),
+        tracks: [
+            {bpm:112, wave:'sine', notes:[72,76,79,76,74,77,81,77,71,74,79,74,72,76,79,84], bass:[48,53,55,48]},
+            {bpm:82, wave:'triangle', notes:[69,76,81,83,72,76,79,84,65,72,77,79,67,74,79,83], bass:[45,48,41,43]},
+            {bpm:142, wave:'square', notes:[52,0,55,59,52,64,59,55,50,0,53,57,55,62,59,55], bass:[40,40,38,43]}
+        ],
+        stop() {
+            for (const node of this.nodes) { try { node.stop(); } catch (_) {} }
+            this.nodes.clear(); this.room=-1;
+        },
+        note(midi, time, duration, wave, volume) {
+            if (!midi) return;
+            const ctx=SFX.ctx, osc=ctx.createOscillator(), gain=ctx.createGain();
+            osc.type=wave; osc.frequency.value=440*Math.pow(2,(midi-69)/12);
+            gain.gain.setValueAtTime(0,time);gain.gain.linearRampToValueAtTime(volume,time+.015);
+            gain.gain.exponentialRampToValueAtTime(.0001,time+duration);
+            osc.connect(gain);gain.connect(this.bus);this.nodes.add(osc);
+            osc.onended=()=>{this.nodes.delete(osc);osc.disconnect();gain.disconnect();};
+            osc.start(time);osc.stop(time+duration+.02);
+        },
+        update() {
+            const playing=[GameState.PLAYING,GameState.TURN_WAIT,GameState.ANIMATING,GameState.TRAVEL].includes(currentState);
+            if (!this.enabled || paused || document.hidden || !playing || !SFX.ctx || SFX.ctx.state!=='running') {
+                if (this.room!==-1) this.stop();
+                return;
+            }
+            if (!this.bus) {this.bus=SFX.ctx.createGain();this.bus.gain.value=.38;this.bus.connect(SFX.ctx.destination);}
+            if (this.room!==activeRoom) {this.stop();this.room=activeRoom;this.step=0;this.next=SFX.ctx.currentTime+.03;}
+            const t=this.tracks[this.room], beat=60/t.bpm/2;
+            if (this.next<SFX.ctx.currentTime) this.next=SFX.ctx.currentTime+.02;
+            while(this.next<SFX.ctx.currentTime+.12) {
+                const n=this.step%16, time=this.next;
+                this.note(t.notes[n],time,beat*(this.room===1?2.8:.85),t.wave,this.room===2?.055:.13);
+                if(n%4===0) {
+                    const root=t.bass[Math.floor(n/4)];
+                    this.note(root,time,beat*3.5,'triangle',.17);
+                    if(this.room===1) {this.note(root+19,time,beat*5,'sine',.06);this.note(root+24,time,beat*5,'sine',.04);}
+                }
+                if(this.room===2 && n%2===0) this.note(n%4===0?31:85,time,.075,'triangle',.16);
+                this.step++;this.next+=beat;
+            }
+        }
+    };
+
     // Queued input survives until the next frame; held buttons only fire once.
     const Input = {camX: 0};
     const pending = new Set(), heldKeys = new Set();
     let previousPad = {}, padIndex = null, paused = false;
-    const keyActions = {ArrowUp:'upPressed', KeyW:'upPressed', ArrowDown:'downPressed', KeyS:'downPressed', Space:'actionPressed', Enter:'actionPressed', KeyX:'altActionPressed', KeyQ:'lbPressed', KeyE:'rbPressed', KeyP:'pausePressed', Escape:'backPressed'};
+    const keyActions = {ArrowLeft:'leftPressed', KeyA:'leftPressed', ArrowRight:'rightPressed', KeyD:'rightPressed', ArrowUp:'upPressed', KeyW:'upPressed', ArrowDown:'downPressed', KeyS:'downPressed', Space:'actionPressed', Enter:'actionPressed', KeyX:'altActionPressed', KeyQ:'lbPressed', KeyE:'rbPressed', KeyP:'pausePressed', Escape:'backPressed'};
     const actionNames = [...new Set(Object.values(keyActions))];
     function queueAction(action) { pending.add(action); }
     function setPaused(value) {
-        if (!boss || currentState === GameState.GAME_OVER || currentState === GameState.ROUND_END) return;
+        if (!boss || currentState === GameState.MENU || currentState === GameState.LOCATIONS || currentState === GameState.GAME_OVER || currentState === GameState.ROUND_END) return;
         paused = value;
+        if (value) Music.stop();
         document.getElementById('pause-screen').hidden = !value;
         if (value) document.getElementById('resume-btn').focus();
         lastTime = performance.now();
@@ -486,7 +599,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         }
         const b = i => !!(gp && gp.buttons[i] && gp.buttons[i].pressed);
         const axis = i => gp && Number.isFinite(gp.axes[i]) ? gp.axes[i] : 0;
-        const now = {upPressed:b(12)||axis(1)<-0.5, downPressed:b(13)||axis(1)>0.5, actionPressed:b(0), altActionPressed:b(2), lbPressed:b(4), rbPressed:b(5), pausePressed:b(3), backPressed:b(1)};
+        const now = {leftPressed:b(14)||axis(0)<-0.5, rightPressed:b(15)||axis(0)>0.5, upPressed:b(12)||axis(1)<-0.5, downPressed:b(13)||axis(1)>0.5, actionPressed:b(0), altActionPressed:b(2), lbPressed:b(4), rbPressed:b(5), pausePressed:b(3), backPressed:b(1)};
         for (const name of actionNames) Input[name] ||= now[name] && !previousPad[name];
         previousPad = now;
         const keyboardCamera = Number(heldKeys.has('KeyD')||heldKeys.has('ArrowRight')) - Number(heldKeys.has('KeyA')||heldKeys.has('ArrowLeft'));
@@ -551,7 +664,11 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
 
     function initRound(round) {
         initTextures(); // Ensure textures are ready
+        document.querySelectorAll('.float-text').forEach(el=>el.remove());
         currentRound = round;
+        document.getElementById('room-label').hidden = false;
+        document.getElementById('room-label').textContent = `${ROOMS[activeRoom].name} / ${round} of 3 · ${roomStops[round-1]}`;
+        canvas.setAttribute('aria-label', `${ROOMS[activeRoom].name} battle scene`);
         document.getElementById('travel-ui').hidden = true;
         document.getElementById('controls-hint').hidden = false;
         document.getElementById('controller-status').hidden = false;
@@ -587,8 +704,10 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         let bossScale = 1 + (round * 0.3);
         let bossHp = 200 + (round * 150);
         let bossSpd = 15 + (round * 5);
-        boss = new Actor("b1", `Mech Mk${round}`, bossHp, bossSpd, "#3b82f6", true, canvasWidth * 0.75, sY + 20, []);
+        boss = new Actor("b1", ROOMS[activeRoom].bosses[round-1], bossHp, bossSpd, "#3b82f6", true, canvasWidth * 0.75, sY + 20, []);
         boss.scale = bossScale;
+        boss.boostCooldown = 0;
+        if (activeRoom === 2) boss.spd *= 1.15;
         boss.maxHp = bossHp; // Ensure max is set correctly
         
         buildUI();
@@ -629,7 +748,10 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         document.getElementById('boss-hp').style.width = `${(boss.hp/boss.maxHp)*100}%`;
         document.getElementById('boss-atb').style.width = `${(boss.atb/boss.atbMax)*100}%`;
         document.getElementById('boss-hp-text').innerText = `${Math.max(0, boss.hp)}/${boss.maxHp}`;
-        document.getElementById('boss-name').innerText = `Mech Mk${currentRound}`;
+        document.getElementById('boss-name').innerText = boss.name;
+        document.getElementById('boss-tactic').textContent = activeRoom === 1
+            ? (boss.boostCooldown ? `Boost recharging · ${boss.boostCooldown} shots • artillery cannot be dodged` : 'Rocket boost ready • artillery cannot be dodged')
+            : activeRoom === 2 ? 'Rapid burst · 3 hits • 15% faster turns' : 'Heavy stomp • steady attacks';
     }
 
     function spawnFloatText(text, x, y, color) {
@@ -786,7 +908,9 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
             if (!target) return;
             
             let power = 20 + (currentRound * 10);
-            executeSkill(actor, { name: "Stomp", type: "damage", power: power, msg: "stomps!" }, target);
+            executeSkill(actor, activeRoom === 2
+                ? { name: "Rapid Burst", type: "damage", power: power * .5, burst: true, msg: "fires a rapid burst!" }
+                : { name: "Stomp", type: "damage", power: power, msg: "stomps!" }, target);
         } else {
             openActionMenu(actor);
         }
@@ -797,7 +921,21 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         animationTimer = 0;
         let target = autoTarget || (skill.type === "heal" ? actor : boss); // simplified targeting
         
-        currentAction = { actor, skill, target, phase: 0 };
+        currentAction = { actor, skill, target, phase: 0, hits: 0, dodged: false };
+        // Save fuel for dangerous direct shots; area artillery is the player's counter.
+        if (activeRoom === 1 && !actor.isEnemy && target === boss && skill.type === 'damage' && !skill.summon) {
+            if (boss.boostCooldown > 0) boss.boostCooldown--;
+            else {
+                const chance = skill.power >= 25 || boss.hp < boss.maxHp * .4 ? .55 : .25;
+                currentAction.dodged = Math.random() < chance;
+                if (currentAction.dodged) {
+                    boss.boostCooldown = 2;
+                    spawnFloatText('ROCKET BOOST!', boss.x - cameraAngle * 100, boss.y - 220, '#79ede3');
+                    SFX.playTone(110, 'sawtooth', .4, .06);
+                }
+            }
+        }
+        if (skill.burst) spawnFloatText('RAPID BURST!', actor.x - cameraAngle * 100, actor.y - 180, '#ffcb7d');
         
         if (skill.cost > 0) {
             globalEnergy = Math.max(0, globalEnergy - skill.cost);
@@ -810,6 +948,21 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         let target = currentAction.target;
         let s = currentAction.skill;
 
+        if (s.burst) {
+            a.animOffsetX = Math.sin(animationTimer * .06) * 12;
+            // Resolve actual separate hits on the animation clock, so pause freezes the burst.
+            while (currentAction.hits < 3 && animationTimer >= 300 + currentAction.hits * 180) {
+                if (target.hp > 0) applySkillEffect(a, target, s);
+                currentAction.hits++;
+            }
+            if (animationTimer > 1000) { a.animOffsetX = 0; endTurn(); }
+            return;
+        }
+        if (currentAction.dodged) {
+            const lift = Math.sin(Math.min(1, animationTimer / 1000) * Math.PI);
+            target.animOffsetY = -lift * 110;
+            target.animOffsetX = lift * 65;
+        }
         if (currentAction.phase === 0) {
             if (s.summon) {
                 // Wait for summon anim
@@ -831,6 +984,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
 
             if (animationTimer > 1000) {
                 a.animOffsetX = 0;
+                if (currentAction.dodged) { target.animOffsetX = 0; target.animOffsetY = 0; }
                 endTurn();
             }
         }
@@ -847,6 +1001,13 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
             SFX.crate();
             spawnFloatText("Recruited!", soldier.x, soldier.y - 90, "#22c55e");
         } else if (skill.type === "damage") {
+            if (currentState === GameState.ANIMATING && currentAction?.dodged && currentAction.actor === actor && currentAction.skill === skill) {
+                SFX.shoot();
+                spawnFloatText('DODGED', target.x + target.animOffsetX - cameraAngle * 100, target.y + target.animOffsetY - 100, '#79ede3');
+                // A missed shot still charges supplies, so dodges cannot starve the counterplay.
+                globalEnergy = Math.min(MAX_ENERGY, globalEnergy + (skill.energyGain || 0));
+                return;
+            }
             if(skill.summon || skill.power > 40) SFX.boom();
             else SFX.shoot();
 
@@ -890,8 +1051,8 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
             if (currentRound < maxRounds) { SFX.heal(); beginTravel(); return; }
             currentState = GameState.ROUND_END;
             document.getElementById('hud').style.display = 'none';
-            document.getElementById('end-title').innerText = currentRound >= maxRounds ? "You saved the Playroom!" : `Round ${currentRound} Cleared!`;
-            document.getElementById('next-round-btn').innerText = currentRound >= maxRounds ? "Play Again" : "Next Round (Press A)";
+            document.getElementById('end-title').innerText = currentRound >= maxRounds ? `You saved the ${ROOMS[activeRoom].name}!` : `Round ${currentRound} Cleared!`;
+            document.getElementById('next-round-btn').innerText = currentRound >= maxRounds ? "Choose another location" : "Next Round (Press A)";
             document.getElementById('game-over-screen').style.display = 'flex';
             SFX.heal(); // victory sound reuse
             return;
@@ -913,6 +1074,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
 
     function drawEnvironment() {
         ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        if (activeRoom !== 0) { drawThemedRoom(); return; }
         
         // Use patterns if available, fallback to colors
         if(carpetPattern) {
@@ -934,6 +1096,18 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         ctx.save();
         ctx.translate(-cameraAngle * 50, 0);
 
+        // A broad toy road lies on the carpet, beneath all scenery and actors.
+        const roadWidth = canvasHeight * .075;
+        ctx.beginPath();
+        ctx.moveTo(-canvasWidth * .1, canvasHeight * .70);
+        ctx.bezierCurveTo(canvasWidth * .25, canvasHeight * .56,
+            canvasWidth * .65, canvasHeight * .78, canvasWidth * 1.1, canvasHeight * .62);
+        ctx.strokeStyle = '#c6cbb5'; ctx.lineWidth = roadWidth + 8; ctx.stroke();
+        ctx.strokeStyle = '#58666a'; ctx.lineWidth = roadWidth; ctx.stroke();
+        ctx.strokeStyle = '#fff0b3'; ctx.lineWidth = Math.max(2, canvasHeight * .004);
+        ctx.setLineDash([canvasHeight * .025, canvasHeight * .02]); ctx.stroke();
+        ctx.setLineDash([]);
+
         // Room landmarks persist along a continuous three-encounter route.
         const roomPosition = currentRound - 1 + (currentState === GameState.TRAVEL ? travelProgress : 0);
         for (let section = 0; section < maxRounds; section++) {
@@ -954,18 +1128,54 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
             ctx.fillStyle='#79bfc9'; ctx.fillRect(canvasWidth*.55+12,canvasHeight*.32+18,15,23); ctx.fillRect(canvasWidth*.55+39,canvasHeight*.32+18,15,23);
             ctx.restore();
         }
-        // Train tracks
-        ctx.strokeStyle = "#64748b"; ctx.lineWidth = 6;
-        ctx.beginPath(); ctx.moveTo(canvasWidth*0.4, canvasHeight*0.4); 
-        ctx.quadraticCurveTo(canvasWidth*0.8, canvasHeight*0.5, canvasWidth*1.1, canvasHeight*0.45); 
-        ctx.stroke();
-        ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 2; ctx.setLineDash([10, 10]);
-        ctx.beginPath(); ctx.moveTo(canvasWidth*0.4, canvasHeight*0.4); 
-        ctx.quadraticCurveTo(canvasWidth*0.8, canvasHeight*0.5, canvasWidth*1.1, canvasHeight*0.45); 
-        ctx.stroke();
-        ctx.setLineDash([]);
-        
         ctx.restore();
+    }
+
+    // Procedural scenery: no images, libraries, or network requests.
+    function drawThemedRoom() {
+        const w=canvasWidth, h=canvasHeight, space=activeRoom===1;
+        ctx.fillStyle=space?'#182546':'#658485'; ctx.fillRect(0,0,w,h*.4);
+        ctx.fillStyle=space?'#686181':'#d4bb91'; ctx.fillRect(0,h*.4,w,h*.6);
+        ctx.fillStyle=space?'#aaa4c9':'#3f5d60'; ctx.fillRect(0,h*.38,w,h*.025);
+        if(space) {
+            for(let i=0;i<55;i++) { const x=(i*137%997)/997*w,y=(i*83%317)/317*h*.36; ctx.fillStyle=i%3?'#a1b5d1':'#fbe8ac'; ctx.fillRect(x,y,i%3?2:4,i%3?2:4); }
+            ctx.fillStyle='#101a35'; ctx.fillRect(w*.72,h*.05,w*.18,h*.25);
+            toyOval(w*.81,h*.15,h*.065,h*.065,'#f9e6b6',false);
+            ctx.fillStyle='#726987'; ctx.fillRect(w*.81,h*.05,5,h*.25); ctx.fillRect(w*.72,h*.17,w*.18,5);
+            toyOval(w*.5,h*.65,w*.42,h*.19,'#444767',false);
+            ctx.strokeStyle='#9198bd';ctx.lineWidth=2;
+            ctx.beginPath();ctx.ellipse(w*.5,h*.65,w*.34,h*.13,-.08,0,Math.PI*2);ctx.stroke();
+        } else {
+            ctx.strokeStyle='#b19d7d';ctx.lineWidth=2;
+            for(let y=h*.45;y<h;y+=50) { ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke(); }
+            ctx.fillStyle='#b79970';ctx.fillRect(w*.07,h*.045,w*.52,h*.23);
+            for(let x=w*.08;x<w*.58;x+=24) for(let y=h*.06;y<h*.26;y+=24) {ctx.fillStyle='#786b56';ctx.fillRect(x,y,3,3);}
+            for(let i=0;i<5;i++) { const x=w*(.13+i*.08); toyLine([[x,h*.10],[x,h*.22]],'#d8e4da',7);toyOval(x,h*.10,10,12,'#a6bdbb'); }
+            ctx.strokeStyle='#555c58';ctx.lineWidth=h*.075;ctx.beginPath();ctx.ellipse(w*.52,h*.64,w*.48,h*.14,0,0,Math.PI*2);ctx.stroke();
+            ctx.strokeStyle='#f9e6b4';ctx.lineWidth=2;ctx.setLineDash([18,16]);ctx.stroke();ctx.setLineDash([]);
+        }
+        const position=currentRound-1+(currentState===GameState.TRAVEL?travelProgress:0);
+        for(let section=0;section<3;section++) {
+            ctx.save();ctx.translate((section-position)*w*1.4-cameraAngle*50,0);
+            ctx.strokeStyle=space?'#252641':'#3e514c';ctx.lineWidth=3;
+            if(space) {
+                // Cardboard rocket, lunar rocks, and the final space station.
+                const x=w*.20,y=h*.36;
+                toyPart(x-28,y-115,56,115,12,'#ded4ba');
+                ctx.fillStyle='#ce759d';ctx.beginPath();ctx.moveTo(x-30,y-105);ctx.lineTo(x,y-150);ctx.lineTo(x+30,y-105);ctx.closePath();ctx.fill();ctx.stroke();
+                toyOval(x,y-77,17,20,'#729cae');
+                toyPart(x-47,y-28,20,40,3,'#b78cdc');toyPart(x+27,y-28,20,40,3,'#b78cdc');
+                for(let i=0;i<4;i++) toyOval(w*(.44+i*.065),h*.44,22+i*3,12+i*2,['#a3a1b1','#8d8a9e'][i%2]);
+                if(section===2) { toyPart(w*.53,h*.22,115,110,10,'#aab6ce');toyPart(w*.53-55,h*.24,48,55,3,'#4e729e');toyPart(w*.53+122,h*.24,48,55,3,'#4e729e');toyOval(w*.53+57,h*.27,20,20,'#5f6b92'); }
+            } else {
+                for(let i=0;i<section+2;i++) {toyOval(w*.19,h*.39-i*17,44,16,'#3d4948');toyOval(w*.19,h*.39-i*17,23,7,'#829691');}
+                toyPart(w*.54,h*.29,150,18,4,'#ad774c');toyPart(w*.54+10,h*.29+18,12,70,2,'#465a54');toyPart(w*.54+125,h*.29+18,12,70,2,'#465a54');
+                toyPart(w*.54+20,h*.29-35,62,35,4,'#df7445');
+                for(let i=0;i<3;i++) {const x=w*(.36+i*.055),y=h*.44;ctx.fillStyle='#e49441';ctx.beginPath();ctx.moveTo(x,y-40);ctx.lineTo(x-15,y);ctx.lineTo(x+15,y);ctx.closePath();ctx.fill();ctx.fillStyle='#fff0c3';ctx.fillRect(x-7,y-23,14,6);}
+            }
+            ctx.fillStyle=space?'#e4deef':'#f7f0dc';ctx.font='bold 20px system-ui';ctx.textAlign='center';ctx.fillText(roomStops[section],w*.51,h*.34);
+            ctx.restore();
+        }
     }
 
     function drawToyBlock(x, y, size, color, icon) {
@@ -1096,7 +1306,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
     }
     function drawMech(x,y,scale,round) {
         ctx.save(); ctx.translate(x,y); ctx.scale(scale,scale);
-        const ink='#263d39', red='#f45145', blue='#31aec8', yellow='#ffcf43', green='#7cbf57';
+        const ink='#263d39'; const [red,blue,yellow,green]=ROOMS[activeRoom].colors;
         ctx.strokeStyle=ink; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round';
         toyOval(0,7,72,12,'#34443d33',false);
         // Chunky boots with contrasting soles and knee joints.
@@ -1216,7 +1426,25 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
             return;
         }
 
-        if (a.isEnemy) drawMech(drawX, drawY, a.scale, currentRound);
+        if (a.isEnemy) {
+            if (activeRoom === 1 && currentState === GameState.ANIMATING && currentAction?.dodged) {
+                ctx.fillStyle = '#ffad52';
+                for (const side of [-1,1]) {
+                    const x = drawX + side * 29 * a.scale;
+                    ctx.beginPath(); ctx.moveTo(x-11,drawY-8); ctx.lineTo(x,drawY+28+Math.sin(animationTimer*.07)*9); ctx.lineTo(x+11,drawY-8); ctx.fill();
+                    ctx.fillStyle='#c2ffff';ctx.fillRect(x-4,drawY-6,8,20);ctx.fillStyle='#ffad52';
+                }
+            }
+            drawMech(drawX, drawY, a.scale, currentRound);
+            if (currentState === GameState.ANIMATING && currentAction?.skill.burst && animationTimer>=280 && animationTimer<760) {
+                const hit = Math.max(0, Math.min(2, Math.floor((animationTimer-280)/180)));
+                if ((animationTimer-280)%180<85) {
+                    const target = currentAction.target;
+                    toyLine([[drawX-65*a.scale,drawY-75*a.scale],[target.x-cameraAngle*50,target.y-50+hit*9]],'#ffcd71',4);
+                    toyOval(drawX-65*a.scale,drawY-75*a.scale,12,8,'#fff4c2',false);
+                }
+            }
+        }
         else drawSoldier(drawX, drawY, a.color, a.name==="Heavy", a.name);
         
         // Target indicator if active char is selecting
@@ -1237,6 +1465,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
 
         updateInput();
         if (Input.pausePressed || (paused && Input.actionPressed)) { setPaused(!paused); Input.actionPressed = false; }
+        Music.update();
         if (paused || document.hidden) { requestAnimationFrame(gameLoop); return; }
 
         cameraAngle += (Input.camX * 0.5 - cameraAngle) * 0.1;
@@ -1246,14 +1475,21 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
                 SFX.init();
                 SFX.select();
                 document.getElementById('start-screen').style.display = 'none';
-                initRound(1);
+                showLocations();
             }
+        } else if (currentState === GameState.LOCATIONS) {
+            if (Input.leftPressed || Input.upPressed) selectRoom(selectedRoom-1);
+            if (Input.rightPressed || Input.downPressed) selectRoom(selectedRoom+1);
+            if (Input.actionPressed) deployRoom();
+            else if (Input.backPressed) { document.getElementById('location-screen').hidden=true; document.getElementById('start-screen').style.display='flex'; currentState=GameState.MENU; document.getElementById('start-btn').focus(); }
         } else if (currentState === GameState.GAME_OVER || currentState === GameState.ROUND_END) {
              if (Input.actionPressed) {
                  SFX.select();
                  document.getElementById('game-over-screen').style.display = 'none';
                  if (currentState === GameState.ROUND_END && currentRound < maxRounds) {
                      initRound(currentRound + 1);
+                 } else if (currentState === GameState.ROUND_END) {
+                     showLocations();
                  } else {
                      initRound(1);
                  }
@@ -1284,7 +1520,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         }
 
         // Draw foreground crate
-        if (currentState !== GameState.MENU && currentState !== GameState.TRAVEL) {
+        if (currentState !== GameState.MENU && currentState !== GameState.LOCATIONS && currentState !== GameState.TRAVEL) {
             drawSupplyCrate();
         }
 
@@ -1323,7 +1559,32 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); }
         catch (_) { document.getElementById('fullscreen-btn').textContent = 'Use browser fullscreen'; }
     };
+    document.getElementById('music-btn').onclick = () => {
+        SFX.init(); Music.enabled=!Music.enabled;
+        if (!Music.enabled) Music.stop();
+        document.getElementById('music-btn').textContent = `Music: ${Music.enabled?'on':'off'}`;
+        document.getElementById('music-btn').setAttribute('aria-pressed',String(Music.enabled));
+    };
+    document.getElementById('deploy-btn').onclick = deployRoom;
+    document.getElementById('change-room-btn').onclick = showLocations;
+    document.getElementById('toolbar').hidden = true;
+    const grid = document.getElementById('room-grid');
+    ROOMS.forEach((room,index) => {
+        const card=document.createElement('button'); card.className='room-card'; card.type='button';
+        card.innerHTML=`<canvas width="480" height="300" aria-hidden="true"></canvas><span class="room-copy"><small>${room.subtitle}</small><strong>${room.name}</strong><span>${room.description}</span></span>`;
+        card.onclick=()=>selectRoom(index);
+        card.onfocus=()=>selectRoom(index);
+        grid.appendChild(card);
+    });
     initTextures();
+    // Paint miniature previews with the same renderer used by the game.
+    const savedWidth=canvasWidth,savedHeight=canvasHeight;
+    canvasWidth=480;canvasHeight=300;
+    document.querySelectorAll('.room-card canvas').forEach((preview,index)=>{
+        activeRoom=index;roomStops=ROOMS[index].stops;drawEnvironment();
+        preview.getContext('2d').drawImage(canvas,0,0,480,300,0,0,480,300);
+    });
+    canvasWidth=savedWidth;canvasHeight=savedHeight;activeRoom=0;roomStops=ROOMS[0].stops;
     // Start loop
     requestAnimationFrame(gameLoop);
 
