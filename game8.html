@@ -1,312 +1,793 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Honey Rush - Xbox Web</title>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Honey Rush • The Golden Harvest</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #1a1a1a; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        canvas { display: block; }
-        #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; }
-        h1 { margin: 0; color: #ffc107; text-shadow: 2px 2px 0px #000; }
-        #ui p { text-shadow: 1px 1px 2px #000; }
-        #score { color: #ffc107; font-weight: bold; }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #111e19;
+        color: #fff1ce;
+        font-family: system-ui, sans-serif;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      canvas {
+        display: block;
+        max-width: 100%;
+        max-height: 100%;
+        touch-action: none;
+        outline: none;
+      }
+      #sound {
+        position: fixed;
+        right: 16px;
+        top: 12px;
+        border: 1px solid #8a875c;
+        border-radius: 22px;
+        background: #192c24;
+        color: #fff1ce;
+        padding: 10px 16px;
+        cursor: pointer;
+      }
+      #sound:focus-visible {
+        outline: 3px solid #ffd565;
+      }
+      #status {
+        position: fixed;
+        bottom: 4px;
+        text-align: center;
+        font-size: 12px;
+        color: #bdc5ad;
+        pointer-events: none;
+      }
+      @media (max-height: 500px) {
+        #sound {
+          top: 2px;
+          padding: 4px 10px;
+        }
+        #status {
+          font-size: 10px;
+        }
+      }
     </style>
-</head>
-<body>
-    <div id="ui">
-        <h1>Honey Rush</h1>
-        <p>Score: <span id="score">0</span></p>
-        <p>🎮 <strong>Left Stick</strong>: Move Cursor | <strong>'A' Button</strong>: Extract Honey / Start / Restart</p>
+  </head>
+  <body>
+    <canvas
+      id="game"
+      tabindex="0"
+      aria-label="Honey Rush. Move with arrow keys, WASD, or Xbox left stick. Hold Space or A to harvest. P or Y pauses."
+    ></canvas
+    ><button id="sound">♪ Enable sound</button>
+    <div id="status" role="status">
+      PC: mouse or keyboard • Xbox: switch Edge to game controls, then press A
     </div>
-    <canvas id="gameCanvas"></canvas>
-
     <script>
-        const canvas = document.getElementById('gameCanvas');
-        canvas.tabIndex = 0;
-        // Xbox Edge (console browser) only exposes the Gamepad API to the currently
-        // focused document, and gains focus can be lost when loaded inside the hub's
-        // iframe -- pull focus onto this game whenever we get a chance to.
-        function ensureGameFocus() { window.focus(); canvas.focus({ preventScroll: true }); }
-        ensureGameFocus();
-        window.addEventListener('load', ensureGameFocus);
-        document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureGameFocus(); });
-        window.addEventListener('gamepadconnected', ensureGameFocus);
-        const ctx = canvas.getContext('2d');
-        const scoreEl = document.getElementById('score');
-
-        // --- Tunable constants ---
-        const HEX_SIZE = 45;
-        const HEX_STROKE_SIZE = HEX_SIZE - 2;
-        const HEX_WIDTH = Math.sqrt(3) * HEX_SIZE;
-        const HEX_HEIGHT = 2 * HEX_SIZE;
-        const HEX_ROW_SPACING = HEX_HEIGHT * 0.75;
-
-        const CURSOR_SPEED = 7;
-        const STICK_DEADZONE = 0.15;
-        const A_BUTTON_INDEX = 0;
-
-        const HONEY_INITIAL_MAX = 30;
-        const HONEY_EXTRACT_THRESHOLD = 10;
-        // SIGNIFICANTLY REDUCED for slower gameplay
-        const HONEY_GROWTH_BASE = 0.015; 
-        const HONEY_GROWTH_SCORE_FACTOR = 0.00001; 
-        const HONEY_OVERFLOW = 100;
-        const HONEY_WARN_LEVEL = 85; // triggers flashing red warning
-
-        const CURSOR_DOT_RADIUS = 8;
-        const CURSOR_RING_RADIUS = 16;
-        const FLASH_DURATION_FRAMES = 18;
-
-        const HEX_STROKE_STYLE = 'rgba(255, 193, 7, 0.3)';
-        const HEX_STROKE_WIDTH = 3;
-
-        const dpr = window.devicePixelRatio || 1;
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
-        canvas.style.width = width + 'px';
-        canvas.style.height = height + 'px';
-        ctx.scale(dpr, dpr);
-
-        const HEX_CORNERS = Array.from({ length: 6 }, (_, i) => {
-            const angle = Math.PI / 180 * (60 * i - 30);
-            return { cos: Math.cos(angle), sin: Math.sin(angle) };
+      "use strict";
+      // All art and audio are generated locally. No downloads, libraries or build step.
+      const W = 1280,
+        H = 800,
+        canvas = document.getElementById("game"),
+        ctx = canvas.getContext("2d");
+      const STAGES = [
+        { name: "Morning dew", goal: 500, rate: 1.3 },
+        { name: "Wildflower fields", goal: 700, rate: 1.65 },
+        { name: "High summer", goal: 900, rate: 2.0 },
+        { name: "Amber afternoon", goal: 1100, rate: 2.4 },
+        { name: "The golden harvest", goal: 1300, rate: 2.8 },
+      ];
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+      // A fixed-size board makes difficulty independent of display resolution.
+      const cells = [];
+      for (let r = -2; r <= 2; r++)
+        for (let q = -2; q <= 2; q++)
+          if (Math.abs(q + r) <= 2)
+            cells.push({
+              q,
+              r,
+              x: 490 + Math.sqrt(3) * 64 * (q + r / 2),
+              y: 422 + 96 * r,
+              honey: 0,
+              flash: 0,
+              grace: 0,
+            });
+      let state = "title",
+        stage = 0,
+        collected = 0,
+        total = 0,
+        lives = 3,
+        elapsed = 0,
+        cooldown = 0,
+        selected = 9,
+        clock = 0,
+        moveWait = 0,
+        transitionWait = 0,
+        reason = "",
+        lastTime = 0;
+      let cursor = { x: 490, y: 422 },
+        pointerHeld = false,
+        padHeld = false,
+        padPresent = false,
+        previousButtons = [],
+        keys = new Set(),
+        inputMode = "keys";
+      const audio = {
+        context: null,
+        master: null,
+        enabled: false,
+        next: 0,
+        step: 0,
+        unlock(force = false) {
+          if (this.context && !this.enabled && !force) return;
+          try {
+            if (!this.context) {
+              const AC = window.AudioContext || window.webkitAudioContext;
+              if (!AC) return;
+              this.context = new AC();
+              this.master = this.context.createGain();
+              this.master.gain.value = 0.22;
+              this.master.connect(this.context.destination);
+            }
+            this.enabled = true;
+            this.context.resume().catch(() => {});
+            this.label();
+          } catch (e) {
+            document.getElementById("sound").textContent = "Sound unavailable";
+          }
+        },
+        label() {
+          document.getElementById("sound").textContent = this.enabled
+            ? "♪ Sound on · M / X"
+            : "♪ Sound off · M / X";
+        },
+        toggle() {
+          if (
+            !this.context ||
+            !this.enabled ||
+            this.context.state !== "running"
+          )
+            this.unlock(true);
+          else {
+            this.enabled = false;
+            this.master.gain.value = 0;
+            this.label();
+          }
+        },
+        tone(freq, t, dur, vol, type = "sine") {
+          if (
+            !this.context ||
+            !this.enabled ||
+            this.context.state !== "running"
+          )
+            return;
+          const o = this.context.createOscillator(),
+            g = this.context.createGain();
+          o.type = type;
+          o.frequency.value = freq;
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(vol, t + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+          o.connect(g);
+          g.connect(this.master);
+          o.start(t);
+          o.stop(t + dur + 0.02);
+          o.onended = () => {
+            o.disconnect();
+            g.disconnect();
+          };
+        },
+        tick() {
+          if (!this.context || !this.enabled) return;
+          this.master.gain.value = state === "paused" ? 0 : 0.22;
+          if (state === "paused" || this.context.state !== "running") return;
+          const now = this.context.currentTime;
+          if (this.next < now) this.next = now + 0.03;
+          const melody = [0, 7, 12, 7, 4, 7, 11, 7, 2, 7, 14, 7, 4, 11, 7, 4];
+          while (this.next < now + 0.12) {
+            const s = this.step++,
+              root = [130.81, 110, 87.31, 98][Math.floor(s / 16) % 4];
+            this.tone(
+              root * 2 * Math.pow(2, melody[s % 16] / 12),
+              this.next,
+              0.28,
+              0.17,
+              "triangle",
+            );
+            if (s % 4 === 0) {
+              this.tone(root, this.next, 0.55, 0.28);
+              this.tone(65, this.next, 0.09, 0.18);
+            }
+            if (s % 2 === 1)
+              this.tone(1100, this.next, 0.035, 0.025, "triangle");
+            this.next += 0.19;
+          }
+        },
+        effect(win) {
+          if (this.context) {
+            const t = this.context.currentTime;
+            [0, 4, 7].forEach((n, i) =>
+              this.tone(
+                (win ? 523 : 262) * Math.pow(2, n / 12),
+                t + i * 0.055,
+                0.18,
+                0.25,
+                "triangle",
+              ),
+            );
+          }
+        },
+      };
+      function resize() {
+        const scale = Math.min(innerWidth / W, innerHeight / H),
+          dpr = Math.min(devicePixelRatio || 1, 2);
+        canvas.style.width = W * scale + "px";
+        canvas.style.height = H * scale + "px";
+        canvas.width = Math.round(W * scale * dpr);
+        canvas.height = Math.round(H * scale * dpr);
+        ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+      }
+      function seedBoard() {
+        cells.forEach((c, i) => {
+          c.honey = 12 + ((i * 17) % 39);
+          c.grace = 0;
+          c.flash = 0;
         });
-
-        const grid = [];
-        const flashes = []; 
-
-        let score = 0;
-        // Game State Management
-        let gameState = 'START'; // 'START', 'PLAYING', 'GAMEOVER'
-
-        // Virtual Cursor for Xbox Gamepad
-        let cursor = { x: width / 2, y: height / 2, speed: CURSOR_SPEED };
-        let lastAState = false;
-
-        // Generate the honeycomb grid
-        const rows = Math.floor(height / HEX_ROW_SPACING);
-        const cols = Math.floor(width / HEX_WIDTH);
-
-        function initGrid() {
-            grid.length = 0; // Clear existing
-            for (let row = 1; row < rows - 1; row++) {
-                for (let col = 1; col < cols - 1; col++) {
-                    const x = (col * HEX_WIDTH) + (row % 2 === 1 ? HEX_WIDTH / 2 : 0);
-                    const y = row * HEX_ROW_SPACING;
-                    grid.push({ x, y, honey: Math.random() * HONEY_INITIAL_MAX });
-                }
-            }
+        cooldown = 0.25;
+      }
+      function start() {
+        stage = 0;
+        total = 0;
+        lives = 3;
+        elapsed = 0;
+        selected = 9;
+        cursor = { x: 490, y: 422 };
+        beginStage();
+      }
+      function beginStage() {
+        collected = 0;
+        seedBoard();
+        state = "playing";
+        transitionWait = 0.5;
+      }
+      function action() {
+        if (transitionWait > 0) return;
+        if (state === "title" || state === "lost" || state === "won") start();
+        else if (state === "between") {
+          stage++;
+          beginStage();
+        } else if (state === "paused") {
+          state = "playing";
+          cooldown = 0.25;
         }
-        initGrid();
-
-        function resetGame() {
-            score = 0;
-            scoreEl.innerText = score;
-            initGrid();
-            flashes.length = 0;
-            gameState = 'PLAYING';
+      }
+      function pause() {
+        if (state === "playing") {
+          state = "paused";
+          pointerHeld = false;
+          keys.clear();
+        } else if (state === "paused") {
+          state = "playing";
+          cooldown = 0.25;
         }
-
-        // Draw a single hexagon with Fill Color + Progress Bar + Flashing
-        function drawHex(x, y, size, honeyLevel) {
-            ctx.beginPath();
-            for (let i = 0; i < 6; i++) {
-                const corner = HEX_CORNERS[i];
-                const px = x + size * corner.cos;
-                const py = y + size * corner.sin;
-                if (i === 0) ctx.moveTo(px, py);
-                else ctx.lineTo(px, py);
-            }
-            ctx.closePath();
-            
-            let isFlashing = honeyLevel > HONEY_WARN_LEVEL;
-            let flashPulse = isFlashing ? Math.abs(Math.sin(Date.now() / 150)) : 0;
-
-            // Background Fill Color
-            if (honeyLevel > 0) {
-                if (isFlashing) {
-                    // Pulsing Red/Orange for danger
-                    ctx.fillStyle = `rgba(255, ${80 + 100 * (1-flashPulse)}, 40, ${0.4 + 0.4 * flashPulse})`;
-                } else {
-                    // Gentle Orange tint based on fill amount
-                    ctx.fillStyle = `rgba(255, 160, 0, ${honeyLevel / 250})`;
-                }
-                ctx.fill();
-            }
-
-            // Hex Outline
-            ctx.strokeStyle = isFlashing ? `rgba(255, 50, 50, ${0.5 + 0.5 * flashPulse})` : HEX_STROKE_STYLE;
-            ctx.lineWidth = isFlashing ? 4 : HEX_STROKE_WIDTH;
-            ctx.stroke();
-
-            // Inner Progress Bar
-            if (honeyLevel > 0) {
-                const barMaxWidth = 8;
-                const barMaxHeight = size * 1.2;
-                const barHeight = Math.min((honeyLevel / 100) * barMaxHeight, barMaxHeight);
-                
-                const barX = x - barMaxWidth / 2;
-                const barY = y + barMaxHeight / 2 - barHeight;
-
-                // Bar Track Background
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-                ctx.fillRect(barX, y - barMaxHeight / 2, barMaxWidth, barMaxHeight);
-
-                // Bar Fill
-                ctx.fillStyle = isFlashing ? '#ff4444' : '#ffc107';
-                ctx.fillRect(barX, barY, barMaxWidth, barHeight);
-            }
+      }
+      function harvest() {
+        if (state !== "playing" || cooldown > 0) return;
+        const c = cells[selected];
+        if (c.honey < 25) return;
+        const n = Math.floor(c.honey);
+        collected += n;
+        total += n;
+        c.honey = 0;
+        c.flash = 0.45;
+        cooldown = 0.2;
+        audio.effect(false);
+        if (collected >= STAGES[stage].goal) {
+          state = stage === 4 ? "won" : "between";
+          transitionWait = 0.7;
+          audio.effect(true);
         }
-
-        // Extract honey based on cursor proximity
-        function extractHoney() {
-            let closest = null;
-            let minDistSq = Infinity;
-            const thresholdSq = HEX_SIZE * HEX_SIZE;
-            for (let hex of grid) {
-                const dx = hex.x - cursor.x;
-                const dy = hex.y - cursor.y;
-                const distSq = dx * dx + dy * dy;
-                if (distSq < minDistSq && distSq < thresholdSq) {
-                    minDistSq = distSq;
-                    closest = hex;
-                }
+      }
+      function update(dt) {
+        clock += dt;
+        transitionWait = Math.max(0, transitionWait - dt);
+        moveWait = Math.max(0, moveWait - dt);
+        if (state !== "playing") return;
+        elapsed += dt;
+        cooldown = Math.max(0, cooldown - dt);
+        for (const c of cells) {
+          c.flash = Math.max(0, c.flash - dt);
+          c.grace = Math.max(0, c.grace - dt);
+          if (c.grace === 0)
+            c.honey +=
+              STAGES[stage].rate *
+              (0.88 + ((c.q * 7 + c.r * 3 + 30) % 7) * 0.04) *
+              dt;
+          if (c.honey >= 100) {
+            lives--;
+            c.honey = 0;
+            c.grace = 4;
+            c.flash = 0.8;
+            if (lives <= 0) {
+              state = "lost";
+              reason = "Three spills. The hive needs another keeper!";
+              transitionWait = 0.7;
+              break;
             }
-
-            // Only reward if there was a dangerous amount of honey
-            if (closest && closest.honey > HONEY_EXTRACT_THRESHOLD) {
-                score += Math.floor(closest.honey);
-                closest.honey = 0;
-                scoreEl.innerText = score;
-                flashes.push({ x: closest.x, y: closest.y, t: 0 });
-            }
+          }
         }
-
-        function handleAction() {
-            if (gameState === 'START' || gameState === 'GAMEOVER') {
-                resetGame();
-            } else if (gameState === 'PLAYING') {
-                extractHoney();
-            }
-        }
-
-        // Handle Xbox controller inputs via Gamepad API
-        function pollGamepad() {
-            const gamepads = navigator.getGamepads();
-            if (gamepads[0]) {
-                const gp = gamepads[0];
-
-                const dx = gp.axes[0];
-                const dy = gp.axes[1];
-
-                if (Math.abs(dx) > STICK_DEADZONE) cursor.x += dx * cursor.speed;
-                if (Math.abs(dy) > STICK_DEADZONE) cursor.y += dy * cursor.speed;
-
-                cursor.x = Math.max(0, Math.min(width, cursor.x));
-                cursor.y = Math.max(0, Math.min(height, cursor.y));
-
-                const aPressed = gp.buttons[A_BUTTON_INDEX].pressed;
-                if (aPressed && !lastAState) {
-                    handleAction();
-                }
-                lastAState = aPressed;
-            }
-        }
-
-        // Mouse fallback for testing on PC
-        window.addEventListener('mousedown', (e) => {
-            cursor.x = e.clientX;
-            cursor.y = e.clientY;
-            handleAction();
+        if (
+          state === "playing" &&
+          (pointerHeld || padHeld || keys.has("Space") || keys.has("Enter"))
+        )
+          harvest();
+      }
+      function nearest(x, y) {
+        let n = 0,
+          b = Infinity;
+        cells.forEach((c, i) => {
+          const d = (c.x - x) ** 2 + (c.y - y) ** 2;
+          if (d < b) {
+            b = d;
+            n = i;
+          }
         });
-
-        // Draw and age out active extraction flashes
-        function drawFlashes() {
-            for (let i = flashes.length - 1; i >= 0; i--) {
-                const f = flashes[i];
-                f.t++;
-                const progress = f.t / FLASH_DURATION_FRAMES;
-                if (progress >= 1) {
-                    flashes.splice(i, 1);
-                    continue;
-                }
-                ctx.beginPath();
-                ctx.arc(f.x, f.y, HEX_SIZE * (0.3 + progress * 0.9), 0, Math.PI * 2);
-                ctx.strokeStyle = `rgba(255, 235, 150, ${1 - progress})`;
-                ctx.lineWidth = 3;
-                ctx.stroke();
+        return n;
+      }
+      function moveSelection(dx, dy) {
+        if (moveWait > 0) return;
+        const c = cells[selected];
+        let best = -1,
+          cost = Infinity;
+        cells.forEach((n, i) => {
+          const x = n.x - c.x,
+            y = n.y - c.y,
+            d = Math.hypot(x, y),
+            dot = (x * dx + y * dy) / (d || 1);
+          if (dot > 0.4) {
+            const v = d / (dot * dot);
+            if (v < cost) {
+              cost = v;
+              best = i;
             }
+          }
+        });
+        if (best >= 0) {
+          selected = best;
+          cursor.x = cells[best].x;
+          cursor.y = cells[best].y;
         }
-
-        // Main Game Loop
-        function gameLoop() {
-            // Clear screen
-            ctx.clearRect(0, 0, width, height);
-            pollGamepad();
-
-            // Draw grid mechanics based on state
-            if (gameState === 'PLAYING' || gameState === 'GAMEOVER') {
-                for (let hex of grid) {
-                    if (gameState === 'PLAYING') {
-                        hex.honey += HONEY_GROWTH_BASE + (score * HONEY_GROWTH_SCORE_FACTOR);
-                        if (hex.honey >= HONEY_OVERFLOW) {
-                            gameState = 'GAMEOVER';
-                        }
-                    }
-                    drawHex(hex.x, hex.y, HEX_STROKE_SIZE, hex.honey);
-                }
-                drawFlashes();
-            } else if (gameState === 'START') {
-                // Draw static background grid for start screen
-                for (let hex of grid) {
-                    drawHex(hex.x, hex.y, HEX_STROKE_SIZE, hex.honey);
-                }
-            }
-
-            // Draw UI Overlays based on state
-            if (gameState === 'START') {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-                ctx.fillRect(0, 0, width, height);
-                ctx.fillStyle = '#ffc107';
-                ctx.font = 'bold 64px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText('HONEY RUSH', width / 2, height / 2 - 20);
-                ctx.fillStyle = 'white';
-                ctx.font = '24px sans-serif';
-                ctx.fillText('Press "A" Button or Click to Start', width / 2, height / 2 + 30);
-            } else if (gameState === 'GAMEOVER') {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-                ctx.fillRect(0, 0, width, height);
-                ctx.fillStyle = '#ff4444';
-                ctx.font = 'bold 64px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText('OVERFLOW!', width / 2, height / 2 - 40);
-                ctx.fillStyle = 'white';
-                ctx.font = '32px sans-serif';
-                ctx.fillText(`Final Score: ${score}`, width / 2, height / 2 + 10);
-                ctx.fillStyle = '#aaa';
-                ctx.font = '24px sans-serif';
-                ctx.fillText('Press "A" Button or Click to Restart', width / 2, height / 2 + 60);
-            }
-
-            // Draw Virtual Target Cursor
+        moveWait = 0.18;
+      }
+      function pollInput(dt) {
+        let pads = [];
+        try {
+          pads = navigator.getGamepads ? navigator.getGamepads() : [];
+        } catch (e) {}
+        const gp = Array.from(pads).find((p) => p && p.connected !== false);
+        if (padPresent && !gp && state === "playing") pause();
+        padPresent = !!gp;
+        padHeld = false;
+        if (gp) {
+          const b = gp.buttons.map((x) => !!x.pressed),
+            edge = (i) => b[i] && !previousButtons[i];
+          padHeld = !!b[0];
+          if (edge(0)) {
+            audio.unlock();
+            action();
+            harvest();
+          }
+          if (edge(3)) pause();
+          if (edge(2)) audio.toggle();
+          let dx = gp.axes[0] || 0,
+            dy = gp.axes[1] || 0;
+          const mag = Math.hypot(dx, dy);
+          if (mag > 0.22) {
+            inputMode = "pad";
+            const speed = (470 * (Math.min(mag, 1) - 0.22)) / 0.78;
+            cursor.x = clamp(cursor.x + (dx / mag) * speed * dt, 245, 735);
+            cursor.y = clamp(cursor.y + (dy / mag) * speed * dt, 208, 638);
+            selected = nearest(cursor.x, cursor.y);
+          }
+          const ax = (b[15] ? 1 : 0) - (b[14] ? 1 : 0),
+            ay = (b[13] ? 1 : 0) - (b[12] ? 1 : 0);
+          if (ax || ay) {
+            inputMode = "keys";
+            moveSelection(ax, ay);
+          }
+          previousButtons = b;
+        } else previousButtons = [];
+        const dx =
+            (keys.has("ArrowRight") || keys.has("KeyD") ? 1 : 0) -
+            (keys.has("ArrowLeft") || keys.has("KeyA") ? 1 : 0),
+          dy =
+            (keys.has("ArrowDown") || keys.has("KeyS") ? 1 : 0) -
+            (keys.has("ArrowUp") || keys.has("KeyW") ? 1 : 0);
+        if (dx || dy) {
+          inputMode = "keys";
+          moveSelection(dx, dy);
+        }
+      }
+      // Cached, seeded paper grain and wood textures: cheap to draw even on a TV.
+      const texture = document.createElement("canvas");
+      texture.width = 256;
+      texture.height = 256;
+      const tx = texture.getContext("2d");
+      let rand = 813;
+      function random() {
+        rand = (rand * 1664525 + 1013904223) >>> 0;
+        return rand / 4294967296;
+      }
+      for (let i = 0; i < 4500; i++) {
+        tx.fillStyle =
+          random() > 0.5 ? "rgba(255,228,166,.08)" : "rgba(0,0,0,.1)";
+        tx.fillRect(random() * 256, random() * 256, 1 + random() * 2, 1);
+      }
+      const grain = ctx.createPattern(texture, "repeat");
+      function hex(x, y, r) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = ((i * 60 - 30) * Math.PI) / 180;
+          const px = x + Math.cos(a) * r,
+            py = y + Math.sin(a) * r;
+          i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        }
+        ctx.closePath();
+      }
+      function text(
+        s,
+        x,
+        y,
+        size = 20,
+        color = "#fff0ce",
+        align = "left",
+        weight = 400,
+      ) {
+        ctx.fillStyle = color;
+        ctx.font = weight + " " + size + "px system-ui, sans-serif";
+        ctx.textAlign = align;
+        ctx.fillText(s, x, y);
+      }
+      function rect(x, y, w, h, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, w, h);
+      }
+      function draw() {
+        rect(0, 0, W, H, "#14291f");
+        ctx.fillStyle = grain;
+        ctx.fillRect(0, 0, W, H);
+        for (let i = 0; i < 16; i++) {
+          ctx.strokeStyle = "rgba(156,178,118,.045)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.ellipse(180 + i * 84, 440, 130, 480, -0.4, 0, 7);
+          ctx.stroke();
+        }
+        text("THE LITTLE APIARY", 64, 65, 14, "#b5c798", "left", 600);
+        text("Honey Rush", 60, 116, 46, "#ffe3a1", "left", 750);
+        text("A little patience. A golden harvest.", 64, 146, 17, "#a8b69a");
+        text(
+          "HARVEST  /  " + String(stage + 1).padStart(2, "0") + " OF 05",
+          820,
+          74,
+          15,
+          "#c4ceae",
+          "left",
+          600,
+        );
+        for (let i = 0; i < 5; i++) {
+          rect(820 + i * 75, 92, 65, 5, i <= stage ? "#edbb52" : "#344938");
+        }
+        text(STAGES[stage].name, 820, 144, 26, "#ffe3a1", "left", 650);
+        // Timber-backed honeycomb.
+        hex(490, 428, 287);
+        ctx.fillStyle = "#382b1d";
+        ctx.fill();
+        ctx.strokeStyle = "#746043";
+        ctx.lineWidth = 10;
+        ctx.stroke();
+        ctx.save();
+        ctx.clip();
+        for (let y = 160; y < 710; y += 12) {
+          ctx.strokeStyle = y % 24 ? "#463522" : "#30271d";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(190, y);
+          ctx.bezierCurveTo(400, y - 12, 570, y + 15, 790, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+        for (let i = 0; i < cells.length; i++) {
+          const c = cells[i],
+            danger = c.honey >= 82;
+          hex(c.x, c.y + 4, 61);
+          ctx.fillStyle = "#201d13";
+          ctx.fill();
+          hex(c.x, c.y, 59);
+          ctx.fillStyle = "#745029";
+          ctx.fill();
+          ctx.strokeStyle = "#c49449";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.save();
+          ctx.clip();
+          rect(c.x - 60, c.y - 60, 120, 120, "#3c3522");
+          const g = ctx.createLinearGradient(0, c.y - 60, 0, c.y + 60);
+          g.addColorStop(0, danger ? "#f69948" : "#ffdb75");
+          g.addColorStop(1, danger ? "#bd512e" : "#bd791f");
+          ctx.fillStyle = g;
+          ctx.fillRect(c.x - 60, c.y + 60 - 1.2 * c.honey, 120, 120);
+          ctx.fillStyle = grain;
+          ctx.fillRect(c.x - 60, c.y - 60, 120, 120);
+          for (let j = 0; j < 3; j++) {
+            ctx.strokeStyle = "rgba(255,246,177,.23)";
             ctx.beginPath();
-            ctx.arc(cursor.x, cursor.y, CURSOR_DOT_RADIUS, 0, Math.PI * 2);
-            ctx.fillStyle = '#fff';
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(cursor.x, cursor.y, CURSOR_RING_RADIUS, 0, Math.PI * 2);
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
+            ctx.arc(
+              c.x - 25 + j * 22,
+              c.y +
+                39 -
+                ((clock * 7 + j * 21 + i * 11) % Math.max(10, c.honey)),
+              3 + j,
+              0,
+              7,
+            );
             ctx.stroke();
-
-            requestAnimationFrame(gameLoop);
+          }
+          ctx.restore();
+          text(
+            c.grace > 0 ? "REST" : Math.floor(c.honey) + "%",
+            c.x,
+            c.y + 7,
+            c.grace > 0 ? 14 : 22,
+            c.honey >= 50 ? "#2c2717" : "#ffedbe",
+            "center",
+            700,
+          );
+          if (danger) text("!", c.x, c.y - 22, 22, "#fff7db", "center", 800);
+          if (i === selected) {
+            hex(c.x, c.y, 64);
+            ctx.strokeStyle = "#fff6cd";
+            ctx.lineWidth = 4;
+            ctx.stroke();
+          }
+          if (c.flash > 0) {
+            hex(c.x, c.y, 61 + 12 * (1 - c.flash / 0.8));
+            ctx.strokeStyle =
+              "rgba(255,243,184," + clamp(c.flash * 2, 0, 1) + ")";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+          }
         }
-
-        gameLoop();
+        text("FILL THE HARVEST JAR", 820, 215, 14, "#bdc8a7", "left", 650);
+        text(
+          Math.min(collected, STAGES[stage].goal) + "",
+          820,
+          264,
+          43,
+          "#ffdb79",
+          "left",
+          750,
+        );
+        text("/ " + STAGES[stage].goal + " nectar", 955, 262, 22, "#b7c19f");
+        rect(820, 283, 340, 12, "#344638");
+        rect(
+          820,
+          283,
+          340 * Math.min(1, collected / STAGES[stage].goal),
+          12,
+          "#efbd52",
+        );
+        text("SPILL CHANCES", 820, 343, 14, "#bdc8a7", "left", 650);
+        for (let i = 0; i < 3; i++) {
+          hex(838 + i * 43, 375, 15);
+          ctx.fillStyle = i < lives ? "#f3c45f" : "#3c4c3a";
+          ctx.fill();
+        }
+        text("Harvest at 25% or more.", 820, 430, 19);
+        text("Big fills earn more nectar.", 820, 460, 19);
+        text("At 100%, you lose a chance.", 820, 490, 19, "#d8b992");
+        text("Total nectar   " + total, 820, 554, 19, "#b9c7a7");
+        text(
+          "Time   " +
+            Math.floor(elapsed / 60) +
+            ":" +
+            String(Math.floor(elapsed % 60)).padStart(2, "0"),
+          820,
+          585,
+          19,
+          "#b9c7a7",
+        );
+        text(
+          "Stage " + (stage + 1) + " / 5 • Growth increases each stage",
+          490,
+          734,
+          17,
+          "#b9c7a7",
+          "center",
+        );
+        text("MOVE  Stick / D-pad / WASD / arrows", 64, 776, 15, "#c5cfb3");
+        text("HARVEST  Hold A / Space / mouse", 525, 776, 15, "#c5cfb3");
+        text("PAUSE  Y / P / Esc", 1000, 776, 15, "#c5cfb3");
+        if (inputMode === "pad" && state === "playing") {
+          ctx.beginPath();
+          ctx.arc(cursor.x, cursor.y, 7, 0, 7);
+          ctx.fillStyle = "#fff";
+          ctx.fill();
+        }
+        if (state !== "playing") drawOverlay();
+      }
+      function drawOverlay() {
+        rect(0, 0, W, H, "rgba(8,20,14,.87)");
+        rect(260, 165, 760, 464, "#20382a");
+        ctx.strokeStyle = "#8b8954";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(271, 176, 738, 442);
+        let title, sub, lines, button;
+        if (state === "title") {
+          title = "The golden harvest";
+          sub = "HONEY RUSH";
+          lines = [
+            "Collect nectar across five increasingly lively harvests.",
+            "Select a cell. Hold harvest when it reaches 25%.",
+            "Keep the hive below 100%. Three spills ends your run.",
+            "No time limit. Each full jar brings you closer to victory.",
+          ];
+          button = "A / Enter / click to begin";
+        } else if (state === "between") {
+          title = "Harvest complete";
+          sub = "STAGE " + (stage + 1) + " CLEARED";
+          lines = [
+            total + " nectar collected • " + lives + " spill chances remaining",
+            "Next: " + STAGES[stage + 1].name,
+            "The hive refills faster. Your chances carry forward.",
+          ];
+          button = "A / Enter / click for next harvest";
+        } else if (state === "paused") {
+          title = "A moment in the shade";
+          sub = "PAUSED";
+          lines = [
+            "The hive is safe while you are away.",
+            "Controller disconnected? Reconnect, then press A.",
+          ];
+          button = "A / Enter / click to resume";
+        } else if (state === "won") {
+          title = "A golden job, keeper.";
+          sub = "ALL FIVE HARVESTS COMPLETE";
+          lines = [
+            total + " nectar • " + lives + " spill chances saved",
+            "Harvest time: " +
+              Math.floor(elapsed / 60) +
+              "m " +
+              Math.floor(elapsed % 60) +
+              "s",
+            "The jars are full. The bees thank you.",
+          ];
+          button = "A / Enter / click to play again";
+        } else {
+          title = "Time for a fresh hive";
+          sub = "HARVEST ENDED";
+          lines = [
+            reason,
+            "Stage " + (stage + 1) + " • " + total + " nectar collected",
+            "Tip: clear the fullest cells first. Hold A while moving.",
+          ];
+          button = "A / Enter / click to retry";
+        }
+        text(sub, 640, 228, 15, "#d2c791", "center", 650);
+        text(title, 640, 287, 42, "#ffe2a0", "center", 750);
+        lines.forEach((s, i) =>
+          text(s, 640, 343 + i * 33, 20, "#d5ddc5", "center"),
+        );
+        rect(407, 509, 466, 54, "#efc369");
+        text(button, 640, 543, 21, "#243023", "center", 700);
+        text(
+          "PC: mouse or keyboard     •     Xbox: left stick + A",
+          640,
+          595,
+          16,
+          "#b2c09e",
+          "center",
+        );
+      }
+      function pointer(e) {
+        const r = canvas.getBoundingClientRect();
+        cursor.x = ((e.clientX - r.left) * W) / r.width;
+        cursor.y = ((e.clientY - r.top) * H) / r.height;
+        selected = nearest(cursor.x, cursor.y);
+        inputMode = "mouse";
+      }
+      canvas.addEventListener("pointermove", pointer);
+      canvas.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        canvas.focus();
+        pointer(e);
+        audio.unlock();
+        if (state === "playing") {
+          pointerHeld = true;
+          harvest();
+        } else action();
+      });
+      window.addEventListener("pointerup", () => (pointerHeld = false));
+      window.addEventListener("pointercancel", () => (pointerHeld = false));
+      const handled = [
+        "Space",
+        "Enter",
+        "ArrowUp",
+        "ArrowDown",
+        "ArrowLeft",
+        "ArrowRight",
+        "KeyW",
+        "KeyA",
+        "KeyS",
+        "KeyD",
+        "KeyP",
+        "Escape",
+        "KeyM",
+      ];
+      window.addEventListener("keydown", (e) => {
+        if (
+          !handled.includes(e.code) ||
+          e.target === document.getElementById("sound")
+        )
+          return;
+        e.preventDefault();
+        keys.add(e.code);
+        if (e.repeat) return;
+        if (e.code === "Space" || e.code === "Enter") {
+          audio.unlock();
+          action();
+          harvest();
+        }
+        if (e.code === "KeyP" || e.code === "Escape") pause();
+        if (e.code === "KeyM") audio.toggle();
+      });
+      window.addEventListener("keyup", (e) => keys.delete(e.code));
+      function loseFocus() {
+        keys.clear();
+        pointerHeld = false;
+        padHeld = false;
+        if (state === "playing") pause();
+      }
+      window.addEventListener("blur", loseFocus);
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) loseFocus();
+      });
+      window.addEventListener("resize", resize);
+      document.getElementById("sound").addEventListener("click", () => {
+        audio.toggle();
+        canvas.focus();
+      });
+      function frame(t) {
+        const dt = Math.min(Math.max((t - lastTime) / 1000, 0), 0.05);
+        lastTime = t;
+        pollInput(dt);
+        update(dt);
+        audio.tick();
+        draw();
+        const a = audio.context;
+        document.getElementById("status").textContent =
+          (padPresent
+            ? "Controller connected"
+            : "PC controls ready • Xbox: hold Menu to switch Edge to game controls") +
+          (a && audio.enabled && a.state !== "running"
+            ? " • Click Enable sound to unlock audio"
+            : "");
+        requestAnimationFrame(frame);
+      }
+      resize();
+      seedBoard();
+      requestAnimationFrame(frame);
     </script>
-</body>
+  </body>
 </html>
