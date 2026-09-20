@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toy Room RPG</title>
+    <style>
+
+        
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a202c;
+            color: white;
+            font-family: 'Nunito', sans-serif;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.8);
+            z-index: 50;
+        }
+
+        h1 {
+            font-family: 'Fredoka One', cursive;
+            font-size: 4rem;
+            text-shadow: 4px 4px 0px #3b82f6, -2px -2px 0px #ef4444;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .btn {
+            font-family: 'Fredoka One', cursive;
+            background: linear-gradient(180deg, #fde047 0%, #eab308 100%);
+            color: #1e293b;
+            border: 4px solid #1e293b;
+            padding: 1rem 2rem;
+            font-size: 1.5rem;
+            border-radius: 9999px;
+            cursor: pointer;
+            box-shadow: 0 8px 0 #1e293b;
+            transition: all 0.1s;
+        }
+        
+        .btn:active {
+            transform: translateY(8px);
+            box-shadow: 0 0 0 #1e293b;
+        }
+
+        /* HUD */
+        #hud {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .party-frame, .boss-frame {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.9);
+            border: 4px solid #1e293b;
+            border-radius: 16px;
+            padding: 10px;
+            color: #1e293b;
+            font-weight: bold;
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.2);
+            pointer-events: auto;
+        }
+
+        .party-frame { bottom: 20px; left: 20px; width: 300px; }
+        .boss-frame { top: 20px; right: 20px; width: 300px; }
+
+        .bar-bg {
+            background: #cbd5e1;
+            height: 12px;
+            border-radius: 6px;
+            border: 2px solid #1e293b;
+            overflow: hidden;
+            margin-top: 4px;
+            position: relative;
+        }
+
+        .hp-fill { background: #ef4444; height: 100%; width: 100%; transition: width 0.2s; }
+        .atb-fill { background: #3b82f6; height: 100%; width: 0%; }
+        .energy-fill { background: #eab308; height: 100%; width: 0%; transition: width 0.2s;}
+
+        .char-row { display: flex; justify-content: space-between; margin-bottom: 8px; align-items: center;}
+        
+        /* Action Menu */
+        #action-menu {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border: 4px solid #1e293b;
+            border-radius: 16px;
+            padding: 15px;
+            color: #1e293b;
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            min-width: 200px;
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.3);
+            pointer-events: auto;
+        }
+
+        .menu-title {
+            font-family: 'Fredoka One', cursive;
+            text-align: center;
+            border-bottom: 2px dashed #cbd5e1;
+            padding-bottom: 5px;
+            margin-bottom: 5px;
+            font-size: 1.2rem;
+            color: #3b82f6;
+        }
+
+        .skill-item {
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: #f1f5f9;
+            border: 2px solid transparent;
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+        }
+
+        .skill-item.selected {
+            background: #fde047;
+            border-color: #1e293b;
+            transform: scale(1.05);
+        }
+
+        .energy-cost { color: #d97706; font-size: 0.9rem; }
+        
+        /* Floating Text */
+        .float-text {
+            position: absolute;
+            font-family: 'Fredoka One', cursive;
+            font-size: 2rem;
+            font-weight: bold;
+            text-shadow: 2px 2px 0 #000;
+            pointer-events: none;
+            animation: floatUp 1s forwards;
+            z-index: 20;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-50px) scale(1.2); opacity: 0; }
+        }
+
+        /* Controls Hint */
+        #controls-hint {
+            position: absolute;
+            top: 20px; left: 20px;
+            background: rgba(0,0,0,0.6);
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            color: white;
+            pointer-events: none;
+        }
+    
+/* Local, dependency-free TV layout. */
+* { box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; }
+h1, .btn, .menu-title { font-family: ui-rounded, system-ui, sans-serif; font-weight: 900; }
+h1 { font-size: clamp(2rem, 5vw, 4rem); }
+.overlay { padding: 5vh 5vw; text-align: center; }
+.overlay p { background: #0f172ae6; padding: 1rem; line-height: 1.6; font-size: clamp(16px, 1.6vw, 23px); }
+[hidden] { display: none !important; }
+#pause-screen { z-index: 100; }
+button { cursor: pointer; font: inherit; }
+button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
+#controller-status { position: absolute; top: 4vh; left: 36%; max-width: 30%; background: #0f172ae6; padding: 10px; border-radius: 8px; font-size: 16px; }
+#toolbar { position: absolute; bottom: 4vh; left: 37%; display: flex; gap: 8px; z-index: 15; }
+#toolbar button { background: #0f172a; color: white; border: 2px solid white; border-radius: 8px; padding: 10px; }
+.party-frame { left: 4vw; bottom: 4vh; width: 27vw; max-width: 350px; }
+.boss-frame { right: 4vw; top: 4vh; width: 27vw; max-width: 350px; }
+#action-menu { right: 4vw; bottom: 4vh; min-width: 25vw; }
+#controls-hint { top: 4vh; left: 4vw; font-size: clamp(12px, 1.1vw, 18px); }
+.skill-item { width: 100%; margin-bottom: 6px; text-align: left; font-size: clamp(16px, 1.5vw, 24px); }
+.skill-item[aria-disabled="true"] { color: #64748b; }
+@media (max-width: 700px) { #controls-hint { display: none; } #controller-status { left: 4vw; max-width: 45%; font-size: 12px; } .party-frame { width: 37vw; font-size: 12px; padding: 6px; } #action-menu { min-width: 40vw; padding: 8px; } #toolbar { left: 43%; bottom: 47%; flex-direction: column; } .boss-frame { width: 43vw; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } .float-text { animation: none; } }
+/* Keep the expanded roster readable without controller-driven scrolling. */
+.party-frame.expanded-squad { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 34vw; max-width: 520px; }
+.expanded-squad > :not(.soldier-stats) { grid-column: 1 / -1; }
+.soldier-stats { min-width: 0; }
+.soldier-stats .char-row { gap: 6px; }
+.expanded-squad .char-row { font-size: clamp(11px, 1.05vw, 17px); }
+.squad-count { font-weight: 900; margin-bottom: 5px; }
+
+#travel-ui { position:absolute; top:4vh; left:8%; right:8%; text-align:center; padding:14px; border:3px solid #284638; border-radius:15px; background:#fff6dbee; color:#284638; z-index:16; font-size:clamp(14px,1.6vw,22px); pointer-events:none; }
+#travel-ui p { font-size: .75em; margin:8px 0 0; }
+#travel-ui .bar-bg { max-width:500px; margin:8px auto; }
+
+</style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" aria-label="Toy Room battle scene"></canvas>
+<div id="controller-status" role="status">Press a controller button to connect</div>
+<div id="toolbar"><button id="march-btn" hidden>Stop marching (A)</button><button id="pause-btn">Pause (Y / P)</button><button id="crate-btn">Supply (X)</button><button id="fullscreen-btn">Fullscreen</button></div>
+<div id="pause-screen" class="overlay" hidden><h1>Paused</h1><p>Press A, Y or P to resume.</p><button id="resume-btn" class="btn">Resume</button></div>
+    
+    <div id="controls-hint">
+        <b>Controller / Keyboard</b><br>
+        D-Pad / W,S : Menu<br>
+        Right Stick / A,D: Rotate Cam<br>
+        A Button / Space : Select<br>
+        X Button / 'X' Key : Supply Crate<br>
+        Bumpers / Q,E : Switch ready character<br>Y / P : Pause · B / Escape : Close crate
+    </div>
+
+    <div id="travel-ui" hidden>
+        <strong id="travel-title"></strong>
+        <div class="bar-bg"><div id="travel-progress" class="atb-fill"></div></div>
+        <p>Left stick / D-pad / WASD: move the squad · A / Space: auto march on/off<br>Reach the next mech to start battle. Y / P: pause.</p>
+    </div>
+    <!-- HUD -->
+    <div id="hud" style="display: none;">
+        <div class="party-frame" id="party-ui">
+            <!-- Populated via JS -->
+        </div>
+        
+        <div class="boss-frame" id="boss-ui">
+            <div class="char-row">
+                <span id="boss-name" style="font-size: 1.2rem; font-family:'Fredoka One', cursive;">Mech Boss</span>
+                <span id="boss-hp-text">100/100</span>
+            </div>
+            <div style="font-size: 0.8rem;">Battery Level</div>
+            <div class="bar-bg"><div class="hp-fill" id="boss-hp"></div></div>
+            <div class="bar-bg" style="height:4px; margin-top:2px;"><div class="atb-fill" id="boss-atb" style="background:#ef4444;"></div></div>
+        </div>
+
+        <div id="action-menu">
+            <div class="menu-title" id="menu-character-name">Soldier</div>
+            <div id="skill-list"></div>
+        </div>
+    </div>
+
+    <!-- Screens -->
+    <div id="start-screen" class="overlay">
+        <h1>Toy Room RPG</h1>
+        <p class="mb-6 text-xl font-bold bg-black/50 p-4 rounded-xl text-center">
+            March across the playroom and defeat three Mechs! Open crates<br>
+            to recruit soldiers and call in Artillery. Your squad travels together.<br><small>Xbox: open this page over HTTPS in Edge. Enable game controls<br>in the browser menu if the controller moves the browser cursor.</small>
+        </p>
+        <button id="start-btn" class="btn">Start Game (Press A / Space)</button>
+    </div>
+
+    <div id="game-over-screen" class="overlay" style="display: none;">
+        <h1 id="end-title">Round Cleared!</h1>
+        <button id="next-round-btn" class="btn">Next Round (Press A / Space)</button>
+    </div>
+</div>
+
+<script>
+
+    // --- Setup & State ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let canvasWidth, canvasHeight;
+    
+    function resizeCanvas() {
+        const oldWidth = canvasWidth, oldHeight = canvasHeight;
+        canvasWidth = window.innerWidth;
+        canvasHeight = window.innerHeight;
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        if (oldWidth && oldHeight) for (const actor of [...party, boss].filter(Boolean)) {
+            actor.x *= canvasWidth / oldWidth; actor.y *= canvasHeight / oldHeight;
+            actor.baseX = actor.x; actor.baseY = actor.y;
+        }
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const GameState = { MENU: 0, PLAYING: 1, TURN_WAIT: 2, ANIMATING: 3, GAME_OVER: 4, ROUND_END: 5, TRAVEL: 6 };
+    let currentState = GameState.MENU;
+    
+    let currentRound = 1;
+    let maxRounds = 3;
+    
+    let globalEnergy = 0;
+    const MAX_ENERGY = 100;
+    const MAX_SOLDIERS = 8;
+    let cameraAngle = 0; 
+    let animationTimer = 0;
+    
+    let party = [];
+    let boss = null;
+    let turnQueue = [];
+    let activeCharacter = null;
+    let selectedSkillIndex = 0;
+    let currentAction = null;
+    let menuMode = 'standard'; // 'standard' or 'artillery'
+
+    let lastTime = 0;
+    let floatTexts = [];
+    let travelProgress = 0, travelLane = 0, marchClock = 0, autoMarch = true;
+    const roomStops = ['Block Fort', 'Crayon Crossing', 'Toy Castle'];
+    function beginTravel() {
+        currentState = GameState.TRAVEL;
+        travelProgress = 0; travelLane = 0; marchClock = 0; autoMarch = true;
+        activeCharacter = null; currentAction = null; turnQueue = [];
+        menuMode = 'standard';
+        party.forEach(p => { p.hp = p.maxHp; p.atb = 0; p.animOffsetX = 0; p.animOffsetY = 0; });
+        document.getElementById('action-menu').style.display = 'none';
+        document.getElementById('boss-ui').style.display = 'none';
+        document.getElementById('travel-ui').hidden = false;
+        document.getElementById('controls-hint').hidden = true;
+        document.getElementById('controller-status').hidden = true;
+        document.getElementById('march-btn').hidden = false;
+        document.getElementById('crate-btn').hidden = true;
+        updateUI();
+    }
+    function updateTravel(dt) {
+        if (Input.actionPressed) autoMarch = !autoMarch;
+        const direction = Math.abs(Input.moveX) > .15 ? Input.moveX : autoMarch ? 1 : 0;
+        travelProgress = Math.max(0, Math.min(1, travelProgress + direction * dt / 8500));
+        travelLane = Math.max(-.1, Math.min(.1, travelLane + Input.moveY * dt / 7000));
+        marchClock += dt * (Math.abs(direction) + Math.abs(Input.moveY));
+        document.getElementById('travel-title').textContent = `Mech ${currentRound} defeated! Onward to ${roomStops[currentRound]}`;
+        document.getElementById('travel-progress').style.width = `${travelProgress * 100}%`;
+        document.getElementById('march-btn').textContent = autoMarch ? 'Stop marching (A)' : 'Auto march (A)';
+        if (travelProgress >= 1) initRound(currentRound + 1);
+    }
+    function drawTravel() {
+        // The next encounter comes into view as the room scrolls past the squad.
+        const nextX = canvasWidth * (.75 + (1 - travelProgress) * 1.4);
+        drawMech(nextX, canvasHeight * .65 + 20, 1 + (currentRound + 1) * .3, currentRound + 1);
+        party.forEach((soldier,index) => {
+            const phase = marchClock / 100 + index * .8;
+            const walking = Math.abs(Input.moveX) > .15 || Math.abs(Input.moveY) > .15 || autoMarch;
+            const stride = walking ? Math.sin(phase) : 0;
+            drawSoldier(soldier.x, soldier.y + travelLane * canvasHeight - Math.abs(stride)*3,
+                soldier.color, soldier.name === 'Heavy', soldier.name, stride);
+        });
+    }
+
+    // --- Procedural Textures ---
+    let carpetPattern, wallPattern, boxPattern;
+
+    function initTextures() {
+        // Carpet Texture
+        let c = document.createElement('canvas');
+        c.width = 128; c.height = 128;
+        let cctx = c.getContext('2d');
+        cctx.fillStyle = "#86efac"; // Light green base
+        cctx.fillRect(0, 0, 128, 128);
+        for(let i=0; i<800; i++) {
+            cctx.fillStyle = Math.random() > 0.5 ? "rgba(255,255,255,0.2)" : "rgba(0,100,0,0.1)";
+            cctx.beginPath();
+            cctx.arc(Math.random()*128, Math.random()*128, Math.random()*2+1, 0, Math.PI*2);
+            cctx.fill();
+        }
+        carpetPattern = ctx.createPattern(c, 'repeat');
+
+        // Wall Texture (Polka dots)
+        let w = document.createElement('canvas');
+        w.width = 60; w.height = 60;
+        let wctx = w.getContext('2d');
+        wctx.fillStyle = "#bae6fd";
+        wctx.fillRect(0, 0, 60, 60);
+        wctx.fillStyle = "#7dd3fc";
+        wctx.beginPath(); wctx.arc(30, 30, 8, 0, Math.PI*2); wctx.fill();
+        wallPattern = ctx.createPattern(w, 'repeat');
+
+        // Box/Cardboard Texture
+        let b = document.createElement('canvas');
+        b.width = 40; b.height = 40;
+        let bctx = b.getContext('2d');
+        bctx.fillStyle = "#d97706";
+        bctx.fillRect(0,0,40,40);
+        bctx.fillStyle = "#b45309";
+        for(let i=0; i<40; i+=4) {
+            bctx.fillRect(0, i, 40, 1);
+        }
+        boxPattern = ctx.createPattern(b, 'repeat');
+    }
+
+    // --- Audio System ---
+    const SFX = {
+        ctx: null,
+        init() { 
+            if(!this.ctx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) this.ctx = new AudioContext();
+            }
+            if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+        },
+        playTone(freq, type, dur, vol=0.1) {
+            if(!this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type; 
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            osc.start(); osc.stop(this.ctx.currentTime + dur);
+        },
+        shoot() { this.playTone(400, 'square', 0.1, 0.05); setTimeout(()=>this.playTone(300, 'sawtooth', 0.15, 0.05), 50); },
+        boom() { 
+            if(!this.ctx) return;
+            const bufferSize = this.ctx.sampleRate * 0.5;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for(let i=0; i<bufferSize; i++) data[i] = Math.random() * 2 - 1;
+            const noise = this.ctx.createBufferSource(); noise.buffer = buffer;
+            const filter = this.ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 800;
+            const gain = this.ctx.createGain(); gain.gain.setValueAtTime(0.5, this.ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+            noise.connect(filter); filter.connect(gain); gain.connect(this.ctx.destination);
+            noise.start();
+        },
+        heal() { this.playTone(400, 'sine', 0.1, 0.1); setTimeout(()=>this.playTone(600, 'sine', 0.2, 0.1), 100); },
+        error() { this.playTone(150, 'sawtooth', 0.2, 0.1); },
+        select() { this.playTone(800, 'sine', 0.05, 0.05); },
+        crate() { this.playTone(200, 'square', 0.1, 0.1); setTimeout(()=>this.playTone(250, 'square', 0.1, 0.1), 100); }
+    };
+
+    // Queued input survives until the next frame; held buttons only fire once.
+    const Input = {camX: 0};
+    const pending = new Set(), heldKeys = new Set();
+    let previousPad = {}, padIndex = null, paused = false;
+    const keyActions = {ArrowUp:'upPressed', KeyW:'upPressed', ArrowDown:'downPressed', KeyS:'downPressed', Space:'actionPressed', Enter:'actionPressed', KeyX:'altActionPressed', KeyQ:'lbPressed', KeyE:'rbPressed', KeyP:'pausePressed', Escape:'backPressed'};
+    const actionNames = [...new Set(Object.values(keyActions))];
+    function queueAction(action) { pending.add(action); }
+    function setPaused(value) {
+        if (!boss || currentState === GameState.GAME_OVER || currentState === GameState.ROUND_END) return;
+        paused = value;
+        document.getElementById('pause-screen').hidden = !value;
+        if (value) document.getElementById('resume-btn').focus();
+        lastTime = performance.now();
+    }
+    window.addEventListener('keydown', e => {
+        if (keyActions[e.code] || ['ArrowLeft','ArrowRight','KeyA','KeyD'].includes(e.code)) {
+            e.preventDefault();
+            if (!e.repeat && keyActions[e.code]) queueAction(keyActions[e.code]);
+            heldKeys.add(e.code);
+            SFX.init();
+        }
+    });
+    window.addEventListener('keyup', e => heldKeys.delete(e.code));
+    function loseFocus() { heldKeys.clear(); pending.clear(); Input.camX = 0; setPaused(true); }
+    window.addEventListener('blur', loseFocus);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) loseFocus(); });
+    function updateInput() {
+        for (const name of actionNames) Input[name] = pending.has(name);
+        pending.clear();
+        let pads = [];
+        try { pads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : []; } catch (_) {}
+        const gp = pads.find(p => p && p.connected && p.mapping === 'standard');
+        const status = document.getElementById('controller-status');
+        const message = gp ? 'Xbox-style controller connected • A to select' : !window.isSecureContext ? 'Use HTTPS for controller support' : 'Press a controller button • keyboard / mouse ready';
+        if (status.textContent !== message) status.textContent = message;
+        if ((gp ? gp.index : null) !== padIndex) {
+            if (padIndex !== null) setPaused(true);
+            previousPad = {}; padIndex = gp ? gp.index : null;
+        }
+        const b = i => !!(gp && gp.buttons[i] && gp.buttons[i].pressed);
+        const axis = i => gp && Number.isFinite(gp.axes[i]) ? gp.axes[i] : 0;
+        const now = {upPressed:b(12)||axis(1)<-0.5, downPressed:b(13)||axis(1)>0.5, actionPressed:b(0), altActionPressed:b(2), lbPressed:b(4), rbPressed:b(5), pausePressed:b(3), backPressed:b(1)};
+        for (const name of actionNames) Input[name] ||= now[name] && !previousPad[name];
+        previousPad = now;
+        const keyboardCamera = Number(heldKeys.has('KeyD')||heldKeys.has('ArrowRight')) - Number(heldKeys.has('KeyA')||heldKeys.has('ArrowLeft'));
+        Input.camX = Math.abs(axis(2)) > 0.2 ? axis(2) : keyboardCamera;
+        Input.moveX = Math.abs(axis(0)) > .2 ? axis(0) : b(14) ? -1 : b(15) ? 1 : keyboardCamera;
+        const vertical = Number(heldKeys.has('KeyS')||heldKeys.has('ArrowDown')) - Number(heldKeys.has('KeyW')||heldKeys.has('ArrowUp'));
+        Input.moveY = Math.abs(axis(1)) > .2 ? axis(1) : b(12) ? -1 : b(13) ? 1 : vertical;
+    }
+
+    // Skills
+    const SKILLS = {
+        // Standard
+        RIFLE: { name: "Rifle Shot", cost: 0, power: 10, type: "damage", energyGain: 15, msg: "fires rifle!" },
+        BAZOOKA: { name: "Bazooka", cost: 0, power: 25, type: "damage", energyGain: 10, msg: "fires bazooka!" },
+        HEAL: { name: "Field Medic", cost: 0, power: 30, type: "heal", energyGain: 5, msg: "applies first aid!" },
+        
+        RECRUIT: { name: "Add Soldier", cost: 50, type: "recruit", msg: "recruits a soldier!" },
+
+        // Artillery (Requires Crate Access)
+        PAINT_TANK: { name: "Paint Tank", cost: 40, power: 80, type: "damage", energyGain: 0, msg: "calls in the Paint Tank!", summon: "tank" },
+        SLIME_CANNON: { name: "Slime Cannon", cost: 60, power: 120, type: "damage", energyGain: 0, msg: "fires the Slime Cannon!", summon: "cannon" },
+        HELI_DROP: { name: "Heli Drop", cost: 90, power: 180, type: "damage", energyGain: 0, msg: "calls Helicopter drop!", summon: "heli" },
+    };
+
+    class Actor {
+        constructor(id, name, hp, spd, color, isEnemy, x, y, skills) {
+            this.id = id;
+            this.name = name;
+            this.maxHp = hp;
+            this.hp = hp;
+            this.spd = spd;
+            this.color = color;
+            this.isEnemy = isEnemy;
+            this.x = x; this.y = y;
+            this.baseX = x; this.baseY = y;
+            
+            this.skills = skills; // Base skills
+            this.artillerySkills = ["RECRUIT", "PAINT_TANK", "SLIME_CANNON", "HELI_DROP"];
+
+            this.atb = 0;
+            this.atbMax = 1000;
+            this.animOffsetX = 0;
+            this.animOffsetY = 0;
+            
+            this.scale = 1;
+        }
+
+        updateATB(dt) {
+            if (this.hp <= 0) return;
+            this.atb += this.spd * dt * 0.05;
+            if (this.atb > this.atbMax) this.atb = this.atbMax;
+        }
+    }
+
+    function positionParty() {
+        party.forEach((soldier, index) => {
+            soldier.x = canvasWidth * (0.13 + (index % 4) * 0.09);
+            soldier.y = canvasHeight * (0.52 + Math.floor(index / 4) * 0.15);
+            soldier.baseX = soldier.x; soldier.baseY = soldier.y;
+        });
+    }
+
+    function initRound(round) {
+        initTextures(); // Ensure textures are ready
+        currentRound = round;
+        document.getElementById('travel-ui').hidden = true;
+        document.getElementById('controls-hint').hidden = false;
+        document.getElementById('controller-status').hidden = false;
+        document.getElementById('march-btn').hidden = true;
+        document.getElementById('crate-btn').hidden = false;
+        document.getElementById('boss-ui').style.display = 'block';
+        paused = false;
+        activeCharacter = null; currentAction = null; animationTimer = 0;
+        document.getElementById('action-menu').style.display = 'none';
+        globalEnergy = 0;
+        turnQueue = [];
+        floatTexts = [];
+        menuMode = 'standard';
+
+        let sX = canvasWidth * 0.2;
+        let sY = canvasHeight * 0.65;
+        let gap = 90;
+
+        if (round === 1 || party.length === 0) party = [
+            new Actor("p1", "Captain", 100, 30, "#22c55e", false, sX, sY, ["RIFLE"]),
+            new Actor("p2", "Heavy", 120, 20, "#16a34a", false, sX + gap, sY + 40, ["BAZOOKA"]),
+            new Actor("p3", "Medic", 80, 35, "#15803d", false, sX - gap, sY + 20, ["RIFLE", "HEAL"])
+        ];
+
+        party.forEach(soldier => {
+            soldier.hp = soldier.maxHp;
+            soldier.atb = 0;
+            soldier.animOffsetX = 0; soldier.animOffsetY = 0;
+        });
+        positionParty();
+
+        // Boss stats scale with round
+        let bossScale = 1 + (round * 0.3);
+        let bossHp = 200 + (round * 150);
+        let bossSpd = 15 + (round * 5);
+        boss = new Actor("b1", `Mech Mk${round}`, bossHp, bossSpd, "#3b82f6", true, canvasWidth * 0.75, sY + 20, []);
+        boss.scale = bossScale;
+        boss.maxHp = bossHp; // Ensure max is set correctly
+        
+        buildUI();
+        currentState = GameState.PLAYING;
+        document.getElementById('hud').style.display = 'block';
+    }
+
+    function buildUI() {
+        let pContainer = document.getElementById('party-ui');
+        pContainer.innerHTML = `<div class="squad-count">Squad: ${party.length} / ${MAX_SOLDIERS}</div><div>Battery: <span id="energy-text"></span></div><div class="bar-bg"><div class="energy-fill" id="energy-bar"></div></div><hr style="margin: 8px 0; border-color:#cbd5e1;">`;
+        
+        party.forEach(p => {
+            pContainer.innerHTML += `
+                <div class="soldier-stats"><div class="char-row" id="ui-${p.id}">
+                    <span>${p.name}</span>
+                    <span id="hp-txt-${p.id}">${p.hp}/${p.maxHp}</span>
+                </div>
+                <div class="bar-bg"><div class="hp-fill" id="hp-${p.id}"></div></div>
+                <div class="bar-bg" style="height:4px; margin-top:2px;"><div class="atb-fill" id="atb-${p.id}"></div></div></div>
+            `;
+        });
+        pContainer.classList.toggle("expanded-squad", party.length > 4);
+        updateUI();
+    }
+
+    function updateUI() {
+        if (!boss) return;
+        
+        document.getElementById('energy-bar').style.width = `${(globalEnergy/MAX_ENERGY)*100}%`;
+
+        document.getElementById('energy-text').textContent = `${globalEnergy} / ${MAX_ENERGY}`;
+        party.forEach(p => {
+            document.getElementById(`hp-${p.id}`).style.width = `${(p.hp/p.maxHp)*100}%`;
+            document.getElementById(`atb-${p.id}`).style.width = `${(p.atb/p.atbMax)*100}%`;
+            document.getElementById(`hp-txt-${p.id}`).innerText = `${Math.max(0, p.hp)}/${p.maxHp}`;
+        });
+
+        document.getElementById('boss-hp').style.width = `${(boss.hp/boss.maxHp)*100}%`;
+        document.getElementById('boss-atb').style.width = `${(boss.atb/boss.atbMax)*100}%`;
+        document.getElementById('boss-hp-text').innerText = `${Math.max(0, boss.hp)}/${boss.maxHp}`;
+        document.getElementById('boss-name').innerText = `Mech Mk${currentRound}`;
+    }
+
+    function spawnFloatText(text, x, y, color) {
+        let el = document.createElement('div');
+        el.className = 'float-text';
+        el.innerText = text;
+        el.style.color = color;
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        document.getElementById('game-container').appendChild(el);
+        setTimeout(() => el.remove(), 1000);
+    }
+
+    function openActionMenu(character) {
+        activeCharacter = character;
+        selectedSkillIndex = 0;
+        currentState = GameState.TURN_WAIT;
+        
+        renderActionMenu();
+        document.getElementById('action-menu').style.display = 'flex';
+    }
+
+    function renderActionMenu() {
+        if(!activeCharacter) return;
+        
+        let title = document.getElementById('menu-character-name');
+        title.innerText = `${activeCharacter.name}'s Turn`;
+        title.style.color = menuMode === 'artillery' ? '#d97706' : '#3b82f6';
+        
+        let list = document.getElementById('skill-list');
+        list.innerHTML = '';
+        
+        let skillSet = menuMode === 'artillery' ? activeCharacter.artillerySkills : activeCharacter.skills;
+
+        // Verify index is valid
+        if(selectedSkillIndex >= skillSet.length) selectedSkillIndex = 0;
+
+        skillSet.forEach((skKey, idx) => {
+            let sk = SKILLS[skKey];
+            let isSel = idx === selectedSkillIndex;
+            const squadFull = sk.type === "recruit" && party.length >= MAX_SOLDIERS;
+            let costHtml = squadFull ? '<span class="energy-cost">FULL</span>' : sk.cost > 0 ? `<span class="energy-cost">${sk.cost} ENG</span>` : '';
+            list.innerHTML += `
+                <button type="button" data-skill="${idx}" aria-disabled="${sk.cost > globalEnergy || squadFull}" class="skill-item ${isSel ? 'selected' : ''}">
+                    <span>${isSel ? '▶ ' : ''}${sk.name}</span>
+                    ${costHtml}
+                </button>
+            `;
+        });
+        
+        list.innerHTML += `<div style="font-size: 0.8rem; text-align: center; margin-top: 5px; color: #64748b;">
+            ${menuMode === 'standard' ? 'Press X to Open Crate' : 'Press X to Close Crate'}
+        </div>`;
+    }
+
+    function handleMenuInput() {
+        if (!activeCharacter) return;
+        
+        let skillSet = menuMode === 'artillery' ? activeCharacter.artillerySkills : activeCharacter.skills;
+        let skillsCount = skillSet.length;
+
+        // Toggle Menu Mode
+        if (Input.backPressed && menuMode === 'artillery') { menuMode = 'standard'; selectedSkillIndex = 0; renderActionMenu(); return; }
+        if (Input.altActionPressed) {
+            SFX.crate();
+            menuMode = menuMode === 'standard' ? 'artillery' : 'standard';
+            selectedSkillIndex = 0;
+            renderActionMenu();
+            
+            // Visual bounce on menu
+            let menu = document.getElementById('action-menu');
+            menu.style.transform = "scale(1.1)";
+            setTimeout(()=> menu.style.transform = "scale(1)", 100);
+            return;
+        }
+
+        if (Input.downPressed) {
+            selectedSkillIndex = (selectedSkillIndex + 1) % skillsCount;
+            SFX.select();
+            renderActionMenu();
+        }
+        if (Input.upPressed) {
+            selectedSkillIndex = (selectedSkillIndex - 1 + skillsCount) % skillsCount;
+            SFX.select();
+            renderActionMenu();
+        }
+
+        // Bumper switching characters
+        if (Input.lbPressed || Input.rbPressed) {
+            let readyPlayers = turnQueue.filter(a => !a.isEnemy && a.hp > 0);
+            if (readyPlayers.length > 1) {
+                let currentIndex = readyPlayers.indexOf(activeCharacter);
+                let dir = Input.rbPressed ? 1 : -1;
+                let nextIndex = (currentIndex + dir + readyPlayers.length) % readyPlayers.length;
+                
+                let nextChar = readyPlayers[nextIndex];
+                let idxA = turnQueue.indexOf(activeCharacter);
+                let idxB = turnQueue.indexOf(nextChar);
+                turnQueue[idxA] = nextChar;
+                turnQueue[idxB] = activeCharacter;
+                
+                SFX.select();
+                openActionMenu(nextChar);
+                return;
+            }
+        }
+
+        if (Input.actionPressed) {
+            let skillKey = skillSet[selectedSkillIndex];
+            let skill = SKILLS[skillKey];
+            
+            if ((skill.cost > 0 && globalEnergy < skill.cost) || (skill.type === "recruit" && party.length >= MAX_SOLDIERS)) {
+                SFX.error();
+                let menu = document.getElementById('action-menu');
+                menu.style.transform = "translateX(10px)";
+                setTimeout(()=> menu.style.transform = "none", 50);
+                return;
+            }
+            
+            SFX.select();
+            document.getElementById('action-menu').style.display = 'none';
+            executeSkill(activeCharacter, skill);
+        }
+    }
+
+    function checkATB() {
+        if (turnQueue.length > 0) return; // Already processing someone
+
+        let ready = party.filter(p => p.atb >= p.atbMax && p.hp > 0);
+        if (boss.atb >= boss.atbMax && boss.hp > 0) ready.push(boss);
+
+        if (ready.length > 0) {
+            ready.sort((a,b) => b.spd - a.spd);
+            turnQueue = ready;
+            processNextTurn();
+        }
+    }
+
+    function processNextTurn() {
+        if (turnQueue.length === 0) {
+            currentState = GameState.PLAYING;
+            return;
+        }
+        
+        let actor = turnQueue[0];
+        if (actor.hp <= 0) {
+            endTurn();
+            return;
+        }
+
+        if (actor.isEnemy) {
+            // Boss AI
+            let target = party.filter(p=>p.hp>0).sort(()=>Math.random()-0.5)[0]; // random alive
+            if (!target) return;
+            
+            let power = 20 + (currentRound * 10);
+            executeSkill(actor, { name: "Stomp", type: "damage", power: power, msg: "stomps!" }, target);
+        } else {
+            openActionMenu(actor);
+        }
+    }
+
+    function executeSkill(actor, skill, autoTarget = null) {
+        currentState = GameState.ANIMATING;
+        animationTimer = 0;
+        let target = autoTarget || (skill.type === "heal" ? actor : boss); // simplified targeting
+        
+        currentAction = { actor, skill, target, phase: 0 };
+        
+        if (skill.cost > 0) {
+            globalEnergy = Math.max(0, globalEnergy - skill.cost);
+        }
+    }
+
+    function updateAnimation(dt) {
+        animationTimer += dt;
+        let a = currentAction.actor;
+        let target = currentAction.target;
+        let s = currentAction.skill;
+
+        if (currentAction.phase === 0) {
+            if (s.summon) {
+                // Wait for summon anim
+            } else if (a.isEnemy) {
+                a.animOffsetX = -Math.sin(animationTimer * 0.01) * 50; 
+            } else {
+                a.animOffsetX = Math.sin(animationTimer * 0.01) * 30; 
+            }
+
+            if (animationTimer > 500) {
+                currentAction.phase = 1;
+                applySkillEffect(a, target, s);
+            }
+        } else if (currentAction.phase === 1) {
+            if (!s.summon) {
+                a.animOffsetX *= 0.8;
+                a.animOffsetY = 0;
+            }
+
+            if (animationTimer > 1000) {
+                a.animOffsetX = 0;
+                endTurn();
+            }
+        }
+    }
+
+    function applySkillEffect(actor, target, skill) {
+        if (skill.type === "recruit") {
+            if (party.length >= MAX_SOLDIERS) return;
+            const number = party.length + 1;
+            const soldier = new Actor(`p${number}`, `Soldier ${number - 3}`, 100, 30, "#4ade80", false, 0, 0, ["RIFLE"]);
+            party.push(soldier);
+            positionParty();
+            buildUI();
+            SFX.crate();
+            spawnFloatText("Recruited!", soldier.x, soldier.y - 90, "#22c55e");
+        } else if (skill.type === "damage") {
+            if(skill.summon || skill.power > 40) SFX.boom();
+            else SFX.shoot();
+
+            let dmg = Math.floor(skill.power * (0.8 + Math.random() * 0.4));
+            
+            if (actor.isEnemy) dmg = Math.floor(dmg * 0.8); // slight nerf to boss to ensure playability
+
+            target.hp = Math.max(0, target.hp - dmg);
+            
+            // Screen coordinates for floating text
+            let tX = target.x - (cameraAngle * (target.isEnemy ? 100 : 50));
+            spawnFloatText(dmg, tX, target.y - 100, "#ef4444");
+
+            if (!actor.isEnemy && skill.energyGain) {
+                globalEnergy = Math.min(MAX_ENERGY, globalEnergy + skill.energyGain);
+            }
+
+            // Screen shake
+            document.getElementById('game-container').style.transform = `translate(${Math.random()*10-5}px, ${Math.random()*10-5}px)`;
+            setTimeout(() => document.getElementById('game-container').style.transform = 'none', 100);
+
+        } else if (skill.type === "heal") {
+             SFX.heal();
+             let healTarget = party.filter(p => p.hp > 0).sort((a,b) => a.hp/a.maxHp - b.hp/b.maxHp)[0];
+             if (!healTarget) return;
+             
+             let healAmt = Math.floor(skill.power * (0.9 + Math.random()*0.2));
+             globalEnergy = Math.min(MAX_ENERGY, globalEnergy + (skill.energyGain || 0));
+             healTarget.hp = Math.min(healTarget.maxHp, healTarget.hp + healAmt);
+             
+             let tX = healTarget.x - (cameraAngle * 50);
+             spawnFloatText("+" + healAmt, tX, healTarget.y - 100, "#22c55e");
+        }
+    }
+
+    function endTurn() {
+        let actor = turnQueue.shift();
+        actor.atb = 0;
+
+        if (boss.hp <= 0) {
+            if (currentRound < maxRounds) { SFX.heal(); beginTravel(); return; }
+            currentState = GameState.ROUND_END;
+            document.getElementById('hud').style.display = 'none';
+            document.getElementById('end-title').innerText = currentRound >= maxRounds ? "You saved the Playroom!" : `Round ${currentRound} Cleared!`;
+            document.getElementById('next-round-btn').innerText = currentRound >= maxRounds ? "Play Again" : "Next Round (Press A)";
+            document.getElementById('game-over-screen').style.display = 'flex';
+            SFX.heal(); // victory sound reuse
+            return;
+        }
+
+        let partyAlive = party.some(p => p.hp > 0);
+        if (!partyAlive) {
+            currentState = GameState.GAME_OVER;
+            document.getElementById('hud').style.display = 'none';
+            document.getElementById('end-title').innerText = "Game Over!";
+            document.getElementById('next-round-btn').innerText = "Retry";
+            document.getElementById('game-over-screen').style.display = 'flex';
+            SFX.error();
+            return;
+        }
+
+        processNextTurn();
+    }
+
+    function drawEnvironment() {
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        
+        // Use patterns if available, fallback to colors
+        if(carpetPattern) {
+            ctx.fillStyle = carpetPattern;
+            ctx.fillRect(0, canvasHeight*0.4, canvasWidth, canvasHeight*0.6);
+        }
+        
+        if(wallPattern) {
+            ctx.fillStyle = wallPattern;
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight*0.4);
+        }
+        
+        // Baseboard
+        ctx.fillStyle = "#f8fafc";
+        ctx.fillRect(0, canvasHeight*0.4 - 20, canvasWidth, 20);
+        ctx.strokeStyle = "#cbd5e1"; ctx.lineWidth = 2;
+        ctx.strokeRect(0, canvasHeight*0.4 - 20, canvasWidth, 20);
+
+        ctx.save();
+        ctx.translate(-cameraAngle * 50, 0);
+
+        // Room landmarks persist along a continuous three-encounter route.
+        const roomPosition = currentRound - 1 + (currentState === GameState.TRAVEL ? travelProgress : 0);
+        for (let section = 0; section < maxRounds; section++) {
+            ctx.save();
+            ctx.translate((section - roomPosition) * canvasWidth * 1.4, 0);
+            ctx.fillStyle = '#35564c'; ctx.font = 'bold 22px system-ui'; ctx.textAlign = 'center';
+            ctx.fillText(roomStops[section], canvasWidth * .53, canvasHeight * .3);
+        // Blocks
+        drawToyBlock(canvasWidth*0.15, canvasHeight*0.32, 80, "#ef4444", "star");
+        drawToyBlock(canvasWidth*0.2, canvasHeight*0.35 + 20, 60, "#3b82f6", null);
+        drawToyBlock(canvasWidth*0.8, canvasHeight*0.35, 100, "#eab308", "heart");
+        
+            // Toy houses mark each encounter in the same room.
+            ctx.strokeStyle = '#4f4834'; ctx.lineWidth = 2;
+            toyPart(canvasWidth*.55,canvasHeight*.32,65,95,3,['#eac58a','#d9b5df','#b8dba4'][section]);
+            ctx.fillStyle = '#d97761'; ctx.beginPath(); ctx.moveTo(canvasWidth*.55-8,canvasHeight*.32);
+            ctx.lineTo(canvasWidth*.55+32,canvasHeight*.32-48); ctx.lineTo(canvasWidth*.55+73,canvasHeight*.32); ctx.closePath(); ctx.fill();ctx.stroke();
+            ctx.fillStyle='#79bfc9'; ctx.fillRect(canvasWidth*.55+12,canvasHeight*.32+18,15,23); ctx.fillRect(canvasWidth*.55+39,canvasHeight*.32+18,15,23);
+            ctx.restore();
+        }
+        // Train tracks
+        ctx.strokeStyle = "#64748b"; ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(canvasWidth*0.4, canvasHeight*0.4); 
+        ctx.quadraticCurveTo(canvasWidth*0.8, canvasHeight*0.5, canvasWidth*1.1, canvasHeight*0.45); 
+        ctx.stroke();
+        ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 2; ctx.setLineDash([10, 10]);
+        ctx.beginPath(); ctx.moveTo(canvasWidth*0.4, canvasHeight*0.4); 
+        ctx.quadraticCurveTo(canvasWidth*0.8, canvasHeight*0.5, canvasWidth*1.1, canvasHeight*0.45); 
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        ctx.restore();
+    }
+
+    function drawToyBlock(x, y, size, color, icon) {
+        ctx.fillStyle = color;
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 3;
+        ctx.fillRect(x, y, size, size);
+        ctx.strokeRect(x, y, size, size);
+        
+        // Highlight (plastic feel)
+        ctx.fillStyle = "rgba(255,255,255,0.3)";
+        ctx.fillRect(x, y, size, size * 0.15);
+        ctx.fillRect(x, y, size * 0.15, size);
+
+        if (icon === "star") {
+            ctx.fillStyle = "#fde047";
+            ctx.beginPath();
+            let cx = x + size/2, cy = y + size/2, r = size/4;
+            for(let i=0; i<5; i++) {
+                ctx.lineTo(cx + Math.cos((18+i*72)*Math.PI/180)*r, cy - Math.sin((18+i*72)*Math.PI/180)*r);
+                ctx.lineTo(cx + Math.cos((54+i*72)*Math.PI/180)*(r/2), cy - Math.sin((54+i*72)*Math.PI/180)*(r/2));
+            }
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+        } else if (icon === "heart") {
+            ctx.fillStyle = "#ec4899";
+            let cx = x + size/2, cy = y + size/3;
+            ctx.beginPath();
+            ctx.arc(cx - size/6, cy, size/6, Math.PI, 0);
+            ctx.arc(cx + size/6, cy, size/6, Math.PI, 0);
+            ctx.lineTo(cx, cy + size/3);
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+        }
+    }
+
+    function drawSupplyCrate() {
+        let x = canvasWidth * 0.5 - (cameraAngle * 80);
+        let y = canvasHeight * 0.8;
+        let w = 120, h = 80;
+
+        ctx.save();
+        ctx.translate(x, y);
+        
+        // Shadow
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.beginPath(); ctx.ellipse(0, h/2 - 5, w*0.6, h*0.2, 0, 0, Math.PI*2); ctx.fill();
+
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#451a03"; // dark brown outline
+        
+        if (boxPattern) ctx.fillStyle = boxPattern;
+        else ctx.fillStyle = "#d97706";
+
+        ctx.fillRect(-w/2, -h/2, w, h);
+        ctx.strokeRect(-w/2, -h/2, w, h);
+        
+        // Tape
+        ctx.fillStyle = "#fcd34d";
+        ctx.fillRect(-w/2, -5, w, 10);
+        
+        // Text / Icon
+        ctx.fillStyle = "#451a03";
+        ctx.font = "bold 16px 'Fredoka One'";
+        ctx.textAlign = "center";
+        ctx.fillText(menuMode === 'artillery' ? "OPEN" : "SUPPLY", 0, -15);
+        ctx.fillText("PRESS X", 0, 25);
+
+        // Highlight box when artillery mode is open
+        if (menuMode === 'artillery') {
+            ctx.strokeStyle = "#fde047";
+            ctx.lineWidth = 4;
+            ctx.strokeRect(-w/2 - 4, -h/2 - 4, w + 8, h + 8);
+        }
+
+        ctx.restore();
+    }
+
+    // Rounded molded-plastic forms, ink outlines and painted highlights.
+    function toyPart(x,y,w,h,r,fill) {
+        ctx.fillStyle=fill; ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); ctx.stroke();
+    }
+    function toyOval(x,y,rx,ry,fill,outline=true) {
+        ctx.fillStyle=fill; ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2); ctx.fill(); if(outline) ctx.stroke();
+    }
+    function toyLine(points,color,width=2) {
+        ctx.strokeStyle=color; ctx.lineWidth=width; ctx.beginPath();
+        points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.stroke();
+    }
+    function drawSoldier(x, y, color, isHeavy, role='', stride=0) {
+        ctx.save(); ctx.translate(x,y); ctx.scale(1.45,1.45);
+        const green=role==='Captain', base=green?'#71a853':'#c6ab6c', light=green?'#9dc87a':'#e5cd91', dark=green?'#3d6236':'#796339';
+        ctx.strokeStyle=dark; ctx.lineWidth=1.7; ctx.lineJoin='round'; ctx.lineCap='round';
+        toyOval(0,5,25,5,'#22332933',false);
+        toyOval(0,2,23,4,base);
+        // Separated legs, molded boots, belted jacket and raised pockets.
+        toyPart(-12 + stride*4,-27,10,25,4,base); toyPart(3 - stride*4,-27,10,25,4,base);
+        toyPart(-16 + stride*5,-5,15,6,2,base); toyPart(3 - stride*5,-5,17,6,2,base);
+        toyPart(-14,-53,29,29,7,base);
+        toyLine([[-8,-46],[-8,-32]],light,3); ctx.strokeStyle=dark; ctx.lineWidth=1.5;
+        toyPart(-11,-44,8,9,1,light); toyPart(3,-44,8,9,1,light);
+        toyPart(-14,-29,29,4,1,dark); toyPart(-2,-30,6,6,1,light);
+        toyPart(-4,-58,10,8,3,base);
+        // Profile face and nose beneath a broad domed helmet.
+        toyOval(0,-65,12,14,light);
+        toyOval(11,-64,4,3,light); toyOval(-8,-65,3,4,base);
+        toyLine([[3,-69],[6,-69]],dark,1.5); toyOval(6,-67,1,1.5,dark,false);
+        toyLine([[8,-58],[3,-57],[0,-60]],dark,1.2);
+        ctx.strokeStyle=dark; ctx.lineWidth=1.7;
+        ctx.fillStyle=base; ctx.beginPath(); ctx.moveTo(-16,-69); ctx.bezierCurveTo(-17,-95,17,-95,16,-69); ctx.closePath(); ctx.fill(); ctx.stroke();
+        toyPart(-18,-72,37,5,2,base);
+        toyLine([[-11,-76],[-9,-81],[-3,-84],[3,-84]],light,2.5);
+        toyLine([[-10,-65],[-7,-54],[2,-52],[9,-59]],dark,1);
+        // Arms wrap around the weapon rather than floating beside the torso.
+        toyLine([[-11,-47],[-7,-36],[9,-40]],dark,10);
+        toyLine([[-11,-47],[-7,-36],[9,-40]],base,7);
+        ctx.strokeStyle=dark; ctx.lineWidth=1.5;
+        if(role==='Medic') {
+            toyPart(12,-42,17,16,3,light);
+            ctx.fillStyle='#faf3d4'; ctx.fillRect(17,-40,6,12); ctx.fillRect(14,-37,12,6);
+        } else {
+            toyPart(1,-47,isHeavy?39:34,isHeavy?10:4,2,isHeavy?'#87947d':'#65745c');
+            toyPart(isHeavy?34:30,-49,isHeavy?7:19,isHeavy?14:3,1,isHeavy?'#b8c095':'#53604d');
+            if(!isHeavy) { toyPart(13,-52,14,4,2,'#68745e'); toyPart(9,-43,5,9,1,base); }
+        }
+        toyOval(9,-40,4,4,base); toyOval(22,-44,4,4,base);
+        ctx.restore();
+    }
+    function drawMech(x,y,scale,round) {
+        ctx.save(); ctx.translate(x,y); ctx.scale(scale,scale);
+        const ink='#263d39', red='#f45145', blue='#31aec8', yellow='#ffcf43', green='#7cbf57';
+        ctx.strokeStyle=ink; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round';
+        toyOval(0,7,72,12,'#34443d33',false);
+        // Chunky boots with contrasting soles and knee joints.
+        for(const side of [-1,1]) {
+            ctx.save(); ctx.translate(side*29,0); ctx.rotate(side*-.09);
+            toyPart(-11,-65,23,36,8,yellow);
+            toyPart(-19,-39,38,34,10,blue);
+            toyPart(-22,-13,46,15,6,red);
+            toyPart(-22,-5,46,5,2,'#c63837');
+            toyLine([[-13,-31],[-13,-21]],'#97e3e5',3);
+            ctx.strokeStyle=ink; ctx.lineWidth=2;
+            toyOval(7,-29,3,5,yellow,false); toyOval(10,-20,2,2,yellow,false);
+            ctx.restore();
+        }
+        toyPart(-27,-80,54,19,7,red);
+        toyPart(-41,-140,82,65,13,blue);
+        toyPart(-33,-128,67,48,9,red);
+        toyPart(-13,-118,28,36,5,yellow);
+        toyLine([[-10,-105],[12,-105]],ink,2); toyLine([[-10,-93],[12,-93]],ink,2);
+        ctx.strokeStyle=ink;
+        for (const [px,py,c] of [[-25,-115,blue],[-25,-95,green],[25,-115,yellow],[25,-95,green]]) toyOval(px,py,6,7,c);
+        // Both arms are present in every round; round three adds a confetti cannon.
+        for(const side of [-1,1]) {
+            ctx.save(); ctx.translate(side*48,-123); ctx.rotate(side*-.20);
+            toyPart(-11,0,22,41,9,yellow);
+            toyPart(-18,-13,36,37,12,red); toyOval(side*8,5,8,12,'#d63f35');
+            toyPart(-14,35,28,28,9,blue);
+            toyOval(0,65,12,11,green);
+            for(let i=-1;i<=1;i++) toyLine([[i*5,60],[i*5+2,70]],ink,1.2);
+            toyLine([[-11,-3],[-11,8]],'#ff9a79',4);
+            ctx.restore();
+        }
+        ctx.strokeStyle=ink; ctx.lineWidth=2;
+        toyPart(-44,-195,88,59,13,blue);
+        toyPart(-47,-187,8,27,4,yellow); toyPart(40,-183,14,25,6,yellow);
+        // Large cream-rimmed eyes with offset pupils and reflected light.
+        for(const px of [-22,17]) {
+            toyOval(px,-166,18,21,yellow); toyOval(px,-166,15,18,'#fffde7');
+            toyOval(px-3,-163,10,12,'#263d39'); toyOval(px-6,-168,4,5,'white',false);
+        }
+        toyPart(-21,-141,42,9,3,red);
+        toyPart(-18,-211,39,20,9,red);
+        toyLine([[-11,-205],[0,-207],[10,-203]],'#ffad83',4);
+        toyLine([[-35,-188],[-23,-190],[15,-190]],'#9ee8e9',3);
+        if(round>=3) {
+            ctx.strokeStyle=ink; ctx.lineWidth=2;
+            toyPart(-65,-165,23,39,5,'#b96bcb'); toyOval(-53,-165,13,6,yellow);
+            for(let i=0;i<8;i++) {
+                ctx.save(); ctx.translate(-55+Math.sin(i*2)*21,-180-i*4); ctx.rotate(i);
+                ctx.fillStyle=[red,yellow,blue,green][i%4]; ctx.fillRect(-2,-2,5,3); ctx.restore();
+            }
+        }
+        ctx.restore();
+    }
+
+    function drawSummon(x,y,type,progress) {
+        ctx.save(); ctx.translate(x,y); ctx.scale(1.35,1.35);
+        const ink='#263d39'; ctx.strokeStyle=ink; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round';
+        if(type==='tank') {
+            ctx.translate(Math.sin(progress*Math.PI)*95-65,0);
+            toyPart(-62,-18,123,42,19,'#536170');
+            for(let i=-50;i<60;i+=12) toyLine([[i,17],[i+5,23]],'#9eabb1',2);
+            ctx.strokeStyle=ink;
+            for(const px of [-39,0,39]) { toyOval(px,3,17,17,'#f15353'); toyOval(px,3,10,12,'#ffce42'); }
+            toyPart(-60,-36,119,23,8,'#84c94e');
+            toyPart(-43,-64,78,33,10,'#ed78bd');
+            toyPart(24,-61,56,12,4,'#ffd54a'); toyPart(63,-63,12,16,3,'#53c8d5');
+            toyOval(-24,-49,7,7,'#70d9e5'); toyPart(-4,-51,22,12,4,'#ffdc58');
+            ctx.save(); ctx.translate(-7,-61); ctx.scale(.55,.55); drawSoldier(0,0,'',false,'Captain'); ctx.restore();
+            toyLine([[-40,-63],[-46,-90]],ink,2); toyOval(-46,-92,3,5,'#ed78bd');
+        } else if(type==='heli') {
+            ctx.translate(progress*400-200,-Math.sin(progress*Math.PI)*100-55);
+            toyPart(28,-14,67,13,5,'#5dc8d5'); toyPart(81,-33,12,42,5,'#e878b8');
+            toyLine([[-37,42],[37,42],[47,33]],'#e6b335',6);
+            toyLine([[-22,26],[-22,42],[24,42],[24,25]],ink,2);
+            ctx.strokeStyle=ink; toyOval(0,0,48,33,'#5ccadd'); toyPart(-39,16,74,13,6,'#e879b9');
+            toyOval(-17,-3,25,26,'#d5f4ed');
+            ctx.save(); ctx.translate(-17,18); ctx.scale(.34,.34); drawSoldier(0,0,'',false,'Captain'); ctx.restore();
+            ctx.strokeStyle=ink; toyPart(14,-20,19,33,7,'#ffd351'); toyPart(18,-15,10,21,4,'#bfeee6');
+            for(const px of [-34,-9,18,35]) toyOval(px,23,3,3,'#ffe97d',false);
+            toyLine([[-36,-16],[-30,-22],[-24,-24]],'white',3);
+            toyLine([[0,-34],[0,-45]],ink,4);
+            ctx.save(); ctx.translate(0,-47); ctx.scale(1,.25); ctx.rotate(progress*32);
+            toyPart(-76,-4,152,8,4,'#c8f1ee'); toyPart(-4,-65,8,130,4,'#96dce2'); ctx.restore();
+            ctx.strokeStyle=ink; toyOval(0,-47,7,4,'#f35e60');
+        } else if(type==='cannon') {
+            ctx.translate(Math.sin(progress*Math.PI)*50-35,0);
+            toyPart(-40,-8,83,20,5,'#f1993e');
+            for(const px of [-28,30]) { toyOval(px,13,11,12,'#485966'); toyOval(px,13,4,5,'#eac36b'); }
+            toyPart(-10,-32,24,27,6,'#ffd046');
+            ctx.save(); ctx.translate(2,-31); ctx.rotate(-.25);
+            toyPart(-37,-20,98,35,10,'#bb6dc5'); toyPart(-24,-20,14,35,3,'#77d6d5');
+            toyPart(41,-25,13,45,4,'#ffd34f'); toyOval(58,-3,9,23,'#9950ae');
+            toyLine([[-8,-12],[23,-12]],'#f4b3e5',5); ctx.restore();
+        }
+        if(progress>.43 && progress<.62) {
+            for(let i=0;i<15;i++) {
+                const px=80+(progress-.43)*300+(i%5)*9, py=-45+Math.sin(i*13)*27;
+                toyOval(px,py,3+(i%3),3,['#a0d74a','#ee75b6','#ffd04b','#5bd5df'][i%4],false);
+            }
+        }
+        ctx.restore();
+    }
+
+    function drawActor(a) {
+        if (a.hp <= 0 && a.isEnemy) return; 
+
+        ctx.save();
+        let drawX = a.x + a.animOffsetX - (cameraAngle * (a.isEnemy ? 100 : 50)); 
+        let drawY = a.y + a.animOffsetY;
+        
+        if (a.hp <= 0) {
+            ctx.translate(drawX, drawY);
+            ctx.rotate(Math.PI / 2);
+            drawSoldier(0, 0, a.color, a.name==="Heavy", a.name);
+            ctx.restore();
+            return;
+        }
+
+        if (a.isEnemy) drawMech(drawX, drawY, a.scale, currentRound);
+        else drawSoldier(drawX, drawY, a.color, a.name==="Heavy", a.name);
+        
+        // Target indicator if active char is selecting
+        if (currentState === GameState.TURN_WAIT && a === boss && menuMode === 'standard') {
+            ctx.fillStyle = "rgba(239, 68, 68, 0.5)";
+            ctx.beginPath();
+            ctx.ellipse(drawX, drawY + 15, 70, 20, 0, 0, Math.PI*2);
+            ctx.fill();
+        }
+        
+        ctx.restore();
+    }
+
+
+    function gameLoop(timestamp) {
+        let dt = Math.min(50, Math.max(0, timestamp - lastTime));
+        lastTime = timestamp;
+
+        updateInput();
+        if (Input.pausePressed || (paused && Input.actionPressed)) { setPaused(!paused); Input.actionPressed = false; }
+        if (paused || document.hidden) { requestAnimationFrame(gameLoop); return; }
+
+        cameraAngle += (Input.camX * 0.5 - cameraAngle) * 0.1;
+
+        if (currentState === GameState.MENU) {
+            if (Input.actionPressed) {
+                SFX.init();
+                SFX.select();
+                document.getElementById('start-screen').style.display = 'none';
+                initRound(1);
+            }
+        } else if (currentState === GameState.GAME_OVER || currentState === GameState.ROUND_END) {
+             if (Input.actionPressed) {
+                 SFX.select();
+                 document.getElementById('game-over-screen').style.display = 'none';
+                 if (currentState === GameState.ROUND_END && currentRound < maxRounds) {
+                     initRound(currentRound + 1);
+                 } else {
+                     initRound(1);
+                 }
+             }
+        } else {
+            if (currentState === GameState.TRAVEL) {
+                updateTravel(dt);
+            } else if (currentState === GameState.PLAYING) {
+                party.forEach(p => p.updateATB(dt));
+                boss.updateATB(dt);
+                checkATB();
+            } else if (currentState === GameState.TURN_WAIT) {
+                handleMenuInput();
+            } else if (currentState === GameState.ANIMATING) {
+                updateAnimation(dt);
+            }
+            updateUI();
+        }
+
+        // --- Render ---
+        drawEnvironment();
+        
+        // Draw boss and players
+        if (currentState === GameState.TRAVEL) drawTravel();
+        else {
+            if (boss) drawActor(boss);
+            party.forEach(p => drawActor(p));
+        }
+
+        // Draw foreground crate
+        if (currentState !== GameState.MENU && currentState !== GameState.TRAVEL) {
+            drawSupplyCrate();
+        }
+
+        // Draw Summons
+        if (currentState === GameState.ANIMATING && currentAction && currentAction.skill.summon) {
+            let progress = animationTimer / 1000;
+            if (progress <= 1) {
+                let sX = canvasWidth * 0.3 - (cameraAngle * 50);
+                let sY = canvasHeight * 0.55;
+                drawSummon(sX, sY, currentAction.skill.summon, progress);
+            }
+        }
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // UI Click Handlers for mouse users
+    document.getElementById('start-btn').addEventListener('click', () => {
+        if(currentState === GameState.MENU) { SFX.init(); queueAction('actionPressed'); }
+    });
+    
+    document.getElementById('next-round-btn').addEventListener('click', () => {
+        if(currentState === GameState.GAME_OVER || currentState === GameState.ROUND_END) { SFX.init(); queueAction('actionPressed'); }
+    });
+
+    document.getElementById('skill-list').addEventListener('click', e => {
+        const button = e.target.closest('[data-skill]');
+        if (!button || paused || currentState !== GameState.TURN_WAIT) return;
+        selectedSkillIndex = Number(button.dataset.skill); queueAction('actionPressed'); SFX.init();
+    });
+    document.getElementById('march-btn').onclick = () => queueAction('actionPressed');
+    document.getElementById('crate-btn').onclick = () => queueAction('altActionPressed');
+    document.getElementById('pause-btn').onclick = () => setPaused(true);
+    document.getElementById('resume-btn').onclick = () => { SFX.init(); setPaused(false); };
+    document.getElementById('fullscreen-btn').onclick = async () => {
+        try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); }
+        catch (_) { document.getElementById('fullscreen-btn').textContent = 'Use browser fullscreen'; }
+    };
+    initTextures();
+    // Start loop
+    requestAnimationFrame(gameLoop);
+
+
+</script>
+</body>
+</html>
