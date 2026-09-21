@@ -80,6 +80,14 @@
         H = 800,
         canvas = document.getElementById("game"),
         ctx = canvas.getContext("2d");
+      // Xbox Edge (console browser) only exposes the Gamepad API to the currently
+      // focused document, and gains focus can be lost when loaded inside the hub's
+      // iframe -- pull focus onto this game whenever we get a chance to.
+      function ensureGameFocus() { window.focus(); canvas.focus({ preventScroll: true }); }
+      ensureGameFocus();
+      window.addEventListener('load', ensureGameFocus);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureGameFocus(); });
+      window.addEventListener('gamepadconnected', ensureGameFocus);
       const STAGES = [
         { name: "Morning dew", goal: 500, rate: 1.3 },
         { name: "Wildflower fields", goal: 700, rate: 1.65 },

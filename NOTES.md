@@ -37,6 +37,16 @@ This pattern originated in [game.html](game.html) and was present through
 and [game20.html](game20.html) — were missing it, which broke controller
 input for all of them. Fixed 2026-08-18.
 
+A second sweep on 2026-09-21 found the same gap in later games:
+[game8.html](game8.html), [game25.html](game25.html), [game29.html](game29.html),
+and [game30.html](game30.html) (canvas-based, missing the block entirely) and
+[game27.html](game27.html) and [game28.html](game28.html) (Three.js games with
+no `<canvas>` in the markup — the renderer creates its own `renderer.domElement`,
+which also needs `tabIndex = 0` set before it can receive focus). Game 28 is
+gamepad-only input, so it was completely unplayable from the hub until fixed.
+`game31.html` is an empty placeholder and `pictionary/game13.html` is a
+TV-display companion screen with no gamepad code, so neither needed the fix.
+
 **Checklist for every new game file:**
 - [ ] `ensureGameFocus()` block added right after `const canvas = ...`
 - [ ] New card in [index.html](index.html) calls `launchGame('correct-file.html')`

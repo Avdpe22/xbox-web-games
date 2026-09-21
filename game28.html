@@ -133,6 +133,15 @@
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
+        // Xbox Edge (console browser) only exposes the Gamepad API to the currently
+        // focused document, and gains focus can be lost when loaded inside the hub's
+        // iframe -- pull focus onto this game whenever we get a chance to.
+        renderer.domElement.tabIndex = 0;
+        function ensureGameFocus() { window.focus(); renderer.domElement.focus({ preventScroll: true }); }
+        ensureGameFocus();
+        window.addEventListener('load', ensureGameFocus);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureGameFocus(); });
+        window.addEventListener('gamepadconnected', ensureGameFocus);
 
         // Lighting (PBR)
         const ambientLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
