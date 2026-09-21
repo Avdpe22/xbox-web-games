@@ -435,7 +435,6 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
             const walking = Math.abs(Input.moveX) > .15 || Math.abs(Input.moveY) > .15 || autoMarch;
             const stride = walking ? Math.sin(phase) : 0;
             drawSoldier(soldier.x, soldier.y + travelLane * canvasHeight - Math.abs(stride)*3,
-                soldier.color, soldier.name === 'Heavy', soldier.name, stride);
                 soldier.color, soldier.role === 'Heavy', soldier.role, stride, soldier.hp / soldier.maxHp);
         });
     }
@@ -815,22 +814,17 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         let list = document.getElementById('skill-list');
         list.innerHTML = '';
         
-        let skillSet = menuMode === 'artillery' ? activeCharacter.artillerySkills : activeCharacter.skills;
         let skillSet = menuSkills();
 
         // Verify index is valid
         if(selectedSkillIndex >= skillSet.length) selectedSkillIndex = 0;
 
-        skillSet.forEach((skKey, idx) => {
-            let sk = SKILLS[skKey];
         skillSet.forEach((sk, idx) => {
             let isSel = idx === selectedSkillIndex;
             const squadFull = sk.type === "recruit" && party.length >= MAX_SOLDIERS;
             const noUpgrades = sk.type === 'upgradeMenu' && upgradeCandidates().length === 0;
-            let costHtml = squadFull ? '<span class="energy-cost">FULL</span>' : sk.cost > 0 ? `<span class="energy-cost">${sk.cost} ENG</span>` : '';
             let costHtml = noUpgrades ? '<span class="energy-cost">NO TROOPS</span>' : squadFull ? '<span class="energy-cost">FULL</span>' : sk.cost > 0 ? `<span class="energy-cost">${sk.cost} ENG</span>` : '';
             list.innerHTML += `
-                <button type="button" data-skill="${idx}" aria-disabled="${sk.cost > globalEnergy || squadFull}" class="skill-item ${isSel ? 'selected' : ''}">
                 <button type="button" data-skill="${idx}" aria-disabled="${sk.cost > globalEnergy || squadFull || noUpgrades}" class="skill-item ${isSel ? 'selected' : ''}">
                     <span>${isSel ? '▶ ' : ''}${sk.name}</span>
                     ${costHtml}
@@ -847,7 +841,6 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
     function handleMenuInput() {
         if (!activeCharacter) return;
         
-        let skillSet = menuMode === 'artillery' ? activeCharacter.artillerySkills : activeCharacter.skills;
         let skillSet = menuSkills();
         let skillsCount = skillSet.length;
 
@@ -899,11 +892,8 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         }
 
         if (Input.actionPressed) {
-            let skillKey = skillSet[selectedSkillIndex];
-            let skill = SKILLS[skillKey];
             let skill = skillSet[selectedSkillIndex];
-            
-            if ((skill.cost > 0 && globalEnergy < skill.cost) || (skill.type === "recruit" && party.length >= MAX_SOLDIERS)) {
+
             if ((skill.cost > 0 && globalEnergy < skill.cost) || (skill.type === "recruit" && party.length >= MAX_SOLDIERS) || (skill.type === "upgradeMenu" && upgradeCandidates().length === 0)) {
                 SFX.error();
                 let menu = document.getElementById('action-menu');
@@ -1037,7 +1027,6 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
     }
 
     function applySkillEffect(actor, target, skill) {
-        if (skill.type === "recruit") {
         if (skill.type === 'upgrade') {
             const troop = party.find(p=>p.id===skill.troopId && p.hp>0 && p.upgradeTier===skill.tier-1);
             if (!troop) return;
@@ -1341,7 +1330,6 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         ctx.restore();
     }
 
-    function drawSoldier(x, y, color, isHeavy, role='', stride=0) {
     function drawSoldier(x, y, color, isHeavy, role='', stride=0, healthRatio=1) {
         ctx.save(); ctx.translate(x,y); ctx.scale(1.45,1.45);
         const green=role==='Captain', base=green?'#71a853':'#c6ab6c', light=green?'#9dc87a':'#e5cd91', dark=green?'#3d6236':'#796339';
@@ -1395,7 +1383,6 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         toyOval(9,-40,4,4,base); toyOval(22,-44,4,4,base);
         ctx.restore();
     }
-    function drawMech(x,y,scale,round) {
     function drawMech(x,y,scale,round,healthRatio=1) {
         ctx.save(); ctx.translate(x,y); ctx.scale(scale,scale);
         const ink='#263d39'; const [red,blue,yellow,green]=ROOMS[activeRoom].colors;
@@ -1530,7 +1517,6 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         if (a.hp <= 0) {
             ctx.translate(drawX, drawY);
             ctx.rotate(Math.PI / 2);
-            drawSoldier(0, 0, a.color, a.name==="Heavy", a.name);
             drawSoldier(0, 0, a.color, a.role === "Heavy", a.role, 0, a.hp / a.maxHp);
             ctx.restore();
             return;
@@ -1545,7 +1531,6 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
                     ctx.fillStyle='#c2ffff';ctx.fillRect(x-4,drawY-6,8,20);ctx.fillStyle='#ffad52';
                 }
             }
-            drawMech(drawX, drawY, a.scale, currentRound);
             drawMech(drawX, drawY, a.scale, currentRound, a.hp / a.maxHp);
             if (currentState === GameState.ANIMATING && currentAction?.skill.burst && animationTimer>=280 && animationTimer<760) {
                 const hit = Math.max(0, Math.min(2, Math.floor((animationTimer-280)/180)));
@@ -1556,7 +1541,6 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
                 }
             }
         }
-        else drawSoldier(drawX, drawY, a.color, a.name==="Heavy", a.name);
         else drawSoldier(drawX, drawY, a.color, a.role === "Heavy", a.role, 0, a.hp / a.maxHp);
         
         // Target indicator if active char is selecting

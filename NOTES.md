@@ -47,6 +47,24 @@ gamepad-only input, so it was completely unplayable from the hub until fixed.
 `game31.html` is an empty placeholder and `pictionary/game13.html` is a
 TV-display companion screen with no gamepad code, so neither needed the fix.
 
+## game30.html: file had a broader merge-corruption bug (fixed 2026-09-21)
+
+Even after adding the focus fix, [game30.html](game30.html) still didn't work
+from the hub — its inline `<script>` had a JS syntax error, so the whole
+script failed to load and nothing on the page ran (gamepad included). The
+cause: several places in the file had two versions of the same line/function
+stacked back-to-back — the pre-edit version immediately followed by the
+edited version, as if a diff had been applied without deleting the old line.
+Examples: two `function drawSoldier(...)` signatures in a row, a dangling
+`if (skill.type === "recruit") {` directly followed by another `if`, `let
+skillSet = ...` declared twice, etc.
+
+**Lesson:** a syntax error anywhere in a game's script silently breaks
+*everything* in that game, including the gamepad-focus fix — `node --check`
+(or extracting the inline `<script>` and running it through a JS parser) on
+every touched game file is a cheap, worthwhile step before calling a fix
+done, not just a visual inspection for the `ensureGameFocus` block.
+
 **Checklist for every new game file:**
 - [ ] `ensureGameFocus()` block added right after `const canvas = ...`
 - [ ] New card in [index.html](index.html) calls `launchGame('correct-file.html')`
