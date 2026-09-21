@@ -233,6 +233,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
 .room-copy strong { display:block; font-size:24px; margin:8px 0; }
 .room-copy span { display:block; color:#c3d0df; font-size:14px; line-height:1.6; min-height:45px; }
 #deploy-btn { margin:24px 0 12px; font-size:18px; }
+#action-menu { max-height:70vh; overflow-y:auto; }
 #room-label { position:absolute; top:21vh; left:4vw; background:#102033dd; border-left:3px solid #facc15; padding:8px 12px; font-size:13px; pointer-events:none; }
 .secondary-btn { padding:12px 20px; margin-top:16px; background:#26364b; color:white; border:1px solid #718096; border-radius:12px; }
 @media(max-width:650px) { .room-grid { gap:8px; } .room-copy { padding:10px; } .room-copy strong { font-size:16px; } .room-copy span { font-size:11px; } #location-screen { padding:20px 12px; } #room-label { top:15vh; font-size:11px; } }
@@ -427,6 +428,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
             const stride = walking ? Math.sin(phase) : 0;
             drawSoldier(soldier.x, soldier.y + travelLane * canvasHeight - Math.abs(stride)*3,
                 soldier.color, soldier.name === 'Heavy', soldier.name, stride);
+                soldier.color, soldier.role === 'Heavy', soldier.role, stride, soldier.hp / soldier.maxHp);
         });
     }
 
@@ -616,6 +618,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         BAZOOKA: { name: "Bazooka", cost: 0, power: 25, type: "damage", energyGain: 10, msg: "fires bazooka!" },
         HEAL: { name: "Field Medic", cost: 0, power: 30, type: "heal", energyGain: 5, msg: "applies first aid!" },
         
+        UPGRADE: { name: "Upgrade troop", cost: 0, type: "upgradeMenu" },
         RECRUIT: { name: "Add Soldier", cost: 50, type: "recruit", msg: "recruits a soldier!" },
 
         // Artillery (Requires Crate Access)
@@ -637,7 +640,10 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
             this.baseX = x; this.baseY = y;
             
             this.skills = skills; // Base skills
+            this.role = name;
+            this.upgradeTier = null;
             this.artillerySkills = ["RECRUIT", "PAINT_TANK", "SLIME_CANNON", "HELI_DROP"];
+            this.artillerySkills = ["RECRUIT", "UPGRADE", "PAINT_TANK", "SLIME_CANNON", "HELI_DROP"];
 
             this.atb = 0;
             this.atbMax = 1000;
@@ -742,6 +748,8 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         party.forEach(p => {
             document.getElementById(`hp-${p.id}`).style.width = `${(p.hp/p.maxHp)*100}%`;
             document.getElementById(`atb-${p.id}`).style.width = `${(p.atb/p.atbMax)*100}%`;
+            document.getElementById(`ui-${p.id}`).style.color = p.hp > 0 && p.hp / p.maxHp <= .3 ? '#b91c1c' : '';
+            document.getElementById(`ui-${p.id}`).title = p.hp > 0 && p.hp / p.maxHp <= .3 ? 'Low health' : '';
             document.getElementById(`hp-txt-${p.id}`).innerText = `${Math.max(0, p.hp)}/${p.maxHp}`;
         });
 
@@ -774,6 +782,21 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         document.getElementById('action-menu').style.display = 'flex';
     }
 
+    function upgradeCandidates() {
+        return party.filter(p => p.upgradeTier !== null && p.upgradeTier < 2 && p.hp > 0);
+    }
+    function menuSkills() {
+        if (menuMode === 'upgrade') return [
+            ...upgradeCandidates().map(p => ({
+                name: `${p.name} → ${p.upgradeTier === 0 ? 'Heavy' : 'Medic'}`,
+                cost: p.upgradeTier === 0 ? 40 : 60, type: 'upgrade', troopId: p.id,
+                tier: p.upgradeTier + 1
+            })),
+            { name: 'Back to supply', cost: 0, type: 'backToSupply' }
+        ];
+        return (menuMode === 'artillery' ? activeCharacter.artillerySkills : activeCharacter.skills).map(key=>SKILLS[key]);
+    }
+
     function renderActionMenu() {
         if(!activeCharacter) return;
         
@@ -785,17 +808,22 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         list.innerHTML = '';
         
         let skillSet = menuMode === 'artillery' ? activeCharacter.artillerySkills : activeCharacter.skills;
+        let skillSet = menuSkills();
 
         // Verify index is valid
         if(selectedSkillIndex >= skillSet.length) selectedSkillIndex = 0;
 
         skillSet.forEach((skKey, idx) => {
             let sk = SKILLS[skKey];
+        skillSet.forEach((sk, idx) => {
             let isSel = idx === selectedSkillIndex;
             const squadFull = sk.type === "recruit" && party.length >= MAX_SOLDIERS;
+            const noUpgrades = sk.type === 'upgradeMenu' && upgradeCandidates().length === 0;
             let costHtml = squadFull ? '<span class="energy-cost">FULL</span>' : sk.cost > 0 ? `<span class="energy-cost">${sk.cost} ENG</span>` : '';
+            let costHtml = noUpgrades ? '<span class="energy-cost">NO TROOPS</span>' : squadFull ? '<span class="energy-cost">FULL</span>' : sk.cost > 0 ? `<span class="energy-cost">${sk.cost} ENG</span>` : '';
             list.innerHTML += `
                 <button type="button" data-skill="${idx}" aria-disabled="${sk.cost > globalEnergy || squadFull}" class="skill-item ${isSel ? 'selected' : ''}">
+                <button type="button" data-skill="${idx}" aria-disabled="${sk.cost > globalEnergy || squadFull || noUpgrades}" class="skill-item ${isSel ? 'selected' : ''}">
                     <span>${isSel ? '▶ ' : ''}${sk.name}</span>
                     ${costHtml}
                 </button>
@@ -804,6 +832,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         
         list.innerHTML += `<div style="font-size: 0.8rem; text-align: center; margin-top: 5px; color: #64748b;">
             ${menuMode === 'standard' ? 'Press X to Open Crate' : 'Press X to Close Crate'}
+            ${menuMode === 'upgrade' ? 'Heavy: bazooka + 120 HP · Medic: adds healing + 140 HP<br>B / Esc: back' : menuMode === 'standard' ? 'Press X to Open Crate' : 'Recruit → Heavy → Medic · X: close'}
         </div>`;
     }
 
@@ -811,10 +840,12 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         if (!activeCharacter) return;
         
         let skillSet = menuMode === 'artillery' ? activeCharacter.artillerySkills : activeCharacter.skills;
+        let skillSet = menuSkills();
         let skillsCount = skillSet.length;
 
         // Toggle Menu Mode
         if (Input.backPressed && menuMode === 'artillery') { menuMode = 'standard'; selectedSkillIndex = 0; renderActionMenu(); return; }
+        if (Input.backPressed && menuMode !== 'standard') { menuMode = menuMode === 'upgrade' ? 'artillery' : 'standard'; selectedSkillIndex = 0; renderActionMenu(); return; }
         if (Input.altActionPressed) {
             SFX.crate();
             menuMode = menuMode === 'standard' ? 'artillery' : 'standard';
@@ -862,8 +893,10 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         if (Input.actionPressed) {
             let skillKey = skillSet[selectedSkillIndex];
             let skill = SKILLS[skillKey];
+            let skill = skillSet[selectedSkillIndex];
             
             if ((skill.cost > 0 && globalEnergy < skill.cost) || (skill.type === "recruit" && party.length >= MAX_SOLDIERS)) {
+            if ((skill.cost > 0 && globalEnergy < skill.cost) || (skill.type === "recruit" && party.length >= MAX_SOLDIERS) || (skill.type === "upgradeMenu" && upgradeCandidates().length === 0)) {
                 SFX.error();
                 let menu = document.getElementById('action-menu');
                 menu.style.transform = "translateX(10px)";
@@ -872,6 +905,10 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
             }
             
             SFX.select();
+            if (skill.type === 'upgradeMenu' || skill.type === 'backToSupply') {
+                menuMode = skill.type === 'upgradeMenu' ? 'upgrade' : 'artillery';
+                selectedSkillIndex = 0; renderActionMenu(); return;
+            }
             document.getElementById('action-menu').style.display = 'none';
             executeSkill(activeCharacter, skill);
         }
@@ -917,6 +954,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
     }
 
     function executeSkill(actor, skill, autoTarget = null) {
+        if (skill.type === 'upgrade' && !party.some(p=>p.id===skill.troopId && p.hp>0 && p.upgradeTier===skill.tier-1)) return;
         currentState = GameState.ANIMATING;
         animationTimer = 0;
         let target = autoTarget || (skill.type === "heal" ? actor : boss); // simplified targeting
@@ -992,9 +1030,24 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
 
     function applySkillEffect(actor, target, skill) {
         if (skill.type === "recruit") {
+        if (skill.type === 'upgrade') {
+            const troop = party.find(p=>p.id===skill.troopId && p.hp>0 && p.upgradeTier===skill.tier-1);
+            if (!troop) return;
+            const oldMax = troop.maxHp;
+            troop.upgradeTier = skill.tier;
+            troop.role = skill.tier === 1 ? 'Heavy' : 'Medic';
+            troop.name = `${troop.role} ${troop.recruitNumber}`;
+            troop.maxHp = skill.tier === 1 ? 120 : 140;
+            troop.hp = Math.min(troop.maxHp, troop.hp + troop.maxHp - oldMax);
+            troop.spd = skill.tier === 1 ? 30 : 35;
+            troop.skills = skill.tier === 1 ? ['BAZOOKA'] : ['BAZOOKA','HEAL'];
+            buildUI(); SFX.heal();
+            spawnFloatText(`${troop.role} upgraded!`, troop.x, troop.y-100, '#facc15');
+        } else if (skill.type === "recruit") {
             if (party.length >= MAX_SOLDIERS) return;
             const number = party.length + 1;
             const soldier = new Actor(`p${number}`, `Soldier ${number - 3}`, 100, 30, "#4ade80", false, 0, 0, ["RIFLE"]);
+            soldier.role = 'Soldier'; soldier.upgradeTier = 0; soldier.recruitNumber = number - 3;
             party.push(soldier);
             positionParty();
             buildUI();
@@ -1265,9 +1318,26 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         ctx.strokeStyle=color; ctx.lineWidth=width; ctx.beginPath();
         points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.stroke();
     }
+    // Two soft light layers keep the toy's own color inside the room's ambient hue.
+    function drawCharacterGlow(x, y, radiusX, radiusY, characterColor, intensity=1) {
+        const ambient = ['#ffe39a', '#9689ff', '#ffa957'][activeRoom];
+        ctx.save();
+        ctx.translate(x,y); ctx.scale(radiusX,radiusY);
+        const halo=ctx.createRadialGradient(0,0,.08,0,0,1);
+        halo.addColorStop(0,characterColor+'70');
+        halo.addColorStop(.4,characterColor+'45');
+        halo.addColorStop(.72,ambient+'30');
+        halo.addColorStop(1,ambient+'00');
+        ctx.globalAlpha=Math.min(1,intensity);
+        ctx.fillStyle=halo;ctx.beginPath();ctx.arc(0,0,1,0,Math.PI*2);ctx.fill();
+        ctx.restore();
+    }
+
     function drawSoldier(x, y, color, isHeavy, role='', stride=0) {
+    function drawSoldier(x, y, color, isHeavy, role='', stride=0, healthRatio=1) {
         ctx.save(); ctx.translate(x,y); ctx.scale(1.45,1.45);
         const green=role==='Captain', base=green?'#71a853':'#c6ab6c', light=green?'#9dc87a':'#e5cd91', dark=green?'#3d6236':'#796339';
+        if (healthRatio > 0) drawCharacterGlow(0,-43,48,73,green?'#9dc87a':'#e5cd91',.85);
         ctx.strokeStyle=dark; ctx.lineWidth=1.7; ctx.lineJoin='round'; ctx.lineCap='round';
         toyOval(0,5,25,5,'#22332933',false);
         toyOval(0,2,23,4,base);
@@ -1282,8 +1352,21 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         // Profile face and nose beneath a broad domed helmet.
         toyOval(0,-65,12,14,light);
         toyOval(11,-64,4,3,light); toyOval(-8,-65,3,4,base);
+        if (healthRatio <= 0) {
+            toyLine([[2,-69],[8,-64]],dark,1.7);toyLine([[2,-64],[8,-69]],dark,1.7);
+            toyLine([[1,-58],[8,-58]],dark,1.5);
+        } else if (healthRatio <= .3) {
+            // Raised inner brow, wide eye, downturned mouth and a blue sweat drop.
+            toyLine([[1,-71],[4,-73],[9,-70]],dark,1.7);
+            toyOval(6,-66,2.8,3.4,'#fff5d6',false);toyOval(7,-66,1.2,2,dark,false);
+            toyLine([[0,-56],[4,-59],[8,-58]],dark,1.8);
+            toyOval(-7,-60,2.4,4,'#57cdeb',false);
+        } else {
         toyLine([[3,-69],[6,-69]],dark,1.5); toyOval(6,-67,1,1.5,dark,false);
         toyLine([[8,-58],[3,-57],[0,-60]],dark,1.2);
+            toyLine([[3,-69],[6,-69]],dark,1.5); toyOval(6,-67,1,1.5,dark,false);
+            toyLine([[8,-58],[3,-57],[0,-60]],dark,1.2);
+        }
         ctx.strokeStyle=dark; ctx.lineWidth=1.7;
         ctx.fillStyle=base; ctx.beginPath(); ctx.moveTo(-16,-69); ctx.bezierCurveTo(-17,-95,17,-95,16,-69); ctx.closePath(); ctx.fill(); ctx.stroke();
         toyPart(-18,-72,37,5,2,base);
@@ -1305,8 +1388,11 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
         ctx.restore();
     }
     function drawMech(x,y,scale,round) {
+    function drawMech(x,y,scale,round,healthRatio=1) {
         ctx.save(); ctx.translate(x,y); ctx.scale(scale,scale);
         const ink='#263d39'; const [red,blue,yellow,green]=ROOMS[activeRoom].colors;
+        const angry = healthRatio > 0 && healthRatio <= .3;
+        drawCharacterGlow(0,-102,112,160,angry?red:blue,angry?1:.8);
         ctx.strokeStyle=ink; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round';
         toyOval(0,7,72,12,'#34443d33',false);
         // Chunky boots with contrasting soles and knee joints.
@@ -1347,7 +1433,22 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
             toyOval(px,-166,18,21,yellow); toyOval(px,-166,15,18,'#fffde7');
             toyOval(px-3,-163,10,12,'#263d39'); toyOval(px-6,-168,4,5,'white',false);
         }
+        if (angry) {
+            // Inward-sloping lids cover the upper eyes, creating a readable scowl.
+            ctx.fillStyle=blue;
+            for (const points of [ [[-39,-185],[-5,-185],[-5,-163],[-37,-177]], [[0,-185],[34,-185],[32,-177],[0,-163]] ]) {
+                ctx.beginPath();points.forEach(([px,py],i)=>i?ctx.lineTo(px,py):ctx.moveTo(px,py));ctx.closePath();ctx.fill();
+            }
+            toyLine([[-37,-177],[-5,-163]],ink,5);
+            toyLine([[0,-163],[32,-177]],ink,5);
+            ctx.strokeStyle=ink;ctx.lineWidth=2;
+            toyPart(-21,-142,42,12,3,'#fff2d3');
+            for(let tooth=-12;tooth<20;tooth+=10) toyLine([[tooth,-140],[tooth,-132]],ink,1.5);
+            toyLine([[-20,-136],[20,-136]],ink,1.5);
+        } else {
         toyPart(-21,-141,42,9,3,red);
+            toyPart(-21,-141,42,9,3,red);
+        }
         toyPart(-18,-211,39,20,9,red);
         toyLine([[-11,-205],[0,-207],[10,-203]],'#ffad83',4);
         toyLine([[-35,-188],[-23,-190],[15,-190]],'#9ee8e9',3);
@@ -1422,6 +1523,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
             ctx.translate(drawX, drawY);
             ctx.rotate(Math.PI / 2);
             drawSoldier(0, 0, a.color, a.name==="Heavy", a.name);
+            drawSoldier(0, 0, a.color, a.role === "Heavy", a.role, 0, a.hp / a.maxHp);
             ctx.restore();
             return;
         }
@@ -1436,6 +1538,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
                 }
             }
             drawMech(drawX, drawY, a.scale, currentRound);
+            drawMech(drawX, drawY, a.scale, currentRound, a.hp / a.maxHp);
             if (currentState === GameState.ANIMATING && currentAction?.skill.burst && animationTimer>=280 && animationTimer<760) {
                 const hit = Math.max(0, Math.min(2, Math.floor((animationTimer-280)/180)));
                 if ((animationTimer-280)%180<85) {
@@ -1446,6 +1549,7 @@ button:focus-visible { outline: 4px solid #facc15; outline-offset: 4px; }
             }
         }
         else drawSoldier(drawX, drawY, a.color, a.name==="Heavy", a.name);
+        else drawSoldier(drawX, drawY, a.color, a.role === "Heavy", a.role, 0, a.hp / a.maxHp);
         
         // Target indicator if active char is selecting
         if (currentState === GameState.TURN_WAIT && a === boss && menuMode === 'standard') {
